@@ -530,7 +530,7 @@ HRESULT CMPIPTVSourceStream::FillBuffer(IMediaSample *pSamp)
                     this->pidCounters[pid] = currentCounter;
                   }
                 }
-                else
+                else if (pid != 0x1FFF)
                 {
                   this->logger.Log(LOGGER_WARNING, _T("%s: %s: wrong PID, current counter or adaptation field, analyze discontinuity disabled, PID: %u, current counter: %u, adaptation field: %u"), MODULE_NAME, METHOD_FILL_BUFFER_NAME, pid, currentCounter, adaptationField);
                   this->analyzeDiscontinuity = false;

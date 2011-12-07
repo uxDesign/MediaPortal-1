@@ -64,6 +64,11 @@
       <ModuleDefinitionFile>mpiptvsource.def</ModuleDefinitionFile>
       <AdditionalLibraryDirectories>$(DSHOW_BASE)Debug_MBCS\;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
+    <PostBuildEvent>
+      <Command>IF NOT EXIST "$(SolutionDir)\MPIPTVSource\bin\Debug" mkdir "$(SolutionDir)\MPIPTVSource\bin\Debug"
+copy /Y "$(TargetPath)" "$(SolutionDir)\MPIPTVSource\bin\Debug\$(TargetFileName)"
+copy /Y "$(TargetDir)\$(TargetName).pdb" "$(SolutionDir)\MPIPTVSource\bin\Debug\$(TargetName).pdb"</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
@@ -84,6 +89,10 @@
       <AdditionalLibraryDirectories>$(DSHOW_BASE)Release_MBCS\;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalDependencies>strmbase.lib;winmm.lib;Shlwapi.lib;Ws2_32.lib;Iphlpapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
+    <PostBuildEvent>
+      <Command>IF NOT EXIST "$(SolutionDir)\MPIPTVSource\bin\Release" mkdir "$(SolutionDir)\MPIPTVSource\bin\Release"
+copy /Y "$(TargetPath)" "$(SolutionDir)\MPIPTVSource\bin\Release\$(TargetFileName)"</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="IMPIPTVConnectInfo.h" />
