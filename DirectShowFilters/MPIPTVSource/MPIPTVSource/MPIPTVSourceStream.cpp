@@ -509,7 +509,7 @@ HRESULT CMPIPTVSourceStream::FillBuffer(IMediaSample *pSamp)
 
                 // check for right values
                 // skip NULL packets (PID 0x1FFF)
-                if ((pid < PID_COUNT) && (currentCounter <= 0x0F) && (adaptationField <= 0x03) && (pid != 0x1FFF))
+                if ((pid < PID_COUNT) && (currentCounter <= 0x0F) && (adaptationField <= 0x03) && (pid != PID_NULL))
                 {
                   // PID counters are incremented only if payload is present (adaptation field is 1 or 3)
                   if ((adaptationField == 0x01) || (adaptationField == 0x03))
@@ -530,7 +530,7 @@ HRESULT CMPIPTVSourceStream::FillBuffer(IMediaSample *pSamp)
                     this->pidCounters[pid] = currentCounter;
                   }
                 }
-                else if (pid != 0x1FFF)
+                else if (pid != PID_NULL)
                 {
                   this->logger.Log(LOGGER_WARNING, _T("%s: %s: wrong PID, current counter or adaptation field, analyze discontinuity disabled, PID: %u, current counter: %u, adaptation field: %u"), MODULE_NAME, METHOD_FILL_BUFFER_NAME, pid, currentCounter, adaptationField);
                   this->analyzeDiscontinuity = false;

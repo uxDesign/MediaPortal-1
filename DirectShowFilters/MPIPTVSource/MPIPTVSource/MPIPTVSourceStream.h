@@ -39,6 +39,8 @@
 #define     RUN_ERROR_NO_DATA_AVAILABLE                               -2
 #define     RUN_ERROR_INITIALIZE                                      -3
 
+#define     PID_NULL                                                  0x1FFFF
+
 struct ProtocolImplementation
 {
   TCHAR *protocol;
