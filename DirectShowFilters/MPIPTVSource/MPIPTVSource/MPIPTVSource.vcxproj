@@ -95,6 +95,8 @@ copy /Y "$(TargetPath)" "$(SolutionDir)\MPIPTVSource\bin\Release\$(TargetFileNam
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="Collection.h" />
+    <ClInclude Include="Crc32.h" />
     <ClInclude Include="IMPIPTVConnectInfo.h" />
     <ClInclude Include="LinearBuffer.h" />
     <ClInclude Include="Logger.h" />
@@ -105,6 +107,10 @@ copy /Y "$(TargetPath)" "$(SolutionDir)\MPIPTVSource\bin\Release\$(TargetFileNam
     <ClInclude Include="Network.h" />
     <ClInclude Include="Parameter.h" />
     <ClInclude Include="ParameterCollection.h" />
+    <ClInclude Include="PatParser.h" />
+    <ClInclude Include="PmtParser.h" />
+    <ClInclude Include="PmtStreamDescription.h" />
+    <ClInclude Include="PmtStreamDescriptionCollection.h" />
     <ClInclude Include="ProtocolInterface.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="Strings.h" />
@@ -112,6 +118,7 @@ copy /Y "$(TargetPath)" "$(SolutionDir)\MPIPTVSource\bin\Release\$(TargetFileNam
     <ClInclude Include="Utilities.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Crc32.cpp" />
     <ClCompile Include="dllmain.cpp">
       <CompileAsManaged Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</CompileAsManaged>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
@@ -128,6 +135,10 @@ copy /Y "$(TargetPath)" "$(SolutionDir)\MPIPTVSource\bin\Release\$(TargetFileNam
     <ClCompile Include="Network.cpp" />
     <ClCompile Include="Parameter.cpp" />
     <ClCompile Include="ParameterCollection.cpp" />
+    <ClCompile Include="PatParser.cpp" />
+    <ClCompile Include="PmtParser.cpp" />
+    <ClCompile Include="PmtStreamDescription.cpp" />
+    <ClCompile Include="PmtStreamDescriptionCollection.cpp" />
     <ClCompile Include="stdafx.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
