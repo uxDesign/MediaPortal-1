@@ -42,7 +42,7 @@
 
 #define     SYNC_BYTE                                                 0x47
 #define     PID_PAT                                                   0x0000
-#define     PID_NULL                                                  0x1FFFF
+#define     PID_NULL                                                  0x1FFF
 
 struct ProtocolImplementation
 {
