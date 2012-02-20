@@ -434,7 +434,6 @@ ${MementoSection} "MediaPortal TV Server" SecServer
   ; protocol implementations for MPIPTVSource.ax
   File "${git_DirectShowFilters}\MPIPTVSource\bin\${BUILD_TYPE}\MPIPTV_FILE.dll"
   File "${git_DirectShowFilters}\MPIPTVSource\bin\${BUILD_TYPE}\MPIPTV_HTTP.dll"
-  File "${git_DirectShowFilters}\MPIPTVSource\bin\${BUILD_TYPE}\MPIPTV_KARTINA.dll"
   File "${git_DirectShowFilters}\MPIPTVSource\bin\${BUILD_TYPE}\MPIPTV_RTP.dll"
   File "${git_DirectShowFilters}\MPIPTVSource\bin\${BUILD_TYPE}\MPIPTV_RTSP.dll"
   File "${git_DirectShowFilters}\MPIPTVSource\bin\${BUILD_TYPE}\MPIPTV_UDP.dll"
@@ -604,7 +603,6 @@ ${MementoSectionEnd}
   ; protocol implementations for MPIPTVSource.ax
   Delete "$INSTDIR\MPIPTV_FILE.dll"
   Delete "$INSTDIR\MPIPTV_HTTP.dll"
-  Delete "$INSTDIR\MPIPTV_KARTINA.dll"
   Delete "$INSTDIR\MPIPTV_RTP.dll"
   Delete "$INSTDIR\MPIPTV_RTSP.dll"
   Delete "$INSTDIR\MPIPTV_UDP.dll"  
