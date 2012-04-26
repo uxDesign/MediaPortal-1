@@ -748,7 +748,7 @@ void CMPIPTV_HTTP::ReceiveData(bool *shouldExit)
           // new connection will try to open in next run
           this->CloseConnection();
         }
-        else
+        else if (length > 0)
         {
           this->GetSafeBufferSizes(this->lockMutex, &freeSpace, &occupiedSpace, &bufferSize);
 
