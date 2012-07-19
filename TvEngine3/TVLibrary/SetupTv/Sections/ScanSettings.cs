@@ -121,7 +121,6 @@ namespace SetupTv.Sections
       delayDetectUpDown.Value = Convert.ToDecimal(layer.GetSetting("delayCardDetect", "0").Value);
 
       checkBoxEnableLinkageScanner.Checked = (layer.GetSetting("linkageScannerEnabled", "no").Value == "yes");
-      useTuningChannelCache.Checked = (layer.GetSetting("useTuningChannelCache", "true").Value == "true");
 
       mpComboBoxPrio.Items.Clear();
       mpComboBoxPrio.Items.Add("Realtime");
@@ -187,10 +186,6 @@ namespace SetupTv.Sections
 
       s = layer.GetSetting("softwareEncoderReuseLimit", "0");
       s.Value = numericUpDownReuseLimit.Value.ToString();
-      s.Persist();
-
-      s = layer.GetSetting("useTuningChannelCache", "true");
-      s.Value = useTuningChannelCache.Checked ? "true" : "false";
       s.Persist();
 
       foreach (DisplaySoftwareEncoder encoder in _bindingVideoEncoders)

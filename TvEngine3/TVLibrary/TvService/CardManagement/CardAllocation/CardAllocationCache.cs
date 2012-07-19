@@ -13,42 +13,6 @@ namespace TvService
     private static readonly IDictionary<int, IDictionary<int, bool>> _channelMapping = new Dictionary<int, IDictionary<int, bool>>();
     private static readonly TvBusinessLayer _businessLayer = new TvBusinessLayer();
 
-    // specifies if tuning channel cache can be used
-    private static Boolean useTuningChannelCache = true;
-    // specifies if value for UseTuningChannelCache property is set 
-    private static Boolean useTuningChannelCacheSet = false;
-
-    private static Boolean UseTuningChannelCache
-    {
-        get
-        {
-          if (!CardAllocationCache.useTuningChannelCacheSet)
-          {
-            // if value is not set, read it from database
-            // if value is not in database, use default value
-
-            try
-            {
-              CardAllocationCache.useTuningChannelCache = _businessLayer.GetSetting("useTuningChannelCache", "true").Value == "true";
-              CardAllocationCache.useTuningChannelCacheSet = true;
-            }
-            catch
-            {
-              // in case of error, use default value
-              CardAllocationCache.useTuningChannelCache = true;
-              CardAllocationCache.useTuningChannelCacheSet = true;
-            }
-          }
-
-          return CardAllocationCache.useTuningChannelCache;
-        }
-        set
-        {
-          CardAllocationCache.useTuningChannelCache = value;
-          CardAllocationCache.useTuningChannelCacheSet = true;
-        }
-    }
-
     public static IList<IChannel> GetTuningDetailsByChannelId(Channel channel)
     {
       IList<IChannel> tuningDetails;
@@ -57,10 +21,7 @@ namespace TvService
       if (!tuningChannelMappingFound)
       {        
         tuningDetails = _businessLayer.GetTuningChannelsByDbChannel(channel);
-        if (CardAllocationCache.UseTuningChannelCache)
-        {
-          _tuningChannelMapping.Add(channel.IdChannel, tuningDetails);
-        }
+        _tuningChannelMapping.Add(channel.IdChannel, tuningDetails);
       }
       return tuningDetails;
     }
