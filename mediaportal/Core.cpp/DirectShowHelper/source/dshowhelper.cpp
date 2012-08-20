@@ -50,6 +50,12 @@ TMFCreateMediaType*                 m_pMFCreateMediaType                 = NULL;
 
 // Vista / Windows 7 only
 TDwmEnableMMCSS*                    m_pDwmEnableMMCSS   = NULL;
+TDwmFlush*                          m_pDwmFlush                = NULL;
+TDwmSetPresentParameters*           m_pDwmSetPresentParameters = NULL;
+TDwmIsCompositionEnabled*           m_pDwmIsCompositionEnabled = NULL;
+TDwmSetDxFrameDuration*             m_pDwmSetDxFrameDuration   = NULL;
+TDwmGetCompositionTimingInfo*       m_pDwmGetCompositionTimingInfo   = NULL;
+ 
 TW7GetRefreshRate*                  m_pW7GetRefreshRate = NULL;
 
 TAvSetMmThreadCharacteristicsW*     m_pAvSetMmThreadCharacteristicsW = NULL;
@@ -474,7 +480,12 @@ bool LoadEVR()
             if (m_hModuleDWMAPI)
             {
               Log("Successfully loaded DWM dll");
-              m_pDwmEnableMMCSS = (TDwmEnableMMCSS*)GetProcAddress(m_hModuleDWMAPI,"DwmEnableMMCSS");
+              m_pDwmEnableMMCSS              = (TDwmEnableMMCSS*)GetProcAddress(m_hModuleDWMAPI,"DwmEnableMMCSS");
+              m_pDwmFlush                    = (TDwmFlush*)GetProcAddress(m_hModuleDWMAPI,"DwmFlush");
+              m_pDwmSetPresentParameters     = (TDwmSetPresentParameters*)GetProcAddress(m_hModuleDWMAPI,"DwmSetPresentParameters");
+              m_pDwmIsCompositionEnabled     = (TDwmIsCompositionEnabled*)GetProcAddress(m_hModuleDWMAPI,"DwmIsCompositionEnabled");
+              m_pDwmSetDxFrameDuration       = (TDwmSetDxFrameDuration*)GetProcAddress(m_hModuleDWMAPI,"DwmSetDxFrameDuration");
+              m_pDwmGetCompositionTimingInfo = (TDwmGetCompositionTimingInfo*)GetProcAddress(m_hModuleDWMAPI,"DwmGetCompositionTimingInfo");
             }
 
 
@@ -673,6 +684,7 @@ void EvrDeinit()
   {
     if (m_evrPresenter)
     {
+      m_evrPresenter->DwmReset(false);
       m_evrPresenter->ReleaseCallback();
     }
     m_evrPresenter = NULL;

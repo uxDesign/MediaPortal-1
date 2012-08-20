@@ -91,12 +91,12 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
     LogRotate();
     if (NO_MP_AUD_REND)
     {
-      Log("---------- v1.5.58 ----------- instance 0x%x", this);
+      Log("--- v1.6.58 Experimental DWM queued mode --- instance 0x%x", this);
     }
     else
     {
-      Log("---------- v1.5.58 ----------- instance 0x%x", this);
-      Log("--- audio renderer enabled --- instance 0x%x", this);
+      Log("--- v1.6.58 Experimental DWM queued mode --- instance 0x%x", this);
+      Log("-------- audio renderer enabled ------------ instance 0x%x", this);
     }
     m_hMonitor = monitor;
     m_pD3DDev = direct3dDevice;
@@ -145,6 +145,10 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
 
     m_dEstRefCycDiff = 0.0;
 
+    m_bDwmCompEnabled  = false;
+    m_bDWMinit         = false;
+    m_dwmBuffers       = 0;
+    m_hDwmWinHandle    = NULL;
     
     // sample time correction variables
     m_LastScheduledUncorrectedSampleTime  = -1;
@@ -1176,6 +1180,7 @@ void MPEVRCustomPresenter::DoFlush(BOOL forced)
      (m_qScheduledSamples.Count() > 0 && forced))
   {
     Log("Flushing: size=%d", m_qScheduledSamples.Count());
+    DwmFlush(); //Just in case...
     while (m_qScheduledSamples.Count() > 0)
     {
       IMFSample* pSample = PeekSample();
@@ -1487,6 +1492,11 @@ HRESULT MPEVRCustomPresenter::CheckForScheduledSample(LONGLONG *pTargetTime, LON
       
       m_lastPresentTime = systemTime;
       CHECK_HR(PresentSample(pSample), "PresentSample failed");
+      if ((m_iFramesDrawn < NUM_DWM_BUFFERS) && m_bDwmCompEnabled) //Push extra samples into the pipeline at start of play
+      {
+        CHECK_HR(PresentSample(pSample), "PresentSample failed");
+        DwmFlush();
+      }     
       ReturnSample(pSample, TRUE);
       m_iFramesProcessed++;
       
@@ -1633,6 +1643,190 @@ void MPEVRCustomPresenter::DwmEnableMMCSSOnOff(bool enable)
   }
 }
 
+void MPEVRCustomPresenter::DwmFlush()
+{
+  if (m_pDwmFlush && m_bDwmCompEnabled)
+  {
+    m_pDwmFlush();
+  }
+}
+
+void MPEVRCustomPresenter::DwmGetState()
+{
+  DWORD wProcessId;
+  DWORD cProcessId;
+  HWND fhWindow = NULL;
+  m_hDwmWinHandle = NULL;
+
+  // Find the foreground window handle
+  fhWindow = GetForegroundWindow();
+  // Get it's process ID
+  GetWindowThreadProcessId(fhWindow, &wProcessId);
+  cProcessId = GetCurrentProcessId();
+  
+  // Check that it's the MP window by comparing process ID's    
+  if (fhWindow && (wProcessId == cProcessId))
+  {
+    m_hDwmWinHandle = fhWindow;
+  }
+
+  Log("DwmGetState(), hDwmWinHandle = 0x%x, wProcessId = 0x%x, cProcessId = 0x%x", fhWindow, wProcessId, cProcessId);
+
+  if (m_pDwmIsCompositionEnabled)
+  { 
+    HRESULT hr = m_pDwmIsCompositionEnabled(&m_bDwmCompEnabled);
+    if (SUCCEEDED(hr)) 
+    {
+      m_dwmBuffers = 2;
+      Log("DWM composition is enabled");
+    }
+    else
+    {
+      m_dwmBuffers = 0;
+      Log("DWM composition is disabled");
+    }
+  }
+  else
+  {
+    m_dwmBuffers = 0;
+    m_bDwmCompEnabled = false;
+    Log("DWM composition check failed");
+  }
+}
+
+
+void MPEVRCustomPresenter::DwmSetParameters(BOOL useSourceRate, UINT buffers, UINT rfshPerFrame)
+{  
+  HRESULT hr = E_FAIL;
+
+  DWM_FRAME_COUNT cRefresh = 0;
+  if (false && m_pDwmGetCompositionTimingInfo && m_bDwmCompEnabled)
+  {
+    hr = E_FAIL;
+    
+    DWM_TIMING_INFO presentationStatus;
+    presentationStatus.cbSize = sizeof(presentationStatus);
+    if (m_hDwmWinHandle)
+    {
+      hr = m_pDwmGetCompositionTimingInfo(m_hDwmWinHandle, &presentationStatus);
+    }
+
+    //if (SUCCEEDED(hr)) 
+    if (hr==E_PENDING || hr==S_OK) 
+    {
+      cRefresh = presentationStatus.cRefresh;
+      Log("DwmGetCompositionTimingInfo succeeded, hr = 0x%x, cRefresh = %d", hr, cRefresh);
+    }
+    else
+    {
+      Log("DwmGetCompositionTimingInfo failed, hr = 0x%x", hr);
+    }
+  }
+  
+  if (m_pDwmSetPresentParameters && m_bDwmCompEnabled)
+  {
+    hr = E_FAIL;
+
+    //Create and initialise the structure
+    DWM_PRESENT_PARAMETERS presentationParams;
+    presentationParams.cbSize = sizeof(presentationParams);
+    presentationParams.fQueue = TRUE;
+    presentationParams.cRefreshStart = 0;
+    presentationParams.cBuffer = buffers;
+    presentationParams.fUseSourceRate = useSourceRate;
+    presentationParams.rateSource.uiNumerator = (UINT)(250000000.0/GetDisplayCycle()); // Actual display rate
+    presentationParams.rateSource.uiDenominator = 100000;
+    presentationParams.cRefreshesPerFrame = rfshPerFrame;
+    presentationParams.eSampling = DWM_SOURCE_FRAME_SAMPLING_POINT;
+    
+    // Set up the DWM presentation parameters    
+    if (m_hDwmWinHandle)
+    {
+      hr = m_pDwmSetPresentParameters(m_hDwmWinHandle, &presentationParams);
+    }
+
+    if (SUCCEEDED(hr)) 
+    {
+      m_dwmBuffers = buffers;
+      Log("DwmSetPresentParameters succeeded, DWM buffers = %d, useSourceRate = %d", m_dwmBuffers, useSourceRate);
+    }
+    else
+    {
+      Log("DwmSetPresentParameters failed, hr = 0x%x, DWM buffers = %d", hr, m_dwmBuffers);
+    }
+    
+  }  
+  
+  if (m_pDwmSetPresentParameters && m_bDwmCompEnabled)
+  {
+    hr = E_FAIL;
+    if (m_hDwmWinHandle)
+    {
+      hr = m_pDwmSetDxFrameDuration(m_hDwmWinHandle, (INT)rfshPerFrame);
+    }
+    if (SUCCEEDED(hr)) 
+    {
+      Log("DwmSetDxFrameDuration succeeded, rfshPerFrame = %d", rfshPerFrame);
+    }
+    else
+    {
+      Log("DwmSetDxFrameDuration failed, hr = 0x%x", hr);
+    }
+  }
+
+}
+
+void MPEVRCustomPresenter::DwmInit(UINT buffers, UINT rfshPerFrame)
+{
+  if (!ENABLE_DWM_SETUP || m_bDWMinit || (GetDisplayCycle() > DWM_REFRESH_THRESH))
+  {
+    return;
+  }
+    
+  Log("EVRCustomPresenter::DwmInit, frame = %d", m_iFramesDrawn);  
+  //Initialise the DWM parameters
+  DwmGetState();
+  
+  DwmFlush();
+  DwmSetParameters(TRUE, buffers, rfshPerFrame); //'Source rate' mode
+  WaitForSingleObject(m_dummyEvent, 50); //Wait for 50ms
+  
+  DwmFlush();
+  DwmSetParameters(FALSE, buffers, rfshPerFrame); //'Display rate' mode
+  WaitForSingleObject(m_dummyEvent, 50); //Wait for 50ms
+
+  DwmEnableMMCSSOnOff(DWM_ENABLE_MMCSS);
+  WaitForSingleObject(m_dummyEvent, 50); //Wait for 50ms
+  
+  m_bDWMinit = true;
+}  
+
+
+void MPEVRCustomPresenter::DwmReset(bool newWinHand)
+{
+  if (!ENABLE_DWM_SETUP || !ENABLE_DWM_RESET || !m_bDWMinit) 
+  {
+    return;
+  }
+
+  Log("EVRCustomPresenter::DwmReset");  
+  //Reset the DWM parameters
+  if (!m_hDwmWinHandle || newWinHand)
+  {
+    DwmGetState();
+  }
+  DwmEnableMMCSSOnOff(false);
+  
+  DwmFlush();
+  DwmSetParameters(TRUE, 2, 1); //'Source rate' mode
+  WaitForSingleObject(m_dummyEvent, 50); //Wait for 50ms
+  
+  DwmFlush();
+  DwmSetParameters(FALSE, 2, 1); //'Display rate' mode
+  WaitForSingleObject(m_dummyEvent, 150); //Wait for 150ms
+  
+  m_bDWMinit = false;
+}  
 
 void MPEVRCustomPresenter::StopWorkers()
 {
@@ -2096,8 +2290,10 @@ HRESULT STDMETHODCALLTYPE MPEVRCustomPresenter::ProcessMessage(MFVP_MESSAGE_TYPE
       m_bInputAvailable = FALSE;
       m_bFirstInputNotify = FALSE;
       m_state = MP_RENDER_STATE_PAUSED;
+      //Setup the Desktop Window Manager (DWM)
+      DwmInit(NUM_DWM_BUFFERS, NUM_DWM_FRAMES);
       StartWorkers();
-      DwmEnableMMCSSOnOff(false);
+      //DwmEnableMMCSSOnOff(false);
 
       // TODO add 2nd monitor support
       ResetTraceStats();
@@ -2834,6 +3030,7 @@ BOOL MPEVRCustomPresenter::EstimateRefreshTimings(int numFrames, int threadPrior
     {
       SetThreadPriority(GetCurrentThread(), threadPriority);
     }
+
      
     const int maxScanLineSamples = 1000;
     const int maxFrameSamples = 8;

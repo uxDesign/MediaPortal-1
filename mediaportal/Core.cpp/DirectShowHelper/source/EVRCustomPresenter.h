@@ -32,7 +32,13 @@ using namespace std;
 //Disables MP audio renderer functions if true
 #define NO_MP_AUD_REND false
 
-#define NUM_SURFACES 5
+//Enables DWM parameter changes if true
+#define ENABLE_DWM_SETUP true
+//#define ENABLE_DWM_SETUP false
+//Enables reset of DWM parameters if true
+#define ENABLE_DWM_RESET true
+
+#define NUM_SURFACES 4
 #define NB_JITTER 125
 #define NB_RFPSIZE 64
 #define NB_DFTHSIZE 64
@@ -47,6 +53,15 @@ using namespace std;
 #define NUM_PHASE_DEVIATIONS 32
 #define FILTER_LIST_SIZE 9
 
+//Valid range is 2-7
+#define NUM_DWM_BUFFERS 3
+#define NUM_DWM_FRAMES 1
+//Compensation for DWM buffering delay (n x video frames)
+#define DWM_DELAY_COMP 0
+//skip DwmInit() if display refresh period is > 25.0 ms (i.e. below 40Hz refresh rate)
+#define DWM_REFRESH_THRESH 25.0
+//Bring DWM under Multimedia Class Scheduler Service (MMCSS) control if 'true'
+#define DWM_ENABLE_MMCSS false
 // magic numbers
 #define DEFAULT_FRAME_TIME 200000 // used when fps information is not provided (PAL interlaced == 50fps)
 
@@ -76,7 +91,8 @@ enum MP_RENDER_STATE
   MP_RENDER_STATE_STARTED = 1,
   MP_RENDER_STATE_STOPPED,
   MP_RENDER_STATE_PAUSED,
-  MP_RENDER_STATE_SHUTDOWN
+	MP_RENDER_STATE_SHUTDOWN,
+	MP_RENDER_STATE_ENDSTREAM
 };
 
 enum FPS_SOURCE_METHOD
@@ -230,8 +246,16 @@ public:
   void           NotifyDVDMenuState(bool pIsInMenu);
   void           UpdateDisplayFPS();
 
+  void           DwmReset(bool newWinHand);
+  void           DwmInit(UINT buffers, UINT rfshPerFrame);
+  void           FlushAtEnd();
+
   bool           m_bScrubbing;
   bool           m_bZeroScrub;
+  bool           m_bDWMinit;
+
+  BOOL           m_bDwmCompEnabled;
+
 
 friend class StatsRenderer;
 
@@ -275,7 +299,10 @@ protected:
   LONGLONG       GetDelayToRasterTarget(LONGLONG *targetTime, LONGLONG *offsetTime);
   void           DwmEnableMMCSSOnOff(bool enable);
   bool           BufferMoreSamples();
-
+  void           DwmSetParameters(BOOL useSourceRate, UINT buffers, UINT rfshPerFrame);
+  void           DwmGetState();
+  void           DwmFlush();
+  
   HRESULT EnumFilters(IFilterGraph *pGraph);
   bool GetFilterNames();
 
@@ -456,8 +483,13 @@ protected:
   LONGLONG      m_lastPresentTime;
   LONGLONG      m_lastDelayErr;
 
+  UINT          m_dwmBuffers;
+  HWND          m_hDwmWinHandle;
+  
   char          m_filterNames[FILTER_LIST_SIZE][MAX_FILTER_NAME];
   int           m_numFilters;
+  
+  HANDLE        m_dummyEvent;
   
   BOOL          m_bIsWin7;
   bool          m_bMsVideoCodec;
