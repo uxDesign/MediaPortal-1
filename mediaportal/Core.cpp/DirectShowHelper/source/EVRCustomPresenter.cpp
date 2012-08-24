@@ -91,11 +91,11 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
     LogRotate();
     if (NO_MP_AUD_REND)
     {
-      Log("--- v1.6.58 Experimental DWM queued mode --- instance 0x%x", this);
+      Log("--- v1.6.659 Experimental DWM queued mode --- instance 0x%x", this);
     }
     else
     {
-      Log("--- v1.6.58 Experimental DWM queued mode --- instance 0x%x", this);
+      Log("--- v1.6.659 Experimental DWM queued mode --- instance 0x%x", this);
       Log("-------- audio renderer enabled ------------ instance 0x%x", this);
     }
     m_hMonitor = monitor;
@@ -176,6 +176,7 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
     m_displayParams.maxVisScanLine = m_displayMode.Height;
     m_displayParams.minVisScanLine = 5;
     m_displayParams.estRefreshLock = false;
+    m_dLastEstRefreshCycle = 0.0;
 
     m_rasterLimitLow    = (UINT)((((m_displayParams.maxVisScanLine - m_displayParams.minVisScanLine) * 2) / 16) + m_displayParams.minVisScanLine); 
     m_rasterTargetPosn  = m_rasterLimitLow;
@@ -194,6 +195,8 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
     }
   }
 
+  m_dLastEstRefreshCycle = m_displayParams.dEstRefreshCycle;
+
   HRESULT result;
   m_pOuterEVR = new COuterEVR(NAME("COuterEVR"), (IUnknown*)(INonDelegatingUnknown*)this, result, this);
   if (FAILED(result))
@@ -207,6 +210,9 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
   }
   
   m_pStatsRenderer = new StatsRenderer(this, m_pD3DDev);
+  
+  //Setup the Desktop Window Manager (DWM)
+  DwmInit(NUM_DWM_BUFFERS, NUM_DWM_FRAMES);
 }
 
 void MPEVRCustomPresenter::SetFrameSkipping(bool onOff)
@@ -1423,7 +1429,16 @@ HRESULT MPEVRCustomPresenter::CheckForScheduledSample(LONGLONG *pTargetTime, LON
       {
         LOG_LATEFR("Late frame (present), sampTime %.2f ms, last sleep %.2f, LFr %d",(double)nextSampleTime/10000, (double)lastSleepTime/10000, m_iLateFrames) ;
       }
-      GetFrameRateRatio(); // update video to display FPS ratio data
+
+      LONGLONG GetDuration;
+      pSample->GetSampleDuration(&GetDuration);
+      m_DetectedFrameTime = ((double)GetDuration)/10000000.0;    
+      GetFrameRateRatio(); // update video to display FPS ratio data     
+      if (m_DetectedFrameTime > DFT_THRESH)
+      {
+        frameTime = GetDuration;
+      }
+
       // Within the time window to 'present' a sample, or it's a special play mode
       if (!m_bZeroScrub)
       {   
@@ -1462,7 +1477,7 @@ HRESULT MPEVRCustomPresenter::CheckForScheduledSample(LONGLONG *pTargetTime, LON
           m_earliestPresentTime = systemTime + (displayTime * (m_rawFRRatio - 1)) + offsetTime;
         }    
         
-        if (nextSampleTime > (frameTime + earlyLimit))
+        if (nextSampleTime > (max(frameTime, displayTime) + earlyLimit))
         {      
           // It's too early to present sample, so delay for a while
           if (m_iLateFrames > 0)
@@ -2290,8 +2305,8 @@ HRESULT STDMETHODCALLTYPE MPEVRCustomPresenter::ProcessMessage(MFVP_MESSAGE_TYPE
       m_bInputAvailable = FALSE;
       m_bFirstInputNotify = FALSE;
       m_state = MP_RENDER_STATE_PAUSED;
-      //Setup the Desktop Window Manager (DWM)
-      DwmInit(NUM_DWM_BUFFERS, NUM_DWM_FRAMES);
+//      //Setup the Desktop Window Manager (DWM)
+//      DwmInit(NUM_DWM_BUFFERS, NUM_DWM_FRAMES);
       StartWorkers();
       //DwmEnableMMCSSOnOff(false);
 
@@ -3676,6 +3691,24 @@ void MPEVRCustomPresenter::UpdateDisplayFPS()
       break; // only go round the loop again if we don't get a good result
     }
   }
+       
+  //Re-init DWM queued mode if display FPS has changed (and it's a good result)
+  if (m_displayParams.estRefreshLock)
+  {   
+    if ((m_dLastEstRefreshCycle > 0.0) && (m_displayParams.dEstRefreshCycle > 0.0))
+    {   
+      // Check if display refresh rate has changed since last time
+      double currDiff = fabs(1.0 - (m_dLastEstRefreshCycle/m_displayParams.dEstRefreshCycle));
+      if (currDiff > 0.02) //Allow 2.0% difference
+      {
+        //Setup the Desktop Window Manager (DWM)
+        DwmReset(false);
+        DwmInit(NUM_DWM_BUFFERS, NUM_DWM_FRAMES);
+      }
+    }
+  }
+ 
+  m_dLastEstRefreshCycle = m_displayParams.dEstRefreshCycle;
   
   SetupAudioRenderer(); // Bias value needs to be updated
 }

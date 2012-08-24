@@ -33,8 +33,8 @@ using namespace std;
 #define NO_MP_AUD_REND false
 
 //Enables DWM parameter changes if true
-#define ENABLE_DWM_SETUP true
-//#define ENABLE_DWM_SETUP false
+//#define ENABLE_DWM_SETUP true
+#define ENABLE_DWM_SETUP false
 //Enables reset of DWM parameters if true
 #define ENABLE_DWM_RESET true
 
@@ -445,6 +445,8 @@ protected:
   UINT   m_rasterLimitNP;
 
   double m_dEstRefCycDiff; 
+  
+  double m_dLastEstRefreshCycle;
   
   LONGLONG m_SampDuration;
 
