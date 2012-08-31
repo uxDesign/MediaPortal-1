@@ -37,6 +37,8 @@ using namespace std;
 //#define ENABLE_DWM_SETUP false
 //Enables reset of DWM parameters if true
 #define ENABLE_DWM_RESET true
+//Bring Scheduler thread under Multimedia Class Scheduler Service (MMCSS) control if 'true'
+#define SCHED_ENABLE_MMCSS false
 
 #define NUM_SURFACES 4
 #define NB_JITTER 125
@@ -252,8 +254,8 @@ public:
 
   bool           m_bScrubbing;
   bool           m_bZeroScrub;
-//  bool           m_bDWMinit;
-//  BOOL           m_bDwmCompEnabled;
+
+  bool           m_bSchedulerEnableMMCSS;
 
 
 friend class StatsRenderer;

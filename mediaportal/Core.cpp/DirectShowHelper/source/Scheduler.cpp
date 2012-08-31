@@ -250,7 +250,7 @@ UINT CALLBACK WorkerThread(void* param)
 UINT CALLBACK SchedulerThread(void* param)
 {
   SchedulerParams *p = (SchedulerParams*)param;
-//  HANDLE hAvrt;
+  HANDLE hAvrt;
   DWORD dwTaskIndex = 0;
   LONGLONG hnsTargetTime = 0;
   MMRESULT lastTimerId = 0;
@@ -267,23 +267,24 @@ UINT CALLBACK SchedulerThread(void* param)
   HANDLE hEvts2[] = {p->eHasWork, p->eTimerEnd};
   HANDLE hEvts3[] = {p->eHasWork, p->eTimerEnd, p->eHasWorkLP};
 
-
-  // SetThreadAffinityMask(GetCurrentThread(), 1); //Force onto CPU 0 - ATi flickering GUI experiment
   
+  if (p->pPresenter->m_bSchedulerEnableMMCSS)
+  {
     // Tell Vista Multimedia Class Scheduler (MMCS) we are doing threaded playback (increase priority)
-//  if (m_pAvSetMmThreadCharacteristicsW) 
-//  {
-//    hAvrt = m_pAvSetMmThreadCharacteristicsW(L"Playback", &dwTaskIndex);
-//  }
-//  if (m_pAvSetMmThreadPriority) 
-//  {
-//    if (m_pAvSetMmThreadPriority(hAvrt, AVRT_PRIORITY_HIGH))
-//    {
-//      Log("Scheduler set AvSetMmThreadPriority succeeded");
-//    }
-//  }
+    if (m_pAvSetMmThreadCharacteristicsW) 
+    {
+      hAvrt = m_pAvSetMmThreadCharacteristicsW(L"Playback", &dwTaskIndex);
+    }
+    if (m_pAvSetMmThreadPriority) 
+    {
+      if (m_pAvSetMmThreadPriority(hAvrt, AVRT_PRIORITY_HIGH))
+      {
+        Log("Scheduler set AvSetMmThreadPriority succeeded");
+      }
+    }
+  }
  
-    // Set timer resolution (must be after MMCS setup, since timer res can be changed by MMCS)
+  // Set timer resolution (must be after MMCS setup, since timer res can be changed by MMCS)
   timeGetDevCaps(&tc, sizeof(TIMECAPS));
   dwResolution = min(max(tc.wPeriodMin, 1), tc.wPeriodMax);
   dwUser = timeBeginPeriod(dwResolution);
@@ -408,10 +409,13 @@ UINT CALLBACK SchedulerThread(void* param)
   p->eTimerEnd.Reset();
   
   timeEndPeriod(dwResolution);
-//  if (m_pAvRevertMmThreadCharacteristics) 
-//  {
-//    m_pAvRevertMmThreadCharacteristics(hAvrt);
-//  }
+  if (p->pPresenter->m_bSchedulerEnableMMCSS)
+  {
+    if (m_pAvRevertMmThreadCharacteristics) 
+    {
+      m_pAvRevertMmThreadCharacteristics(hAvrt);
+    }
+  }
   Log("Scheduler done.");
   return 0;
 }

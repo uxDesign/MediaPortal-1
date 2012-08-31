@@ -191,12 +191,13 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
   HKEY key;
   m_bEnableDWMQueued = ENABLE_DWM_QUEUED;
   m_bDWMEnableMMCSS = DWM_ENABLE_MMCSS;
+  m_bSchedulerEnableMMCSS = SCHED_ENABLE_MMCSS;
   if (ERROR_SUCCESS==RegCreateKeyEx(HKEY_CURRENT_USER, "Software\\Team MediaPortal\\EVR Presenter", 0, NULL, 
                                     REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, NULL, &key, NULL))
   {
     DWORD keyValue;
     keyValue = ENABLE_DWM_QUEUED ? 1 : 0;
-    LPCTSTR enableDWMQueued = TEXT("EnableDWMQueued");
+    LPCTSTR enableDWMQueued = TEXT("EnableDWMQueuedMode");
     ReadRegistryKeyDword(key, enableDWMQueued, keyValue);
     if (keyValue)
     {
@@ -205,12 +206,21 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
     }
 
     keyValue = DWM_ENABLE_MMCSS ? 1 : 0;
-    LPCTSTR enableDWM_MMCS = TEXT("DWMEnableMMCSS");
+    LPCTSTR enableDWM_MMCS = TEXT("EnableMMCSSforDWM");
     ReadRegistryKeyDword(key, enableDWM_MMCS, keyValue);
     if (keyValue)
     {
       Log("--- Enable MMCS for DWM ---");
       m_bDWMEnableMMCSS = true;
+    }
+    
+    keyValue = SCHED_ENABLE_MMCSS ? 1 : 0;
+    LPCTSTR enableScheduler_MMCS = TEXT("EnableMMCSSforSchedulerThread");
+    ReadRegistryKeyDword(key, enableScheduler_MMCS, keyValue);
+    if (keyValue)
+    {
+      Log("--- Enable MMCS for Scheduler Thread ---");
+      m_bSchedulerEnableMMCSS = true;
     }
     
     RegCloseKey(key);
@@ -1839,7 +1849,7 @@ void MPEVRCustomPresenter::DwmInit(UINT buffers, UINT rfshPerFrame)
   DwmSetParameters(FALSE, buffers, rfshPerFrame); //'Display rate' mode
   WaitForSingleObject(m_dummyEvent, 50); //Wait for 50ms
 
-  DwmEnableMMCSSOnOff(DWM_ENABLE_MMCSS);
+  DwmEnableMMCSSOnOff(m_bDWMEnableMMCSS);
   WaitForSingleObject(m_dummyEvent, 50); //Wait for 50ms
   
   m_bDWMinit = true;
