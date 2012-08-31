@@ -32,8 +32,8 @@ using namespace std;
 //Disables MP audio renderer functions if true
 #define NO_MP_AUD_REND false
 
-//Enables DWM parameter changes if true
-#define ENABLE_DWM_SETUP true
+//Enables DWM queued mode if true
+#define ENABLE_DWM_QUEUED true
 //#define ENABLE_DWM_SETUP false
 //Enables reset of DWM parameters if true
 #define ENABLE_DWM_RESET true
@@ -252,9 +252,8 @@ public:
 
   bool           m_bScrubbing;
   bool           m_bZeroScrub;
-  bool           m_bDWMinit;
-
-  BOOL           m_bDwmCompEnabled;
+//  bool           m_bDWMinit;
+//  BOOL           m_bDwmCompEnabled;
 
 
 friend class StatsRenderer;
@@ -302,6 +301,8 @@ protected:
   void           DwmSetParameters(BOOL useSourceRate, UINT buffers, UINT rfshPerFrame);
   void           DwmGetState();
   void           DwmFlush();
+  void           ReadRegistryKeyDword(HKEY hKey, LPCTSTR& lpSubKey, DWORD& data);
+  void           WriteRegistryKeyDword(HKEY hKey, LPCTSTR& lpSubKey, DWORD& data);
   
   HRESULT EnumFilters(IFilterGraph *pGraph);
   bool GetFilterNames();
@@ -487,6 +488,10 @@ protected:
 
   UINT          m_dwmBuffers;
   HWND          m_hDwmWinHandle;
+  bool          m_bDWMinit;
+  BOOL          m_bDwmCompEnabled;
+  bool          m_bEnableDWMQueued;
+  bool          m_bDWMEnableMMCSS;
   
   char          m_filterNames[FILTER_LIST_SIZE][MAX_FILTER_NAME];
   int           m_numFilters;

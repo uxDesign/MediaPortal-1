@@ -91,11 +91,11 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
     LogRotate();
     if (NO_MP_AUD_REND)
     {
-      Log("--- v1.6.659b Experimental DWM queued mode --- instance 0x%x", this);
+      Log("--- v1.6.660 Experimental DWM queued mode --- instance 0x%x", this);
     }
     else
     {
-      Log("--- v1.6.659b Experimental DWM queued mode --- instance 0x%x", this);
+      Log("--- v1.6.660 Experimental DWM queued mode --- instance 0x%x", this);
       Log("-------- audio renderer enabled ------------ instance 0x%x", this);
     }
     m_hMonitor = monitor;
@@ -185,6 +185,35 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
     m_rasterLimitNP     = (UINT)m_displayParams.maxVisScanLine; 
 
     m_bDrawStats = false;
+  }
+
+  //Read (and create if needed) debug registry settings
+  HKEY key;
+  m_bEnableDWMQueued = ENABLE_DWM_QUEUED;
+  m_bDWMEnableMMCSS = DWM_ENABLE_MMCSS;
+  if (ERROR_SUCCESS==RegCreateKeyEx(HKEY_CURRENT_USER, "Software\\Team MediaPortal\\EVR Presenter", 0, NULL, 
+                                    REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, NULL, &key, NULL))
+  {
+    DWORD keyValue;
+    keyValue = ENABLE_DWM_QUEUED ? 1 : 0;
+    LPCTSTR enableDWMQueued = TEXT("EnableDWMQueued");
+    ReadRegistryKeyDword(key, enableDWMQueued, keyValue);
+    if (keyValue)
+    {
+      Log("--- Enable DWM Queued mode ---");
+      m_bEnableDWMQueued = true;
+    }
+
+    keyValue = DWM_ENABLE_MMCSS ? 1 : 0;
+    LPCTSTR enableDWM_MMCS = TEXT("DWMEnableMMCSS");
+    ReadRegistryKeyDword(key, enableDWM_MMCS, keyValue);
+    if (keyValue)
+    {
+      Log("--- Enable MMCS for DWM ---");
+      m_bDWMEnableMMCSS = true;
+    }
+    
+    RegCloseKey(key);
   }
     
   for (int i = 0; i < 2; i++)
@@ -1793,7 +1822,7 @@ void MPEVRCustomPresenter::DwmSetParameters(BOOL useSourceRate, UINT buffers, UI
 
 void MPEVRCustomPresenter::DwmInit(UINT buffers, UINT rfshPerFrame)
 {
-  if (!ENABLE_DWM_SETUP || m_bDWMinit || (GetDisplayCycle() > DWM_REFRESH_THRESH))
+  if (!m_bEnableDWMQueued || m_bDWMinit || (GetDisplayCycle() > DWM_REFRESH_THRESH))
   {
     return;
   }
@@ -1819,7 +1848,7 @@ void MPEVRCustomPresenter::DwmInit(UINT buffers, UINT rfshPerFrame)
 
 void MPEVRCustomPresenter::DwmReset(bool newWinHand)
 {
-  if (!ENABLE_DWM_SETUP || !ENABLE_DWM_RESET || !m_bDWMinit) 
+  if (!m_bEnableDWMQueued || !ENABLE_DWM_RESET || !m_bDWMinit) 
   {
     return;
   }
@@ -4358,4 +4387,38 @@ HRESULT MPEVRCustomPresenter::EnumFilters(IFilterGraph *pGraph)
   return S_OK;
 }
 
+//=============== Registry interface functions =================
+
+void MPEVRCustomPresenter::ReadRegistryKeyDword(HKEY hKey, LPCTSTR& lpSubKey, DWORD& data)
+{
+  DWORD dwSize = sizeof(DWORD);
+  DWORD dwType = REG_DWORD;
+  LONG error = RegQueryValueEx(hKey, lpSubKey, NULL, &dwType, (PBYTE)&data, &dwSize);
+  if (error != ERROR_SUCCESS)
+  {
+    if (error == ERROR_FILE_NOT_FOUND)
+    {
+      Log("Create default value for %s", lpSubKey);
+      WriteRegistryKeyDword(hKey, lpSubKey, data);
+    }
+    else
+    {
+      Log("Faíled to create default value for %s", lpSubKey);
+    }
+  }
+}
+
+void MPEVRCustomPresenter::WriteRegistryKeyDword(HKEY hKey, LPCTSTR& lpSubKey, DWORD& data)
+{  
+  DWORD dwSize = sizeof(DWORD);
+  LONG result = RegSetValueEx(hKey, lpSubKey, 0, REG_DWORD, (LPBYTE)&data, dwSize);
+  if (result == ERROR_SUCCESS) 
+  {
+    Log("Success writing to Registry: %s", lpSubKey);
+  } 
+  else 
+  {
+    Log("Error writing to Registry - subkey: %s error: %d", lpSubKey, result);
+  }
+}
 
