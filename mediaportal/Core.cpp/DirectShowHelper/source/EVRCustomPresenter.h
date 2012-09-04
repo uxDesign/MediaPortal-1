@@ -321,12 +321,12 @@ protected:
   CComPtr<IDirect3DSurface9>        surfaces[NUM_SURFACES];
   CComPtr<IMFSample>                samples[NUM_SURFACES];
   CCritSec                          m_lockSamples;
-  CCritSec                          m_lockScheduledSamples;
   CCritSec                          m_lockRasterData;
   CCritSec                          m_lockRefreshEstimator;
   CCritSec                          m_lockCallback;
   int                               m_iFreeSamples;
   IMFSample*                        m_vFreeSamples[NUM_SURFACES];
+  IMFSample*                        m_vAllSamples[NUM_SURFACES];
   CMyQueue<IMFSample*>              m_qScheduledSamples;
   SchedulerParams                   m_schedulerParams;
   SchedulerParams                   m_workerParams;

@@ -926,6 +926,7 @@ void MPEVRCustomPresenter::ReAllocSurfaces()
     }
     Log("Adding sample: 0x%x", samples[i]);
     m_vFreeSamples[i] = samples[i];
+    m_vAllSamples[i] = samples[i];
   }
   m_iFreeSamples = NUM_SURFACES;
   CHECK_HR(m_pDeviceManager->UnlockDevice(hDevice, FALSE), "failed: Unlock device");
@@ -1196,9 +1197,10 @@ HRESULT MPEVRCustomPresenter::RenegotiateMediaOutputType()
 
 HRESULT MPEVRCustomPresenter::GetFreeSample(IMFSample** ppSample)
 {
-  TIME_LOCK(&m_lockSamples, 50000, "GetFreeSample");
+  CAutoLock sLock(&m_lockSamples);
+  //TIME_LOCK(&m_lockSamples, 50000, "GetFreeSample");
   LOG_TRACE("Trying to get free sample, size: %d", m_iFreeSamples);
-  if (m_iFreeSamples == 0)
+  if (m_iFreeSamples == 0 || m_qScheduledSamples.IsFull())
   {
     return E_FAIL;
   }
@@ -1210,6 +1212,22 @@ HRESULT MPEVRCustomPresenter::GetFreeSample(IMFSample** ppSample)
 }
 
 
+//HRESULT MPEVRCustomPresenter::GetFreeSample(IMFSample** ppSample)
+//{
+//  TIME_LOCK(&m_lockSamples, 50000, "GetFreeSample");
+//  LOG_TRACE("Trying to get free sample, size: %d", m_iFreeSamples);
+//  if (m_iFreeSamples == 0)
+//  {
+//    return E_FAIL;
+//  }
+//  m_iFreeSamples--;
+//  *ppSample = m_vFreeSamples[m_iFreeSamples];
+//  m_vFreeSamples[m_iFreeSamples] = NULL;
+//
+//  return S_OK;
+//}
+
+
 void MPEVRCustomPresenter::Flush(BOOL forced)
 {
   m_bFlushDone.Reset();
@@ -1217,54 +1235,103 @@ void MPEVRCustomPresenter::Flush(BOOL forced)
   m_bFlushDone.Wait();
 }
 
+//void MPEVRCustomPresenter::DoFlush(BOOL forced)
+//{
+//  CAutoLock sLock(&m_lockSamples);
+//  if ((m_qScheduledSamples.Count() > 0 && !m_bDVDMenu) ||
+//     (m_qScheduledSamples.Count() > 0 && forced))
+//  {
+//    Log("Flushing: size=%d", m_qScheduledSamples.Count());
+//    DwmFlush(); //Just in case...
+//    while (m_qScheduledSamples.Count() > 0)
+//    {
+//      IMFSample* pSample = PeekSample();
+//      if (pSample != NULL)
+//      {
+//        PopSample();
+//        ReturnSample(pSample, FALSE);
+//      }
+//    }
+//  }
+//  else
+//  {
+//    Log("Not flushing: size=%d", m_qScheduledSamples.Count());
+//  }
+//  
+//  m_bFlushDone.Set();
+//  m_bFlush = false;
+//  LOG_TRACE("pre buffering on 1");
+//  m_bDoPreBuffering = true;
+//}
+
+
 void MPEVRCustomPresenter::DoFlush(BOOL forced)
 {
-  CAutoLock sLock(&m_lockSamples);
-  CAutoLock ssLock(&m_lockScheduledSamples);
-  if ((m_qScheduledSamples.Count() > 0 && !m_bDVDMenu) ||
-     (m_qScheduledSamples.Count() > 0 && forced))
+  if (!m_bDVDMenu || forced)
   {
     Log("Flushing: size=%d", m_qScheduledSamples.Count());
+
     DwmFlush(); //Just in case...
-    while (m_qScheduledSamples.Count() > 0)
+    CAutoLock sLock(&m_lockSamples);
+
+    for (int i = 0; i < NUM_SURFACES; i++)
     {
-      IMFSample* pSample = PeekSample();
-      if (pSample != NULL)
-      {
-        PopSample();
-        ReturnSample(pSample, FALSE);
-      }
+      m_vFreeSamples[i] = m_vAllSamples[i];
     }
+    m_iFreeSamples = NUM_SURFACES;
+    m_qScheduledSamples.Clear();
   }
   else
   {
     Log("Not flushing: size=%d", m_qScheduledSamples.Count());
   }
-  
+
+  CheckForEndOfStream();  
   m_bFlushDone.Set();
-  m_bFlush = false;
+  m_bFlush = FALSE;
   LOG_TRACE("pre buffering on 1");
   m_bDoPreBuffering = true;
 }
 
 
+
+//void MPEVRCustomPresenter::ReturnSample(IMFSample* pSample, BOOL tryNotify)
+//{
+//  TIME_LOCK(&m_lockSamples, 50000, "ReturnSample")
+//  LOG_TRACE("Sample returned: now having %d samples", m_iFreeSamples+1);
+//  m_vFreeSamples[m_iFreeSamples++] = pSample;
+//  if (CheckQueueCount() == 0)
+//  {
+//    LOG_TRACE("No scheduled samples, queue was empty -> todo, CheckForEndOfStream()");
+//    CheckForEndOfStream();
+//  }
+//
+//  if (tryNotify && (m_iFreeSamples > 0) && (m_iFreeSamples < NUM_SURFACES) && m_bInputAvailable)
+//  {
+//    NotifyWorker(FALSE);
+//  }
+//}
+
+
 void MPEVRCustomPresenter::ReturnSample(IMFSample* pSample, BOOL tryNotify)
 {
-  TIME_LOCK(&m_lockSamples, 50000, "ReturnSample")
+  CAutoLock sLock(&m_lockSamples);
+  //TIME_LOCK(&m_lockSamples, 50000, "ReturnSample")
   LOG_TRACE("Sample returned: now having %d samples", m_iFreeSamples+1);
-  m_vFreeSamples[m_iFreeSamples++] = pSample;
-  if (CheckQueueCount() == 0)
+  m_vFreeSamples[m_iFreeSamples] = pSample;
+  m_iFreeSamples++;
+  
+  if (m_qScheduledSamples.IsEmpty())
   {
     LOG_TRACE("No scheduled samples, queue was empty -> todo, CheckForEndOfStream()");
     CheckForEndOfStream();
   }
 
-  if (tryNotify && (m_iFreeSamples > 0) && (m_iFreeSamples < NUM_SURFACES) && m_bInputAvailable)
+  if (tryNotify && (m_iFreeSamples > 0) && !m_qScheduledSamples.IsFull())
   {
     NotifyWorker(FALSE);
   }
 }
-
 
 HRESULT MPEVRCustomPresenter::PresentSample(IMFSample* pSample)
 {
@@ -2057,11 +2124,43 @@ void MPEVRCustomPresenter::NotifyTimer(LONGLONG targetTime)
 }
 
 
+//BOOL MPEVRCustomPresenter::PopSample()
+//{
+//  CAutoLock lock(&m_lockScheduledSamples);
+//  LOG_TRACE("Removing scheduled sample, size: %d", m_qScheduledSamples.Count());
+//  if (m_qScheduledSamples.Count() > 0)
+//  {
+//    m_qScheduledSamples.Get();
+//    m_qGoodPopCnt++;
+//    return TRUE;
+//  }
+//  m_qBadPopCnt++;
+//  return FALSE;
+//}
+//
+//int MPEVRCustomPresenter::CheckQueueCount()
+//{
+//  CAutoLock lock(&m_lockScheduledSamples);
+//  return m_qScheduledSamples.Count();
+//}
+//
+//
+//IMFSample* MPEVRCustomPresenter::PeekSample()
+//{
+//  CAutoLock lock(&m_lockScheduledSamples);
+//  if (m_qScheduledSamples.Count() == 0)
+//  {
+//    Log("ERR: PeekSample: empty queue!");
+//    return NULL;
+//  }
+//  return m_qScheduledSamples.Peek();
+//}
+
 BOOL MPEVRCustomPresenter::PopSample()
 {
-  CAutoLock lock(&m_lockScheduledSamples);
+  CAutoLock sLock(&m_lockSamples);
   LOG_TRACE("Removing scheduled sample, size: %d", m_qScheduledSamples.Count());
-  if (m_qScheduledSamples.Count() > 0)
+  if (!m_qScheduledSamples.IsEmpty())
   {
     m_qScheduledSamples.Get();
     m_qGoodPopCnt++;
@@ -2073,15 +2172,15 @@ BOOL MPEVRCustomPresenter::PopSample()
 
 int MPEVRCustomPresenter::CheckQueueCount()
 {
-  CAutoLock lock(&m_lockScheduledSamples);
+  CAutoLock sLock(&m_lockSamples);
   return m_qScheduledSamples.Count();
 }
 
 
 IMFSample* MPEVRCustomPresenter::PeekSample()
 {
-  CAutoLock lock(&m_lockScheduledSamples);
-  if (m_qScheduledSamples.Count() == 0)
+  CAutoLock sLock(&m_lockSamples);
+  if (m_qScheduledSamples.IsEmpty())
   {
     Log("ERR: PeekSample: empty queue!");
     return NULL;
@@ -2089,10 +2188,8 @@ IMFSample* MPEVRCustomPresenter::PeekSample()
   return m_qScheduledSamples.Peek();
 }
 
-
 void MPEVRCustomPresenter::ScheduleSample(IMFSample* pSample)
 {
-  CAutoLock lock(&m_lockScheduledSamples);
   LOG_TRACE("Scheduling Sample, size: %d", m_qScheduledSamples.Count());
   
   VideoFpsFromSample(pSample);
@@ -2111,14 +2208,16 @@ void MPEVRCustomPresenter::ScheduleSample(IMFSample* pSample)
     }
   }
 
-  m_qScheduledSamples.Put(pSample);
+  { //Context for CAutoLock
+    CAutoLock sLock(&m_lockSamples);
+    m_qScheduledSamples.Put(pSample);
+  }
   m_SampleAddedEvent.Set();
-  if (m_qScheduledSamples.Count() >= 1)
+  if (CheckQueueCount() >= 1)
   {
     NotifyScheduler(false);
   }
 }
-
 
 BOOL MPEVRCustomPresenter::CheckForEndOfStream()
 {
@@ -4328,8 +4427,7 @@ bool MPEVRCustomPresenter::GetState(DWORD dwMilliSecsTimeout, FILTER_STATE* Stat
 bool MPEVRCustomPresenter::BufferMoreSamples()
 {
   CAutoLock sLock(&m_lockSamples);
-  CAutoLock ssLock(&m_lockScheduledSamples);
-  return m_qScheduledSamples.Count() < NUM_SURFACES && !m_bEndBuffering && m_state != MP_RENDER_STATE_STOPPED;
+  return !m_qScheduledSamples.IsFull() && !m_bEndBuffering && m_state != MP_RENDER_STATE_STOPPED;
 }
 
 
