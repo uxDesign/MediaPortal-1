@@ -43,8 +43,12 @@ using namespace std;
 #define NUM_SURFACES 4
 #define NB_JITTER 125
 #define NB_RFPSIZE 64
-#define NB_DFTHSIZE 64
-#define NB_CFPSIZE 16
+
+//#define NB_DFTHSIZE 64
+//#define NB_CFPSIZE 16
+#define NB_DFTHSIZE 8
+#define NB_CFPSIZE 32
+
 #define NB_PCDSIZE 32
 #define LF_THRESH_LOW 3
 #define LF_THRESH (LF_THRESH_LOW + 1)
@@ -380,6 +384,9 @@ protected:
   int                               m_nNextCFP;
   LONGLONG                          m_fCFPMean;
   LONGLONG                          m_llCFPSumAvg;
+  LONGLONG                          m_hnsNSToffset;
+  bool                              m_NSTinitDone;
+  bool                              m_NSToffsUpdate;
 
   double                            m_pllPCD [NB_PCDSIZE];   // timestamp buffer for estimating pres/sys clock delta
   LONGLONG                          m_llLastPCDprsTs;
@@ -425,7 +432,7 @@ protected:
   void OnVBlankFinished(bool fAll, LONGLONG periodStart, LONGLONG periodEnd);
   void CalculateJitter(LONGLONG PerfCounter);
   void CalculateRealFramePeriod(LONGLONG timeStamp);
-  void CalculateNSTStats(LONGLONG timeStamp);
+  void CalculateNSTStats(LONGLONG timeStamp, LONGLONG frameTime);
   void CalculatePresClockDelta(LONGLONG presTime, LONGLONG sysTime);
 
   bool QueryFpsFromVideoMSDecoder();
@@ -474,6 +481,7 @@ protected:
   double        m_DetSampleAve;
 
   int           m_frameRateRatio;
+  int           m_frameRateRatX2;
   int           m_rawFRRatio;
   
   int           m_qGoodPopCnt;

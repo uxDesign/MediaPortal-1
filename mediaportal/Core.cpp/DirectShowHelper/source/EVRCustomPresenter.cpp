@@ -1413,6 +1413,7 @@ HRESULT MPEVRCustomPresenter::CheckForScheduledSample(LONGLONG *pTargetTime, LON
   LONGLONG delErrLimit = displayTime ;
   LONGLONG delErr = 0;
   LONGLONG nextSampleTime = 0;
+  LONGLONG realSampleTime = 0;
   LONGLONG systemTime = 0;
   LONGLONG lateLimit = 0;
   LONGLONG earlyLimit = hystersisTime;
@@ -1470,11 +1471,13 @@ HRESULT MPEVRCustomPresenter::CheckForScheduledSample(LONGLONG *pTargetTime, LON
     }
   
     // get scheduled time, if none is available the sample will be presented immediately
-    CHECK_HR(hr = GetTimeToSchedule(pSample, &nextSampleTime, &systemTime), "Couldn't get time to schedule!");
+    CHECK_HR(hr = GetTimeToSchedule(pSample, &realSampleTime, &systemTime), "Couldn't get time to schedule!");
     if (FAILED(hr))
     {
-      nextSampleTime = 0;
+      realSampleTime = 0; 
     }
+
+    nextSampleTime = realSampleTime;
     
     LOG_TRACE("Time to schedule: %I64d", nextSampleTime);
    
@@ -1525,6 +1528,12 @@ HRESULT MPEVRCustomPresenter::CheckForScheduledSample(LONGLONG *pTargetTime, LON
       lateLimit = hystersisTime;
       delErr = 0;
       m_iLateFrames = 0;
+    }
+
+    // Centralise nextSampleTime timing window when in normal play mode and MP Audio Renderer is inactive
+    if ((m_frameRateRatio > 0) && !m_bDVDMenu && !m_bScrubbing && !m_pAVSyncClock && m_NSTinitDone && (realSampleTime != 0))
+    {
+      nextSampleTime = (realSampleTime + (frameTime/2)) - m_hnsNSToffset;
     }
 
     // nextSampleTime == 0 means there is no valid presentation time, so we present it immediately without vsync correction
@@ -1624,7 +1633,7 @@ HRESULT MPEVRCustomPresenter::CheckForScheduledSample(LONGLONG *pTargetTime, LON
       // Notify EVR of sample latency
       if( m_pEventSink )
       {
-        LONGLONG sampleLatency = -nextSampleTime;
+        LONGLONG sampleLatency = -realSampleTime;
         m_pEventSink->Notify(EC_SAMPLE_LATENCY, (LONG_PTR)&sampleLatency, 0);
         LOG_TRACE("Sample Latency: %I64d", sampleLatency);
       }
@@ -1636,13 +1645,13 @@ HRESULT MPEVRCustomPresenter::CheckForScheduledSample(LONGLONG *pTargetTime, LON
 
       if (m_pAVSyncClock) //Update phase deviation data for MP Audio Renderer
       {
-        //Target (0.5 * frameTime) for nextSampleTime
-        double nstPhaseDiff = -(((double)nextSampleTime / (double)frameTime) - 0.5);
+        //Target (0.5 * frameTime) for realSampleTime
+        double nstPhaseDiff = -(((double)realSampleTime / (double)frameTime) - 0.5);
 
-        //Clamp within limits - because of hystersis, the range of nextSampleTime
+        //Clamp within limits - because of hystersis, the range of realSampleTime
         //is greater than frameTime, so it's possible for nstPhaseDiff to exceed
         //the -0.5 to +0.5 allowable range 
-        if (m_bDVDMenu || m_bScrubbing || (m_iFramesDrawn <= FRAME_PROC_THRSH2) || (m_frameRateRatio == 0 && m_dBias == 1.0))
+        if (m_bDVDMenu || m_bScrubbing || (m_frameRateRatX2 == 0 && m_dBias == 1.0))
         {
           nstPhaseDiff = 0.0;
         }
@@ -1658,10 +1667,21 @@ HRESULT MPEVRCustomPresenter::CheckForScheduledSample(LONGLONG *pTargetTime, LON
         AdjustAVSync(nstPhaseDiff);
       }
 
-      if (m_bDrawStats)
+      m_llLastCFPts = nextSampleTime;
+      CalculateNSTStats(realSampleTime, frameTime); // update NextSampleTime average
+
+      // Notify EVR of sample latency
+      if( m_pEventSink )
       {
-        CalculateNSTStats(nextSampleTime); // update NextSampleTime average
+        LONGLONG sampleLatency = -realSampleTime;
+        m_pEventSink->Notify(EC_SAMPLE_LATENCY, (LONG_PTR)&sampleLatency, 0);
+        LOG_TRACE("Sample Latency: %I64d", sampleLatency);
       }
+
+//      if (m_bDrawStats)
+//      {
+//        CalculateNSTStats(nextSampleTime); // update NextSampleTime average
+//      }
       break;
     } 
     else // Drop late frames when frame skipping is enabled during normal playback
@@ -3553,11 +3573,15 @@ void MPEVRCustomPresenter::ResetFrameStats()
   
   m_LastScheduledUncorrectedSampleTime = -1;
   m_frameRateRatio = 0;
+  m_frameRateRatX2 = 0;
   m_rawFRRatio = 0;
 
   m_stallTime = 0;
   m_earliestPresentTime = 0;
   m_lastPresentTime = 0;
+  m_hnsNSToffset = 0;
+  m_NSTinitDone = false;
+  m_NSToffsUpdate = true;
   
   m_nNextRFP = 0;
     
@@ -3730,16 +3754,8 @@ void MPEVRCustomPresenter::GetFrameRateRatio()
   int F2DRatioN6 = (int)((rtimePerFrameMs * 0.985)/currentDispCycle); // Allow -1.5% tolerance
 
   m_rawFRRatio = F2DRatioP6;
- 
-  if (!(m_DetectedFrameTime > DFT_THRESH) || (m_iFramesProcessed < FRAME_PROC_THRESH))
-  {
-    m_frameRateRatio = 0;
-  }
-  else if (m_iFramesDrawn < FRAME_PROC_THRSH2)
-  {
-    m_frameRateRatio = F2DRatioP6;
-  }
-  else if (F2DRatioP6 == 0 || (F2DRatioP6 == F2DRatioN6)) 
+
+  if (F2DRatioP6 == 0 || (F2DRatioP6 == F2DRatioN6)) 
   {
     m_frameRateRatio = 0;
   }
@@ -3747,7 +3763,30 @@ void MPEVRCustomPresenter::GetFrameRateRatio()
   {
     m_frameRateRatio = F2DRatioP6;
   }
+
+  int F4DRatX2P6 = (int)((rtimePerFrameMs * 2.03)/currentDispCycle); // Allow +1.5% tolerance
+  int F4DRatX2N6 = (int)((rtimePerFrameMs * 1.97)/currentDispCycle); // Allow -1.5% tolerance
+
+  if (F4DRatX2P6 == 0 || (F4DRatX2P6 == F4DRatX2N6)) 
+  {
+    m_frameRateRatX2 = 0;
+  }
+  else
+  {
+    m_frameRateRatX2 = F4DRatX2P6;
+  }
  
+  if (!(m_DetectedFrameTime > DFT_THRESH) || (m_iFramesDrawn < FRAME_PROC_THRESH) )
+  {
+    m_frameRateRatio = 0;
+    m_frameRateRatX2 = 0;
+  }
+  else if (m_iFramesDrawn < FRAME_PROC_THRSH2)
+  {
+    m_frameRateRatio = F2DRatioP6;
+    m_frameRateRatX2 = F4DRatX2P6;
+  }
+
 }
 
 // Get the difference in video and display cycle times.
@@ -4082,12 +4121,10 @@ LONGLONG MPEVRCustomPresenter::GetDelayToRasterTarget(LONGLONG *targetTime, LONG
 }
 
 // Update the array m_pllCFP with a new time stamp. Calculate mean.
-void MPEVRCustomPresenter::CalculateNSTStats(LONGLONG timeStamp)
+void MPEVRCustomPresenter::CalculateNSTStats(LONGLONG timeStamp, LONGLONG frameTime)
 {
   LONGLONG cfpDiff = timeStamp;
-  
-  m_llLastCFPts = timeStamp;
-      
+        
   int tempNextCFP = (m_nNextCFP % NB_CFPSIZE);
   m_llCFPSumAvg -= m_pllCFP[tempNextCFP];
   m_pllCFP[tempNextCFP] = cfpDiff;
@@ -4098,7 +4135,7 @@ void MPEVRCustomPresenter::CalculateNSTStats(LONGLONG timeStamp)
   {
     m_fCFPMean = m_llCFPSumAvg / (LONGLONG)NB_CFPSIZE;
   }
-  else if (m_nNextCFP >= 10)
+  else if (m_nNextCFP > 0)
   {
     m_fCFPMean = m_llCFPSumAvg / (LONGLONG)m_nNextCFP;
   }
@@ -4106,7 +4143,56 @@ void MPEVRCustomPresenter::CalculateNSTStats(LONGLONG timeStamp)
   {
     m_fCFPMean = cfpDiff;
   }
+
+  //Calculate 'next sample time' correction offset
+  //This is used to centre the timing window for the frame drop/stall logic
+  //It is updated every NB_CFPSIZE frames
+  if (tempNextCFP == (NB_CFPSIZE-1))
+  {
+    if (m_fCFPMean < 0)
+    {
+      m_hnsNSToffset = -( -m_fCFPMean % frameTime);
+    }
+    else
+    {
+      m_hnsNSToffset = m_fCFPMean % frameTime;
+    }
+    m_NSTinitDone = true;
+    m_NSToffsUpdate = true;
+  }
+  else
+  {
+    m_NSToffsUpdate = !m_NSTinitDone; //force 'true' initially
+  }
+      
 }
+
+//// Update the array m_pllCFP with a new time stamp. Calculate mean.
+//void MPEVRCustomPresenter::CalculateNSTStats(LONGLONG timeStamp)
+//{
+//  LONGLONG cfpDiff = timeStamp;
+//  
+//  m_llLastCFPts = timeStamp;
+//      
+//  int tempNextCFP = (m_nNextCFP % NB_CFPSIZE);
+//  m_llCFPSumAvg -= m_pllCFP[tempNextCFP];
+//  m_pllCFP[tempNextCFP] = cfpDiff;
+//  m_llCFPSumAvg += cfpDiff;
+//  m_nNextCFP++;
+//  
+//  if (m_nNextCFP >= NB_CFPSIZE)
+//  {
+//    m_fCFPMean = m_llCFPSumAvg / (LONGLONG)NB_CFPSIZE;
+//  }
+//  else if (m_nNextCFP >= 10)
+//  {
+//    m_fCFPMean = m_llCFPSumAvg / (LONGLONG)m_nNextCFP;
+//  }
+//  else
+//  {
+//    m_fCFPMean = cfpDiff;
+//  }
+//}
 
 
   // This function calculates the (average) ratio between the presentation clock and
