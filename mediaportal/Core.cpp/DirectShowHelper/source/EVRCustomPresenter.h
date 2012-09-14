@@ -47,12 +47,13 @@ using namespace std;
 //#define NB_DFTHSIZE 64
 //#define NB_CFPSIZE 16
 #define NB_DFTHSIZE 8
-#define NB_CFPSIZE 32
+//#define NB_CFPSIZE 32
+#define NB_CFPSIZE 16
 
 #define NB_PCDSIZE 32
-#define LF_THRESH_LOW 3
-#define LF_THRESH (LF_THRESH_LOW + 1)
-#define LF_THRESH_HIGH (LF_THRESH + 3)
+//#define LF_THRESH_LOW 3
+//#define LF_THRESH (LF_THRESH_LOW + 1)
+//#define LF_THRESH_HIGH (LF_THRESH + 3)
 #define FRAME_PROC_THRESH 30
 #define FRAME_PROC_THRSH2 60
 #define DFT_THRESH 0.007
@@ -394,13 +395,9 @@ protected:
   int                               m_nNextPCD;
   double                            m_fPCDMean;
   double                            m_fPCDSumAvg;
-	
-	
-  int                               m_iFramesHeld;
-  int                               m_iLateFrames;
+		
   int                               m_iFramesProcessed;
  
-
   int       m_nNextSyncOffset;
   LONGLONG  nsSampleTime;
 
