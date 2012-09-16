@@ -1,4 +1,4 @@
-// Copyright (C) 2005-2010 Team MediaPortal
+// Copyright (C) 2005-2012 Team MediaPortal
 // http://www.team-mediaportal.com
 // 
 // MediaPortal is free software: you can redistribute it and/or modify
@@ -721,15 +721,6 @@ HRESULT MPEVRCustomPresenter::GetTimeToSchedule(IMFSample* pSample, LONGLONG *ph
   pSample->GetSampleTime(&sampleTime);
   LOG_TRACE("Due: %I64d, Calculated delta: %I64d sample time: %I64d now %I64d (rate: %f)", hnsPresentationTime, hnsDelta, sampleTime, hnsTimeNow, m_fRate);
 
-//  if (m_fRate != 1.0f && m_fRate != 0.0f)
-//  {
-//    *phnsDelta = (LONGLONG)((float)hnsDelta / m_fRate);
-//  }
-//  else
-//  {
-//    *phnsDelta = hnsDelta;
-//  }
-
   *phnsDelta = hnsDelta;
   
   if (*phnsDelta == 0)
@@ -1212,57 +1203,12 @@ HRESULT MPEVRCustomPresenter::GetFreeSample(IMFSample** ppSample)
 }
 
 
-//HRESULT MPEVRCustomPresenter::GetFreeSample(IMFSample** ppSample)
-//{
-//  TIME_LOCK(&m_lockSamples, 50000, "GetFreeSample");
-//  LOG_TRACE("Trying to get free sample, size: %d", m_iFreeSamples);
-//  if (m_iFreeSamples == 0)
-//  {
-//    return E_FAIL;
-//  }
-//  m_iFreeSamples--;
-//  *ppSample = m_vFreeSamples[m_iFreeSamples];
-//  m_vFreeSamples[m_iFreeSamples] = NULL;
-//
-//  return S_OK;
-//}
-
-
 void MPEVRCustomPresenter::Flush(BOOL forced)
 {
   m_bFlushDone.Reset();
   m_bFlush = true;
   m_bFlushDone.Wait();
 }
-
-//void MPEVRCustomPresenter::DoFlush(BOOL forced)
-//{
-//  CAutoLock sLock(&m_lockSamples);
-//  if ((m_qScheduledSamples.Count() > 0 && !m_bDVDMenu) ||
-//     (m_qScheduledSamples.Count() > 0 && forced))
-//  {
-//    Log("Flushing: size=%d", m_qScheduledSamples.Count());
-//    DwmFlush(); //Just in case...
-//    while (m_qScheduledSamples.Count() > 0)
-//    {
-//      IMFSample* pSample = PeekSample();
-//      if (pSample != NULL)
-//      {
-//        PopSample();
-//        ReturnSample(pSample, FALSE);
-//      }
-//    }
-//  }
-//  else
-//  {
-//    Log("Not flushing: size=%d", m_qScheduledSamples.Count());
-//  }
-//  
-//  m_bFlushDone.Set();
-//  m_bFlush = false;
-//  LOG_TRACE("pre buffering on 1");
-//  m_bDoPreBuffering = true;
-//}
 
 
 void MPEVRCustomPresenter::DoFlush(BOOL forced)
@@ -1292,25 +1238,6 @@ void MPEVRCustomPresenter::DoFlush(BOOL forced)
   LOG_TRACE("pre buffering on 1");
   m_bDoPreBuffering = true;
 }
-
-
-
-//void MPEVRCustomPresenter::ReturnSample(IMFSample* pSample, BOOL tryNotify)
-//{
-//  TIME_LOCK(&m_lockSamples, 50000, "ReturnSample")
-//  LOG_TRACE("Sample returned: now having %d samples", m_iFreeSamples+1);
-//  m_vFreeSamples[m_iFreeSamples++] = pSample;
-//  if (CheckQueueCount() == 0)
-//  {
-//    LOG_TRACE("No scheduled samples, queue was empty -> todo, CheckForEndOfStream()");
-//    CheckForEndOfStream();
-//  }
-//
-//  if (tryNotify && (m_iFreeSamples > 0) && (m_iFreeSamples < NUM_SURFACES) && m_bInputAvailable)
-//  {
-//    NotifyWorker(FALSE);
-//  }
-//}
 
 
 void MPEVRCustomPresenter::ReturnSample(IMFSample* pSample, BOOL tryNotify)
@@ -1449,7 +1376,7 @@ HRESULT MPEVRCustomPresenter::CheckForScheduledSample(LONGLONG *pTargetTime, LON
   if (m_bZeroScrub && (m_iFramesProcessed > 0))
     return S_OK;
 
-  while (CheckQueueCount() > 0)
+  while (SampleAvailable())
   {        
     // don't process frame in paused mode during normal playback
     if (m_state == MP_RENDER_STATE_PAUSED && !m_bDVDMenu) 
@@ -1484,7 +1411,7 @@ HRESULT MPEVRCustomPresenter::CheckForScheduledSample(LONGLONG *pTargetTime, LON
     if (*pTargetTime > 0)
     {  
       m_lastDelayErr = *pTargetTime - systemTime;
-      if (m_lastDelayErr < 0) //late
+      if ((m_lastDelayErr < 0) && (m_frameRateRatio > 0) && !m_bDVDMenu && !m_bScrubbing) //late
       {
         delErr = min(delErrLimit, -m_lastDelayErr); 
       }     
@@ -1492,17 +1419,10 @@ HRESULT MPEVRCustomPresenter::CheckForScheduledSample(LONGLONG *pTargetTime, LON
     
     *pTargetTime = 0;      
         
-    if ((m_frameRateRatio > 0) && !m_bDVDMenu && !m_bScrubbing)
+    // Centralise nextSampleTime timing window (using average NST offset) when MP Audio Renderer is inactive
+    if (!m_pAVSyncClock && (realSampleTime != 0))
     {
-      // Centralise nextSampleTime timing window when in normal play mode and MP Audio Renderer is inactive
-      if (!m_pAVSyncClock && m_NSTinitDone && (realSampleTime != 0))
-      {
-        nextSampleTime = (realSampleTime + (frameTime/2)) - m_hnsNSToffset;
-      }
-    }
-    else
-    {
-      delErr = 0;
+      nextSampleTime = (realSampleTime + (frameTime/2)) - m_hnsAvgNSToffset;
     }
 
     // nextSampleTime == 0 means there is no valid presentation time, so we present it immediately without vsync correction
@@ -1622,7 +1542,7 @@ HRESULT MPEVRCustomPresenter::CheckForScheduledSample(LONGLONG *pTargetTime, LON
       }
 
       m_llLastCFPts = nextSampleTime;
-      CalculateNSTStats(realSampleTime, frameTime); // update NextSampleTime average
+      CalculateAvgNstOffset(realSampleTime, frameTime); // update NextSampleTime average
 
       // Notify EVR of sample latency
       if( m_pEventSink )
@@ -2088,39 +2008,6 @@ void MPEVRCustomPresenter::NotifyTimer(LONGLONG targetTime)
   }   
 }
 
-
-//BOOL MPEVRCustomPresenter::PopSample()
-//{
-//  CAutoLock lock(&m_lockScheduledSamples);
-//  LOG_TRACE("Removing scheduled sample, size: %d", m_qScheduledSamples.Count());
-//  if (m_qScheduledSamples.Count() > 0)
-//  {
-//    m_qScheduledSamples.Get();
-//    m_qGoodPopCnt++;
-//    return TRUE;
-//  }
-//  m_qBadPopCnt++;
-//  return FALSE;
-//}
-//
-//int MPEVRCustomPresenter::CheckQueueCount()
-//{
-//  CAutoLock lock(&m_lockScheduledSamples);
-//  return m_qScheduledSamples.Count();
-//}
-//
-//
-//IMFSample* MPEVRCustomPresenter::PeekSample()
-//{
-//  CAutoLock lock(&m_lockScheduledSamples);
-//  if (m_qScheduledSamples.Count() == 0)
-//  {
-//    Log("ERR: PeekSample: empty queue!");
-//    return NULL;
-//  }
-//  return m_qScheduledSamples.Peek();
-//}
-
 BOOL MPEVRCustomPresenter::PopSample()
 {
   CAutoLock sLock(&m_lockSamples);
@@ -2139,6 +2026,12 @@ int MPEVRCustomPresenter::CheckQueueCount()
 {
   CAutoLock sLock(&m_lockSamples);
   return m_qScheduledSamples.Count();
+}
+
+bool MPEVRCustomPresenter::SampleAvailable()
+{
+  CAutoLock sLock(&m_lockSamples);
+  return !m_qScheduledSamples.IsEmpty();
 }
 
 
@@ -2178,7 +2071,7 @@ void MPEVRCustomPresenter::ScheduleSample(IMFSample* pSample)
     m_qScheduledSamples.Put(pSample);
   }
   m_SampleAddedEvent.Set();
-  if (CheckQueueCount() >= 1)
+  if (SampleAvailable())
   {
     NotifyScheduler(false);
   }
@@ -2191,7 +2084,7 @@ BOOL MPEVRCustomPresenter::CheckForEndOfStream()
     return FALSE;
   }
   // samples pending
-  if (CheckQueueCount() > 0)
+  if (SampleAvailable())
   {
     return FALSE;
   }
@@ -3522,9 +3415,8 @@ void MPEVRCustomPresenter::ResetFrameStats()
   m_stallTime = 0;
   m_earliestPresentTime = 0;
   m_lastPresentTime = 0;
-  m_hnsNSToffset = 0;
+  m_hnsAvgNSToffset = 0;
   m_NSTinitDone = false;
-  m_NSToffsUpdate = true;
   
   m_nNextRFP = 0;
     
@@ -3719,17 +3611,12 @@ void MPEVRCustomPresenter::GetFrameRateRatio()
     m_frameRateRatX2 = F4DRatX2P6;
   }
  
-  if (!(m_DetectedFrameTime > DFT_THRESH) || (m_iFramesDrawn < FRAME_PROC_THRESH) )
+  if ((m_DetectedFrameTime <= DFT_THRESH) || (m_iFramesDrawn < FRAME_PROC_THRESH) )
   {
+    //Force to zero until playback has settled down and we know the real video frame rate
     m_frameRateRatio = 0;
     m_frameRateRatX2 = 0;
   }
-  else if (m_iFramesDrawn < FRAME_PROC_THRSH2)
-  {
-    m_frameRateRatio = F2DRatioP6;
-    m_frameRateRatX2 = F4DRatX2P6;
-  }
-
 }
 
 // Get the difference in video and display cycle times.
@@ -4064,14 +3951,18 @@ LONGLONG MPEVRCustomPresenter::GetDelayToRasterTarget(LONGLONG *targetTime, LONG
 }
 
 // Update the array m_pllCFP with a new time stamp. Calculate mean.
-void MPEVRCustomPresenter::CalculateNSTStats(LONGLONG timeStamp, LONGLONG frameTime)
-{
-  LONGLONG cfpDiff = timeStamp;
+void MPEVRCustomPresenter::CalculateAvgNstOffset(LONGLONG timeStamp, LONGLONG frameTime)
+{  
+  if ((m_frameRateRatio <= 0) || m_bDVDMenu || m_bScrubbing)
+  {
+    //Display and video FPS unrelated - allow NST offset to decay away to zero
+    timeStamp = (LONGLONG)((double)m_fCFPMean * 0.8);
+  }  
         
   int tempNextCFP = (m_nNextCFP % NB_CFPSIZE);
   m_llCFPSumAvg -= m_pllCFP[tempNextCFP];
-  m_pllCFP[tempNextCFP] = cfpDiff;
-  m_llCFPSumAvg += cfpDiff;
+  m_pllCFP[tempNextCFP] = timeStamp;
+  m_llCFPSumAvg += timeStamp;
   m_nNextCFP++;
   
   if (m_nNextCFP >= NB_CFPSIZE)
@@ -4084,7 +3975,7 @@ void MPEVRCustomPresenter::CalculateNSTStats(LONGLONG timeStamp, LONGLONG frameT
   }
   else
   {
-    m_fCFPMean = cfpDiff;
+    m_fCFPMean = timeStamp;
   }
 
   //Calculate 'next sample time' correction offset
@@ -4094,49 +3985,16 @@ void MPEVRCustomPresenter::CalculateNSTStats(LONGLONG timeStamp, LONGLONG frameT
   {
     if (m_fCFPMean < 0)
     {
-      m_hnsNSToffset = -(-m_fCFPMean % frameTime);
+      m_hnsAvgNSToffset = -(-m_fCFPMean % frameTime);
     }
     else
     {
-      m_hnsNSToffset = m_fCFPMean % frameTime;
+      m_hnsAvgNSToffset = m_fCFPMean % frameTime;
     }
     m_NSTinitDone = true;
-    m_NSToffsUpdate = true;
-  }
-  else
-  {
-    m_NSToffsUpdate = !m_NSTinitDone; //force 'true' initially
   }
       
 }
-
-//// Update the array m_pllCFP with a new time stamp. Calculate mean.
-//void MPEVRCustomPresenter::CalculateNSTStats(LONGLONG timeStamp)
-//{
-//  LONGLONG cfpDiff = timeStamp;
-//  
-//  m_llLastCFPts = timeStamp;
-//      
-//  int tempNextCFP = (m_nNextCFP % NB_CFPSIZE);
-//  m_llCFPSumAvg -= m_pllCFP[tempNextCFP];
-//  m_pllCFP[tempNextCFP] = cfpDiff;
-//  m_llCFPSumAvg += cfpDiff;
-//  m_nNextCFP++;
-//  
-//  if (m_nNextCFP >= NB_CFPSIZE)
-//  {
-//    m_fCFPMean = m_llCFPSumAvg / (LONGLONG)NB_CFPSIZE;
-//  }
-//  else if (m_nNextCFP >= 10)
-//  {
-//    m_fCFPMean = m_llCFPSumAvg / (LONGLONG)m_nNextCFP;
-//  }
-//  else
-//  {
-//    m_fCFPMean = cfpDiff;
-//  }
-//}
-
 
   // This function calculates the (average) ratio between the presentation clock and
   // system clock - Audio renderer can modify the presentation clock when performing speed up/down.

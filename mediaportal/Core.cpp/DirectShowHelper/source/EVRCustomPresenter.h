@@ -1,4 +1,4 @@
-// Copyright (C) 2005-2010 Team MediaPortal
+// Copyright (C) 2005-2012 Team MediaPortal
 // http://www.team-mediaportal.com
 // 
 // MediaPortal is free software: you can redistribute it and/or modify
@@ -44,18 +44,11 @@ using namespace std;
 #define NB_JITTER 125
 #define NB_RFPSIZE 64
 
-//#define NB_DFTHSIZE 64
-//#define NB_CFPSIZE 16
 #define NB_DFTHSIZE 8
-//#define NB_CFPSIZE 32
 #define NB_CFPSIZE 16
 
 #define NB_PCDSIZE 32
-//#define LF_THRESH_LOW 3
-//#define LF_THRESH (LF_THRESH_LOW + 1)
-//#define LF_THRESH_HIGH (LF_THRESH + 3)
-#define FRAME_PROC_THRESH 30
-#define FRAME_PROC_THRSH2 60
+#define FRAME_PROC_THRESH 32
 #define DFT_THRESH 0.007
 #define NUM_PHASE_DEVIATIONS 32
 #define FILTER_LIST_SIZE 9
@@ -255,7 +248,6 @@ public:
 
   void           DwmReset(bool newWinHand);
   void           DwmInit(UINT buffers, UINT rfshPerFrame);
-  void           FlushAtEnd();
 
   bool           m_bScrubbing;
   bool           m_bZeroScrub;
@@ -296,6 +288,7 @@ protected:
   IMFSample*     PeekSample();
   BOOL           PopSample();
   int            CheckQueueCount();
+  bool           SampleAvailable();
   HRESULT        TrackSample(IMFSample *pSample);
   HRESULT        GetFreeSample(IMFSample** ppSample);
   void           ReturnSample(IMFSample* pSample, BOOL tryNotify);
@@ -385,9 +378,8 @@ protected:
   int                               m_nNextCFP;
   LONGLONG                          m_fCFPMean;
   LONGLONG                          m_llCFPSumAvg;
-  LONGLONG                          m_hnsNSToffset;
+  LONGLONG                          m_hnsAvgNSToffset;
   bool                              m_NSTinitDone;
-  bool                              m_NSToffsUpdate;
 
   double                            m_pllPCD [NB_PCDSIZE];   // timestamp buffer for estimating pres/sys clock delta
   LONGLONG                          m_llLastPCDprsTs;
@@ -429,7 +421,7 @@ protected:
   void OnVBlankFinished(bool fAll, LONGLONG periodStart, LONGLONG periodEnd);
   void CalculateJitter(LONGLONG PerfCounter);
   void CalculateRealFramePeriod(LONGLONG timeStamp);
-  void CalculateNSTStats(LONGLONG timeStamp, LONGLONG frameTime);
+  void CalculateAvgNstOffset(LONGLONG timeStamp, LONGLONG frameTime);
   void CalculatePresClockDelta(LONGLONG presTime, LONGLONG sysTime);
 
   bool QueryFpsFromVideoMSDecoder();
