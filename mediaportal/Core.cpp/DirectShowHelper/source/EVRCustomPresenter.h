@@ -40,6 +40,9 @@ using namespace std;
 //Bring Scheduler thread under Multimedia Class Scheduler Service (MMCSS) control if 'true'
 #define SCHED_ENABLE_MMCSS false
 
+//Thread pause timeout in ms
+#define THREAD_PAUSE_TIMEOUT 2000
+
 #define NUM_SURFACES 4
 #define NB_JITTER 125
 #define NB_RFPSIZE 64
@@ -287,6 +290,7 @@ protected:
   void           ScheduleSample(IMFSample* pSample);
   IMFSample*     PeekSample();
   BOOL           PopSample();
+  BOOL           PutSample(IMFSample* pSample);
   int            CheckQueueCount();
   bool           SampleAvailable();
   HRESULT        TrackSample(IMFSample *pSample);

@@ -91,11 +91,11 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
     LogRotate();
     if (NO_MP_AUD_REND)
     {
-      Log("--- v1.6.660 Experimental DWM queued mode --- instance 0x%x", this);
+      Log("--- v1.6.661 Experimental DWM queued mode --- instance 0x%x", this);
     }
     else
     {
-      Log("--- v1.6.660 Experimental DWM queued mode --- instance 0x%x", this);
+      Log("--- v1.6.661 Experimental DWM queued mode --- instance 0x%x", this);
       Log("-------- audio renderer enabled ------------ instance 0x%x", this);
     }
     m_hMonitor = monitor;
@@ -1191,7 +1191,7 @@ HRESULT MPEVRCustomPresenter::GetFreeSample(IMFSample** ppSample)
   CAutoLock sLock(&m_lockSamples);
   //TIME_LOCK(&m_lockSamples, 50000, "GetFreeSample");
   LOG_TRACE("Trying to get free sample, size: %d", m_iFreeSamples);
-  if (m_iFreeSamples == 0 || m_qScheduledSamples.IsFull())
+  if (m_iFreeSamples <= 0 || m_qScheduledSamples.IsFull())
   {
     return E_FAIL;
   }
@@ -1245,8 +1245,11 @@ void MPEVRCustomPresenter::ReturnSample(IMFSample* pSample, BOOL tryNotify)
   CAutoLock sLock(&m_lockSamples);
   //TIME_LOCK(&m_lockSamples, 50000, "ReturnSample")
   LOG_TRACE("Sample returned: now having %d samples", m_iFreeSamples+1);
-  m_vFreeSamples[m_iFreeSamples] = pSample;
-  m_iFreeSamples++;
+  if (m_iFreeSamples < NUM_SURFACES)
+  {
+    m_vFreeSamples[m_iFreeSamples] = pSample;
+    m_iFreeSamples++;
+  }
   
   if (m_qScheduledSamples.IsEmpty())
   {
@@ -1358,9 +1361,7 @@ HRESULT MPEVRCustomPresenter::CheckForScheduledSample(LONGLONG *pTargetTime, LON
   {
     if (!m_bDVDMenu)
     {
-      PauseThread(m_hWorker, &m_workerParams);
       DoFlush(FALSE);
-      WakeThread(m_hWorker, &m_workerParams);
       *pTargetTime = 0;
       m_earliestPresentTime = 0;
       return S_OK;
@@ -1888,13 +1889,13 @@ void MPEVRCustomPresenter::PauseThread(HANDLE hThread, SchedulerParams* params)
   {
     return;
   }
-  Log("Pausing thread 0x%x, 0x%x, %d", hThread, params, params->iPause);
+  //Log("Pausing thread 0x%x, 0x%x, %d", hThread, params, params->iPause);
 
   InterlockedIncrement(&params->iPause);
 
   int i = 0;
   
-  for (i = 0; i < 50; i++)
+  for (i = 0; i < THREAD_PAUSE_TIMEOUT; i++)
   {
     params->eHasWork.Set(); //Wake thread (in case it's sleeping)
     Sleep(1);
@@ -1904,15 +1905,14 @@ void MPEVRCustomPresenter::PauseThread(HANDLE hThread, SchedulerParams* params)
     }
   }
   
-  if (i >= 50)
+  if (i >= THREAD_PAUSE_TIMEOUT)
   {
     Log("Thread pause timeout 0x%x, 0x%x, %d", hThread, params, params->iPause);
   }
   else
   {
-    Log("Thread paused, 0x%x, 0x%x, %d", hThread, params, params->iPause);
+    //Log("Thread paused, 0x%x, 0x%x, %d", hThread, params, params->iPause);
   }
-
 }
 
 void MPEVRCustomPresenter::WakeThread(HANDLE hThread, SchedulerParams* params)
@@ -1926,7 +1926,7 @@ void MPEVRCustomPresenter::WakeThread(HANDLE hThread, SchedulerParams* params)
 
   params->eHasWork.Set();
 
-  Log("Waking thread 0x%x, 0x%x, %d", hThread, params, params->iPause);  
+  //Log("Waking thread 0x%x, 0x%x, %d", hThread, params, params->iPause);  
 }
 
 
@@ -2008,6 +2008,18 @@ void MPEVRCustomPresenter::NotifyTimer(LONGLONG targetTime)
   }   
 }
 
+BOOL MPEVRCustomPresenter::PutSample(IMFSample* pSample)
+{
+  CAutoLock sLock(&m_lockSamples);
+  LOG_TRACE("Adding scheduled sample, size: %d", m_qScheduledSamples.Count());
+  if (!m_qScheduledSamples.IsFull() && (m_iFreeSamples < NUM_SURFACES))
+  {
+    m_qScheduledSamples.Put(pSample);
+    return TRUE;
+  }
+  return FALSE;
+}
+
 BOOL MPEVRCustomPresenter::PopSample()
 {
   CAutoLock sLock(&m_lockSamples);
@@ -2066,10 +2078,7 @@ void MPEVRCustomPresenter::ScheduleSample(IMFSample* pSample)
     }
   }
 
-  { //Context for CAutoLock
-    CAutoLock sLock(&m_lockSamples);
-    m_qScheduledSamples.Put(pSample);
-  }
+  PutSample(pSample);
   m_SampleAddedEvent.Set();
   if (SampleAvailable())
   {
@@ -4266,7 +4275,7 @@ bool MPEVRCustomPresenter::GetState(DWORD dwMilliSecsTimeout, FILTER_STATE* Stat
   bool moreSamplesNeeded = BufferMoreSamples();
   bool stopWaiting = false;
 
-  if (!moreSamplesNeeded || !m_bDoPreBuffering) // all samples have arrieved 
+  if (!moreSamplesNeeded || !m_bDoPreBuffering) // all samples have arrived 
   {
     return false;
   }
@@ -4316,7 +4325,6 @@ bool MPEVRCustomPresenter::BufferMoreSamples()
   CAutoLock sLock(&m_lockSamples);
   return !m_qScheduledSamples.IsFull() && !m_bEndBuffering && m_state != MP_RENDER_STATE_STOPPED;
 }
-
 
 //=============== Filter Graph interface functions =================
 
