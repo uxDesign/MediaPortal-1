@@ -1245,11 +1245,27 @@ void MPEVRCustomPresenter::ReturnSample(IMFSample* pSample, BOOL tryNotify)
   CAutoLock sLock(&m_lockSamples);
   //TIME_LOCK(&m_lockSamples, 50000, "ReturnSample")
   LOG_TRACE("Sample returned: now having %d samples", m_iFreeSamples+1);
-  if (m_iFreeSamples < NUM_SURFACES)
+  if (m_iFreeSamples >= NUM_SURFACES)
   {
-    m_vFreeSamples[m_iFreeSamples] = pSample;
-    m_iFreeSamples++;
+    //Error - all samples free !!
+    return;
   }
+  for (int i = 0; i < NUM_SURFACES; i++)
+  {
+    if (m_vFreeSamples[i] == pSample)
+    {
+      //Error - pSample pointer is already free !!
+      return;
+    }
+  }
+  if (m_vFreeSamples[m_iFreeSamples] != NULL)
+  {
+    //Error - array element already holds valid pointer !!
+    return;
+  }
+
+  m_vFreeSamples[m_iFreeSamples] = pSample;
+  m_iFreeSamples++;
   
   if (m_qScheduledSamples.IsEmpty())
   {
