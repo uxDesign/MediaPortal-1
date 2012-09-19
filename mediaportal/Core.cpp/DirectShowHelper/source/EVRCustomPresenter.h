@@ -357,6 +357,7 @@ protected:
   bool                              m_bDoPreBuffering;
   int                               m_iFramesDrawn;
   int                               m_iFramesDropped;
+  int                               m_iEarlyFrCnt;
   bool                              m_bFrameSkipping;
   double                            m_fSeekRate;
 //  bool                              m_bScrubbing;

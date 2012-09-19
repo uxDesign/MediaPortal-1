@@ -91,11 +91,11 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
     LogRotate();
     if (NO_MP_AUD_REND)
     {
-      Log("--- v1.6.661 Experimental DWM queued mode --- instance 0x%x", this);
+      Log("--- v1.6.661a Experimental DWM queued mode --- instance 0x%x", this);
     }
     else
     {
-      Log("--- v1.6.661 Experimental DWM queued mode --- instance 0x%x", this);
+      Log("--- v1.6.661a Experimental DWM queued mode --- instance 0x%x", this);
       Log("-------- audio renderer enabled ------------ instance 0x%x", this);
     }
     m_hMonitor = monitor;
@@ -1495,6 +1495,11 @@ HRESULT MPEVRCustomPresenter::CheckForScheduledSample(LONGLONG *pTargetTime, LON
         
         if (nextSampleTime > (max(frameTime, displayTime) + earlyLimit))
         {      
+          if ((m_frameRateRatio > 0) && !m_bDVDMenu && !m_bScrubbing)
+          {
+            //Count the early/stalled frames
+            m_iEarlyFrCnt++;
+          }
           // It's too early to present sample, so delay for a while          
           m_stallTime = m_earliestPresentTime - systemTime;
           *pTargetTime = systemTime + (m_stallTime/2); //delay in smaller chunks
@@ -1923,7 +1928,7 @@ void MPEVRCustomPresenter::PauseThread(HANDLE hThread, SchedulerParams* params)
   
   if (i >= THREAD_PAUSE_TIMEOUT)
   {
-    Log("Thread pause timeout 0x%x, 0x%x, %d", hThread, params, params->iPause);
+    Log("***** Warning - PauseThread() timeout 0x%x, 0x%x, %d", hThread, params, params->iPause);
   }
   else
   {
@@ -3413,6 +3418,7 @@ void MPEVRCustomPresenter::ResetFrameStats()
   m_iFramesDrawn    = 0;
   m_iFramesDropped  = 0;
   m_iFramesProcessed = 0;
+  m_iEarlyFrCnt     = 0;
   
   m_nNextCFP = 0;
   m_fCFPMean = 0;
