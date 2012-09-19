@@ -14,7 +14,7 @@ along with this library; if not, write to the Free Software Foundation, Inc.,
 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA
 **********/
 // "mTunnel" multicast access service
-// Copyright (c) 1996-2009 Live Networks, Inc.  All rights reserved.
+// Copyright (c) 1996-2012 Live Networks, Inc.  All rights reserved.
 // Network Interfaces
 // C++ header
 
@@ -97,8 +97,7 @@ public:
   static int DebugLevel;
 
 protected:
-  Socket(UsageEnvironment& env, Port port,
-	 Boolean setLoopback = True); // virtual base class
+  Socket(UsageEnvironment& env, Port port); // virtual base class
 
   Boolean changePort(Port newPort); // will also cause socketNum() to change
 
@@ -106,7 +105,6 @@ private:
   int fSocketNum;
   UsageEnvironment& fEnv;
   Port fPort;
-  Boolean fSetLoopback;
 };
 
 UsageEnvironment& operator<<(UsageEnvironment& s, const Socket& sock);

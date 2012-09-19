@@ -14,7 +14,7 @@ along with this library; if not, write to the Free Software Foundation, Inc.,
 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA
 **********/
 // "liveMedia"
-// Copyright (c) 1996-2009 Live Networks, Inc.  All rights reserved.
+// Copyright (c) 1996-2012 Live Networks, Inc.  All rights reserved.
 // RTP Sources
 // C++ header
 
@@ -62,6 +62,9 @@ public:
   void setStreamSocket(int sockNum, unsigned char streamChannelId) {
     // hack to allow sending RTP over TCP (RFC 2236, section 10.12)
     fRTPInterface.setStreamSocket(sockNum, streamChannelId);
+  }
+  void setServerRequestAlternativeByteHandler(int socketNum, ServerRequestAlternativeByteHandler* handler, void* clientData) {
+    fRTPInterface.setServerRequestAlternativeByteHandler(socketNum, handler, clientData);
   }
 
   void setAuxilliaryReadHandler(AuxHandlerFunc* handlerFunc,
@@ -175,7 +178,7 @@ public:
   double totNumKBytesReceived() const;
 
   unsigned totNumPacketsExpected() const {
-    return fHighestExtSeqNumReceived - fBaseExtSeqNumReceived;
+    return (fHighestExtSeqNumReceived - fBaseExtSeqNumReceived) + 1;
   }
 
   unsigned baseExtSeqNumReceived() const { return fBaseExtSeqNumReceived; }

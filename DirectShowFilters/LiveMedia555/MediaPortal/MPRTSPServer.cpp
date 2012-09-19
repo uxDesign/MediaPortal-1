@@ -75,7 +75,7 @@ MPRTSPServer::createNewClientSession(unsigned sessionId, int clientSocket, struc
 MPRTSPServer::MPRTSPClientSession
 ::MPRTSPClientSession(MPRTSPServer& ourServer, unsigned sessionId,
 					  int clientSocket, struct sockaddr_in clientAddr)
-					  : RTSPClientSession(ourServer,sessionId,clientSocket,clientAddr),
+					  : RTSPClientSession(ourServer,sessionId),
 					  fOurMPServer(ourServer) {
 						  startDateTime=time(NULL);
 						  m_bPaused=false;
@@ -87,15 +87,14 @@ MPRTSPServer::MPRTSPClientSession::~MPRTSPClientSession() {
 }
 
 void MPRTSPServer::MPRTSPClientSession
-::handleCmd_PLAY(ServerMediaSubsession* subsession, char const* cseq,
-				 char const* fullRequestStr) {
-					 RTSPClientSession::handleCmd_PLAY(subsession,cseq,fullRequestStr);
+::handleCmd_PLAY(RTSPClientConnection* ourClientConnection, ServerMediaSubsession* subsession, char const* fullRequestStr) {
+					 RTSPClientSession::handleCmd_PLAY(ourClientConnection, subsession,fullRequestStr);
 					 m_bPaused=false;
 }
 
 void MPRTSPServer::MPRTSPClientSession
-::handleCmd_PAUSE(ServerMediaSubsession* subsession, char const* cseq) {
-	RTSPClientSession::handleCmd_PAUSE(subsession,cseq);
+::handleCmd_PAUSE(RTSPClientConnection* ourClientConnection, ServerMediaSubsession* subsession) {
+	RTSPClientSession::handleCmd_PAUSE(ourClientConnection, subsession);
 	m_bPaused=true;
 }
 

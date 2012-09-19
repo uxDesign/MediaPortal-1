@@ -14,7 +14,7 @@ along with this library; if not, write to the Free Software Foundation, Inc.,
 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA
 **********/
 // "liveMedia"
-// Copyright (c) 1996-2009 Live Networks, Inc.  All rights reserved.
+// Copyright (c) 1996-2012 Live Networks, Inc.  All rights reserved.
 // RTP source for a common kind of payload format: Those that pack multiple,
 // complete codec frames (as many as possible) into each RTP packet.
 // Implementation
@@ -45,6 +45,7 @@ public:
   Boolean isEmpty() const { return fHeadPacket == NULL; }
 
   void setThresholdTime(unsigned uSeconds) { fThresholdTime = uSeconds; }
+  void resetHaveSeenFirstPacket() { fHaveSeenFirstPacket = False; }
 
 private:
   BufferedPacketFactory* fPacketFactory;
@@ -52,6 +53,7 @@ private:
   Boolean fHaveSeenFirstPacket; // used to set initial "fNextExpectedSeqNo"
   unsigned short fNextExpectedSeqNo;
   BufferedPacket* fHeadPacket;
+  BufferedPacket* fTailPacket;
   BufferedPacket* fSavedPacket;
       // to avoid calling new/free in the common case
   Boolean fSavedPacketFree;
@@ -77,6 +79,7 @@ void MultiFramedRTPSource::reset() {
   fCurrentPacketBeginsFrame = True; // by default
   fCurrentPacketCompletesFrame = True; // by default
   fAreDoingNetworkReads = False;
+  fPacketReadInProgress = NULL;
   fNeedDelivery = False;
   fPacketLossInFragmentedFrame = False;
 }
@@ -180,7 +183,7 @@ void MultiFramedRTPSource::doGetNextFrame1() {
       fReorderingBuffer->releaseUsedPacket(nextPacket);
     }
 
-    if (fCurrentPacketCompletesFrame || fNumTruncatedBytes > 0) {
+    if (fCurrentPacketCompletesFrame) {
       // We have all the data that the client wants.
       if (fNumTruncatedBytes > 0) {
 	envir() << "MultiFramedRTPSource::doGetNextFrame1(): The total received frame size exceeds the client's buffer size ("
@@ -214,28 +217,46 @@ void MultiFramedRTPSource
 
 #define ADVANCE(n) do { bPacket->skip(n); } while (0)
 
-void MultiFramedRTPSource::networkReadHandler(MultiFramedRTPSource* source,
-					      int /*mask*/) {
-  // Get a free BufferedPacket descriptor to hold the new network packet:
-  BufferedPacket* bPacket
-    = source->fReorderingBuffer->getFreePacket(source);
+void MultiFramedRTPSource::networkReadHandler(MultiFramedRTPSource* source, int /*mask*/) {
+  source->networkReadHandler1();
+}
+
+void MultiFramedRTPSource::networkReadHandler1() {
+  BufferedPacket* bPacket = fPacketReadInProgress;
+  if (bPacket == NULL) {
+    // Normal case: Get a free BufferedPacket descriptor to hold the new network packet:
+    bPacket = fReorderingBuffer->getFreePacket(this);
+  }
 
   // Read the network packet, and perform sanity checks on the RTP header:
   Boolean readSuccess = False;
   do {
-    if (!bPacket->fillInData(source->fRTPInterface)) break;
+    Boolean packetReadWasIncomplete = fPacketReadInProgress != NULL;
+    if (!bPacket->fillInData(fRTPInterface, packetReadWasIncomplete)) {
+      if (bPacket->bytesAvailable() == 0) {
+	envir() << "MultiFramedRTPSource error: Hit limit when reading incoming packet over TCP. Increase \"MAX_PACKET_SIZE\"\n";
+      }
+      break;
+    }
+    if (packetReadWasIncomplete) {
+      // We need additional read(s) before we can process the incoming packet:
+      fPacketReadInProgress = bPacket;
+      return;
+    } else {
+      fPacketReadInProgress = NULL;
+    }
 #ifdef TEST_LOSS
-    source->setPacketReorderingThresholdTime(0);
+    setPacketReorderingThresholdTime(0);
        // don't wait for 'lost' packets to arrive out-of-order later
     if ((our_random()%10) == 0) break; // simulate 10% packet loss
 #endif
 
     // Check for the 12-byte RTP header:
     if (bPacket->dataSize() < 12) break;
-    unsigned rtpHdr = ntohl(*(unsigned*)(bPacket->data())); ADVANCE(4);
-    Boolean rtpMarkerBit = (rtpHdr&0x00800000) >> 23;
-    unsigned rtpTimestamp = ntohl(*(unsigned*)(bPacket->data()));ADVANCE(4);
-    unsigned rtpSSRC = ntohl(*(unsigned*)(bPacket->data())); ADVANCE(4);
+    unsigned rtpHdr = ntohl(*(u_int32_t*)(bPacket->data())); ADVANCE(4);
+    Boolean rtpMarkerBit = (rtpHdr&0x00800000) != 0;
+    unsigned rtpTimestamp = ntohl(*(u_int32_t*)(bPacket->data()));ADVANCE(4);
+    unsigned rtpSSRC = ntohl(*(u_int32_t*)(bPacket->data())); ADVANCE(4);
 
     // Check the RTP version number (it should be 2):
     if ((rtpHdr&0xC0000000) != 0x80000000) break;
@@ -248,7 +269,7 @@ void MultiFramedRTPSource::networkReadHandler(MultiFramedRTPSource* source,
     // Check for (& ignore) any RTP header extension
     if (rtpHdr&0x10000000) {
       if (bPacket->dataSize() < 4) break;
-      unsigned extHdr = ntohl(*(unsigned*)(bPacket->data())); ADVANCE(4);
+      unsigned extHdr = ntohl(*(u_int32_t*)(bPacket->data())); ADVANCE(4);
       unsigned remExtSize = 4*(extHdr&0xFFFF);
       if (bPacket->dataSize() < remExtSize) break;
       ADVANCE(remExtSize);
@@ -264,21 +285,26 @@ void MultiFramedRTPSource::networkReadHandler(MultiFramedRTPSource* source,
     }
     // Check the Payload Type.
     if ((unsigned char)((rtpHdr&0x007F0000)>>16)
-	!= source->rtpPayloadFormat()) {
+	!= rtpPayloadFormat()) {
       break;
     }
 
     // The rest of the packet is the usable data.  Record and save it:
-    source->fLastReceivedSSRC = rtpSSRC;
+    if (rtpSSRC != fLastReceivedSSRC) {
+      // The SSRC of incoming packets has changed.  Unfortunately we don't yet handle streams that contain multiple SSRCs,
+      // but we can handle a single-SSRC stream where the SSRC changes occasionally:
+      fLastReceivedSSRC = rtpSSRC;
+      fReorderingBuffer->resetHaveSeenFirstPacket();
+    }
     unsigned short rtpSeqNo = (unsigned short)(rtpHdr&0xFFFF);
     Boolean usableInJitterCalculation
-      = source->packetIsUsableInJitterCalculation((bPacket->data()),
+      = packetIsUsableInJitterCalculation((bPacket->data()),
 						  bPacket->dataSize());
     struct timeval presentationTime; // computed by:
     Boolean hasBeenSyncedUsingRTCP; // computed by:
-    source->receptionStatsDB()
+    receptionStatsDB()
       .noteIncomingPacket(rtpSSRC, rtpSeqNo, rtpTimestamp,
-			  source->timestampFrequency(),
+			  timestampFrequency(),
 			  usableInJitterCalculation, presentationTime,
 			  hasBeenSyncedUsingRTCP, bPacket->dataSize());
 
@@ -288,20 +314,20 @@ void MultiFramedRTPSource::networkReadHandler(MultiFramedRTPSource* source,
     bPacket->assignMiscParams(rtpSeqNo, rtpTimestamp, presentationTime,
 			      hasBeenSyncedUsingRTCP, rtpMarkerBit,
 			      timeNow);
-    if (!source->fReorderingBuffer->storePacket(bPacket)) break;
+    if (!fReorderingBuffer->storePacket(bPacket)) break;
 
     readSuccess = True;
   } while (0);
-  if (!readSuccess) source->fReorderingBuffer->freePacket(bPacket);
+  if (!readSuccess) fReorderingBuffer->freePacket(bPacket);
 
-  source->doGetNextFrame1();
+  doGetNextFrame1();
   // If we didn't get proper data this time, we'll get another chance
 }
 
 
 ////////// BufferedPacket and BufferedPacketFactory implementation /////
 
-#define MAX_PACKET_SIZE 10000
+#define MAX_PACKET_SIZE 20000
 
 BufferedPacket::BufferedPacket()
   : fPacketSize(MAX_PACKET_SIZE),
@@ -344,13 +370,14 @@ void BufferedPacket
   frameDurationInMicroseconds = 0; // by default.  Subclasses should correct this.
 }
 
-Boolean BufferedPacket::fillInData(RTPInterface& rtpInterface) {
-  reset();
+Boolean BufferedPacket::fillInData(RTPInterface& rtpInterface, Boolean& packetReadWasIncomplete) {
+  if (!packetReadWasIncomplete) reset();
 
   unsigned numBytesRead;
   struct sockaddr_in fromAddress;
-  if (!rtpInterface.handleRead(&fBuf[fTail], fPacketSize-fTail, numBytesRead,
-			       fromAddress)) {
+  unsigned const maxBytesToRead = bytesAvailable();
+  if (maxBytesToRead == 0) return False; // exceeded buffer size when reading over TCP
+  if (!rtpInterface.handleRead(&fBuf[fTail], maxBytesToRead, numBytesRead, fromAddress, packetReadWasIncomplete)) {
     return False;
   }
   fTail += numBytesRead;
@@ -398,7 +425,7 @@ void BufferedPacket::use(unsigned char* to, unsigned toSize,
   getNextEnclosedFrameParameters(newFramePtr, fTail - fHead,
 				 frameSize, frameDurationInMicroseconds);
   if (frameSize > toSize) {
-    bytesTruncated = frameSize - toSize;
+    bytesTruncated += frameSize - toSize;
     bytesUsed = toSize;
   } else {
     bytesTruncated = 0;
@@ -440,7 +467,7 @@ BufferedPacket* BufferedPacketFactory
 ReorderingPacketBuffer
 ::ReorderingPacketBuffer(BufferedPacketFactory* packetFactory)
   : fThresholdTime(100000) /* default reordering threshold: 100 ms */,
-    fHaveSeenFirstPacket(False), fHeadPacket(NULL), fSavedPacket(NULL), fSavedPacketFree(True) {
+    fHaveSeenFirstPacket(False), fHeadPacket(NULL), fTailPacket(NULL), fSavedPacket(NULL), fSavedPacketFree(True) {
   fPacketFactory = (packetFactory == NULL)
     ? (new BufferedPacketFactory)
     : packetFactory;
@@ -454,13 +481,11 @@ ReorderingPacketBuffer::~ReorderingPacketBuffer() {
 void ReorderingPacketBuffer::reset() {
   if (fSavedPacketFree) delete fSavedPacket; // because fSavedPacket is not in the list
   delete fHeadPacket; // will also delete fSavedPacket if it's in the list
-  fHaveSeenFirstPacket = False;
-  fHeadPacket = NULL;
-  fSavedPacket = NULL;
+  resetHaveSeenFirstPacket();
+  fHeadPacket = fTailPacket = fSavedPacket = NULL;
 }
 
-BufferedPacket* ReorderingPacketBuffer
-::getFreePacket(MultiFramedRTPSource* ourSource) {
+BufferedPacket* ReorderingPacketBuffer::getFreePacket(MultiFramedRTPSource* ourSource) {
   if (fSavedPacket == NULL) { // we're being called for the first time
     fSavedPacket = fPacketFactory->createNewPacket(ourSource);
     fSavedPacketFree = True;
@@ -487,7 +512,27 @@ Boolean ReorderingPacketBuffer::storePacket(BufferedPacket* bPacket) {
   // that we're looking for (in this case, it's been excessively delayed).
   if (seqNumLT(rtpSeqNo, fNextExpectedSeqNo)) return False;
 
-  // Figure out where the new packet will be stored in the queue:
+  if (fTailPacket == NULL) {
+    // Common case: There are no packets in the queue; this will be the first one:
+    bPacket->nextPacket() = NULL;
+    fHeadPacket = fTailPacket = bPacket;
+    return True;
+  }
+
+  if (seqNumLT(fTailPacket->rtpSeqNo(), rtpSeqNo)) {
+    // The next-most common case: There are packets already in the queue; this packet arrived in order => put it at the tail:
+    bPacket->nextPacket() = NULL;
+    fTailPacket->nextPacket() = bPacket;
+    fTailPacket = bPacket;
+    return True;
+  } 
+
+  if (rtpSeqNo == fTailPacket->rtpSeqNo()) {
+    // This is a duplicate packet - ignore it
+    return False;
+  }
+
+  // Rare case: This packet is out-of-order.  Run through the list (from the head), to figure out where it belongs:
   BufferedPacket* beforePtr = NULL;
   BufferedPacket* afterPtr = fHeadPacket;
   while (afterPtr != NULL) {
@@ -518,6 +563,9 @@ void ReorderingPacketBuffer::releaseUsedPacket(BufferedPacket* packet) {
   ++fNextExpectedSeqNo; // because we're finished with this packet now
 
   fHeadPacket = fHeadPacket->nextPacket();
+  if (!fHeadPacket) { 
+    fTailPacket = NULL;
+  }
   packet->nextPacket() = NULL;
 
   freePacket(packet);
@@ -539,12 +587,18 @@ BufferedPacket* ReorderingPacketBuffer
   // We're still waiting for our desired packet to arrive.  However, if
   // our time threshold has been exceeded, then forget it, and return
   // the head packet instead:
-  struct timeval timeNow;
-  gettimeofday(&timeNow, NULL);
-  unsigned uSecondsSinceReceived
-    = (timeNow.tv_sec - fHeadPacket->timeReceived().tv_sec)*1000000
-    + (timeNow.tv_usec - fHeadPacket->timeReceived().tv_usec);
-  if (uSecondsSinceReceived > fThresholdTime) {
+  Boolean timeThresholdHasBeenExceeded;
+  if (fThresholdTime == 0) {
+    timeThresholdHasBeenExceeded = True; // optimization
+  } else {
+    struct timeval timeNow;
+    gettimeofday(&timeNow, NULL);
+    unsigned uSecondsSinceReceived
+      = (timeNow.tv_sec - fHeadPacket->timeReceived().tv_sec)*1000000
+      + (timeNow.tv_usec - fHeadPacket->timeReceived().tv_usec);
+    timeThresholdHasBeenExceeded = uSecondsSinceReceived > fThresholdTime;
+  }
+  if (timeThresholdHasBeenExceeded) {
     fNextExpectedSeqNo = fHeadPacket->rtpSeqNo();
         // we've given up on earlier packets now
     packetLossPreceded = True;

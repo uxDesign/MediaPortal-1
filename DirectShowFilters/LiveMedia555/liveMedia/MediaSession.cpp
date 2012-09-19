@@ -14,16 +14,13 @@ along with this library; if not, write to the Free Software Foundation, Inc.,
 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA
 **********/
 // "liveMedia"
-// Copyright (c) 1996-2009 Live Networks, Inc.  All rights reserved.
+// Copyright (c) 1996-2012 Live Networks, Inc.  All rights reserved.
 // A data structure that represents a session that consists of
 // potentially multiple (audio and/or video) sub-sessions
 // Implementation
 
 #include "liveMedia.hh"
 #include "Locale.hh"
-#ifdef SUPPORT_REAL_RTSP
-#include "../RealRTSP/include/RealRTSP.hh"
-#endif
 #include "GroupsockHelper.hh"
 #include <ctype.h>
 
@@ -62,12 +59,10 @@ Boolean MediaSession::lookupByName(UsageEnvironment& env,
 MediaSession::MediaSession(UsageEnvironment& env)
   : Medium(env),
     fSubsessionsHead(NULL), fSubsessionsTail(NULL),
-    fConnectionEndpointName(NULL), fMaxPlayStartTime(0.0f), fMaxPlayEndTime(0.0f),
+    fConnectionEndpointName(NULL),
+    fMaxPlayStartTime(0.0f), fMaxPlayEndTime(0.0f), fAbsStartTime(NULL), fAbsEndTime(NULL),
     fScale(1.0f), fMediaSessionType(NULL), fSessionName(NULL), fSessionDescription(NULL),
     fControlPath(NULL) {
-#ifdef SUPPORT_REAL_RTSP
-  RealInitSDPAttributes(this);
-#endif
   fSourceFilterAddr.s_addr = 0;
 
   // Get our host name, and use this for the RTCP CNAME:
@@ -87,17 +82,20 @@ MediaSession::~MediaSession() {
   delete fSubsessionsHead;
   delete[] fCNAME;
   delete[] fConnectionEndpointName;
+  delete[] fAbsStartTime; delete[] fAbsEndTime;
   delete[] fMediaSessionType;
   delete[] fSessionName;
   delete[] fSessionDescription;
   delete[] fControlPath;
-#ifdef SUPPORT_REAL_RTSP
-  RealReclaimSDPAttributes(this);
-#endif
 }
 
 Boolean MediaSession::isMediaSession() const {
   return True;
+}
+
+MediaSubsession* MediaSession::createNewMediaSubsession() {
+  // default implementation:
+  return new MediaSubsession(*this);
 }
 
 Boolean MediaSession::initializeWithSDP(char const* sdpDescription) {
@@ -123,14 +121,11 @@ Boolean MediaSession::initializeWithSDP(char const* sdpDescription) {
     if (parseSDPAttribute_range(sdpLine)) continue;
     if (parseSDPAttribute_type(sdpLine)) continue;
     if (parseSDPAttribute_source_filter(sdpLine)) continue;
-#ifdef SUPPORT_REAL_RTSP
-    if (RealParseSDPAttributes(this, sdpLine)) continue;
-#endif
   }
 
   while (sdpLine != NULL) {
     // We have a "m=" line, representing a new sub-session:
-    MediaSubsession* subsession = new MediaSubsession(*this);
+    MediaSubsession* subsession = createNewMediaSubsession();
     if (subsession == NULL) {
       envir().setResultMsg("Unable to create new MediaSubsession");
       return False;
@@ -211,6 +206,7 @@ Boolean MediaSession::initializeWithSDP(char const* sdpDescription) {
 
       // Check for various special SDP lines that we understand:
       if (subsession->parseSDPLine_c(sdpLine)) continue;
+      if (subsession->parseSDPLine_b(sdpLine)) continue;
       if (subsession->parseSDPAttribute_rtpmap(sdpLine)) continue;
       if (subsession->parseSDPAttribute_control(sdpLine)) continue;
       if (subsession->parseSDPAttribute_range(sdpLine)) continue;
@@ -218,9 +214,6 @@ Boolean MediaSession::initializeWithSDP(char const* sdpDescription) {
       if (subsession->parseSDPAttribute_source_filter(sdpLine)) continue;
       if (subsession->parseSDPAttribute_x_dimensions(sdpLine)) continue;
       if (subsession->parseSDPAttribute_framerate(sdpLine)) continue;
-#ifdef SUPPORT_REAL_RTSP
-      if (RealParseSDPAttributes(subsession, sdpLine)) continue;
-#endif
 
       // (Later, check for malformed lines, and other valid SDP lines#####)
     }
@@ -286,7 +279,7 @@ Boolean MediaSession::parseSDPLine(char const* inputLine,
 static char* parseCLine(char const* sdpLine) {
   char* resultStr = NULL;
   char* buffer = strDupSize(sdpLine); // ensures we have enough space
-  if (sscanf(sdpLine, "c=IN IP4 %[^/ ]", buffer) == 1) {
+  if (sscanf(sdpLine, "c=IN IP4 %[^/\r\n]", buffer) == 1) {
     // Later, handle the optional /<ttl> and /<numAddresses> #####
     resultStr = strDup(buffer);
   }
@@ -352,10 +345,6 @@ Boolean MediaSession::parseSDPAttribute_type(char const* sdpLine) {
   return parseSuccess;
 }
 
-static Boolean parseRangeAttribute(char const* sdpLine, double& startTime, double& endTime) {
-  return sscanf(sdpLine, "a=range: npt = %lg - %lg", &startTime, &endTime) == 2;
-}
-
 Boolean MediaSession::parseSDPAttribute_control(char const* sdpLine) {
   // Check for a "a=control:<control-path>" line:
   Boolean parseSuccess = False;
@@ -368,6 +357,29 @@ Boolean MediaSession::parseSDPAttribute_control(char const* sdpLine) {
   delete[] controlPath;
 
   return parseSuccess;
+}
+
+static Boolean parseRangeAttribute(char const* sdpLine, double& startTime, double& endTime) {
+  return sscanf(sdpLine, "a=range: npt = %lg - %lg", &startTime, &endTime) == 2;
+}
+
+static Boolean parseRangeAttribute(char const* sdpLine, char*& absStartTime, char*& absEndTime) {
+  size_t len = strlen(sdpLine) + 1;
+  char* as = new char[len];
+  char* ae = new char[len];
+  int sscanfResult = sscanf(sdpLine, "a=range: clock = %[^-\r\n]-%[^\r\n]", as, ae);
+  if (sscanfResult == 2) {
+    absStartTime = as;
+    absEndTime = ae;
+  } else if (sscanfResult == 1) {
+    absStartTime = as;
+    delete[] ae;
+  } else {
+    delete[] as; delete[] ae;
+    return False;
+  }
+
+  return True;
 }
 
 Boolean MediaSession::parseSDPAttribute_range(char const* sdpLine) {
@@ -385,6 +397,8 @@ Boolean MediaSession::parseSDPAttribute_range(char const* sdpLine) {
     if (playEndTime > fMaxPlayEndTime) {
       fMaxPlayEndTime = playEndTime;
     }
+  } else if (parseRangeAttribute(sdpLine, _absStartTime(), _absEndTime())) {
+    parseSuccess = True;
   }
 
   return parseSuccess;
@@ -462,7 +476,8 @@ char* MediaSession::lookupPayloadFormat(unsigned char rtpPayloadType,
 unsigned MediaSession::guessRTPTimestampFrequency(char const* mediumName,
 						  char const* codecName) {
   // By default, we assume that audio sessions use a frequency of 8000,
-  // and that video sessions use a frequency of 90000.
+  // video sessions use a frequency of 90000,
+  // and text sessions use a frequency of 1000.
   // Begin by checking for known exceptions to this rule
   // (where the frequency is known unambiguously (e.g., not like "DVI4"))
   if (strcmp(codecName, "L16") == 0) return 44100;
@@ -472,7 +487,32 @@ unsigned MediaSession::guessRTPTimestampFrequency(char const* mediumName,
 
   // Now, guess default values:
   if (strcmp(mediumName, "video") == 0) return 90000;
+  else if (strcmp(mediumName, "text") == 0) return 1000;
   return 8000; // for "audio", and any other medium
+}
+
+char* MediaSession::absStartTime() const {
+  if (fAbsStartTime != NULL) return fAbsStartTime;
+
+  // If a subsession has an 'absolute' start time, then use that:
+  MediaSubsessionIterator iter(*this);
+  MediaSubsession* subsession;
+  while ((subsession = iter.next()) != NULL) {
+    if (subsession->_absStartTime() != NULL) return subsession->_absStartTime();
+  }
+  return NULL;
+}
+
+char* MediaSession::absEndTime() const {
+  if (fAbsEndTime != NULL) return fAbsEndTime;
+
+  // If a subsession has an 'absolute' end time, then use that:
+  MediaSubsessionIterator iter(*this);
+  MediaSubsession* subsession;
+  while ((subsession = iter.next()) != NULL) {
+    if (subsession->_absEndTime() != NULL) return subsession->_absEndTime();
+  }
+  return NULL;
 }
 
 Boolean MediaSession
@@ -511,7 +551,7 @@ Boolean MediaSession
 
 ////////// MediaSubsessionIterator //////////
 
-MediaSubsessionIterator::MediaSubsessionIterator(MediaSession& session)
+MediaSubsessionIterator::MediaSubsessionIterator(MediaSession const& session)
   : fOurSession(session) {
   reset();
 }
@@ -534,28 +574,26 @@ void MediaSubsessionIterator::reset() {
 ////////// MediaSubsession //////////
 
 MediaSubsession::MediaSubsession(MediaSession& parent)
-  : sessionId(NULL), serverPortNum(0), sink(NULL), miscPtr(NULL),
+  : serverPortNum(0), sink(NULL), miscPtr(NULL), deferRTCPSetup(False),
     fParent(parent), fNext(NULL),
     fConnectionEndpointName(NULL),
     fClientPortNum(0), fRTPPayloadFormat(0xFF),
     fSavedSDPLines(NULL), fMediumName(NULL), fCodecName(NULL), fProtocolName(NULL),
     fRTPTimestampFrequency(0), fControlPath(NULL),
-    fSourceFilterAddr(parent.sourceFilterAddr()),
+    fSourceFilterAddr(parent.sourceFilterAddr()), fBandwidth(0),
     fAuxiliarydatasizelength(0), fConstantduration(0), fConstantsize(0),
     fCRC(0), fCtsdeltalength(0), fDe_interleavebuffersize(0), fDtsdeltalength(0),
     fIndexdeltalength(0), fIndexlength(0), fInterleaving(0), fMaxdisplacement(0),
     fObjecttype(0), fOctetalign(0), fProfile_level_id(0), fRobustsorting(0),
     fSizelength(0), fStreamstateindication(0), fStreamtype(0),
     fCpresent(False), fRandomaccessindication(False),
-    fConfig(NULL), fMode(NULL), fSpropParameterSets(NULL),
-    fPlayStartTime(0.0), fPlayEndTime(0.0),
+    fConfig(NULL), fMode(NULL), fSpropParameterSets(NULL), fEmphasis(NULL), fChannelOrder(NULL),
+    fPlayStartTime(0.0), fPlayEndTime(0.0), fAbsStartTime(NULL), fAbsEndTime(NULL),
     fVideoWidth(0), fVideoHeight(0), fVideoFPS(0), fNumChannels(1), fScale(1.0f), fNPT_PTS_Offset(0.0f),
     fRTPSocket(NULL), fRTCPSocket(NULL),
-    fRTPSource(NULL), fRTCPInstance(NULL), fReadSource(NULL) {
+    fRTPSource(NULL), fRTCPInstance(NULL), fReadSource(NULL), fReceiveRawMP3ADUs(False),
+    fSessionId(NULL) {
   rtpInfo.seqNum = 0; rtpInfo.timestamp = 0; rtpInfo.infoIsNew = False;
-#ifdef SUPPORT_REAL_RTSP
-  RealInitSDPAttributes(this);
-#endif
 }
 
 MediaSubsession::~MediaSubsession() {
@@ -563,12 +601,17 @@ MediaSubsession::~MediaSubsession() {
 
   delete[] fConnectionEndpointName; delete[] fSavedSDPLines;
   delete[] fMediumName; delete[] fCodecName; delete[] fProtocolName;
-  delete[] fControlPath; delete[] fConfig; delete[] fMode; delete[] fSpropParameterSets;
+  delete[] fControlPath;
+  delete[] fConfig; delete[] fMode; delete[] fSpropParameterSets; delete[] fEmphasis; delete[] fChannelOrder;
+  delete[] fAbsStartTime; delete[] fAbsEndTime;
+  delete[] fSessionId;
 
   delete fNext;
-#ifdef SUPPORT_REAL_RTSP
-  RealReclaimSDPAttributes(this);
-#endif
+}
+
+void MediaSubsession::addFilter(FramedFilter* filter){
+  if (filter == NULL || filter->inputSource() != fReadSource) return; // sanity check
+  fReadSource = filter;
 }
 
 double MediaSubsession::playStartTime() const {
@@ -581,6 +624,18 @@ double MediaSubsession::playEndTime() const {
   if (fPlayEndTime > 0) return fPlayEndTime;
 
   return fParent.playEndTime();
+}
+
+char* MediaSubsession::absStartTime() const {
+  if (fAbsStartTime != NULL) return fAbsStartTime;
+
+  return fParent.absStartTime();
+}
+
+char* MediaSubsession::absEndTime() const {
+  if (fAbsEndTime != NULL) return fAbsEndTime;
+
+  return fParent.absEndTime();
 }
 
 Boolean MediaSubsession::initiate(int useSpecialRTPoffset) {
@@ -598,9 +653,12 @@ Boolean MediaSubsession::initiate(int useSpecialRTPoffset) {
     tempAddr.s_addr = connectionEndpointAddress();
         // This could get changed later, as a result of a RTSP "SETUP"
 
-    if (fClientPortNum != 0) {
-      // The sockets' port numbers were specified for us.  Use these:
-      fClientPortNum = fClientPortNum&~1; // even
+    if (fClientPortNum != 0  && IsMulticastAddress(tempAddr.s_addr)) {
+      // This is a multicast stream, and the sockets' port numbers were specified for us.  Use these:
+      Boolean const protocolIsRTP = strcmp(fProtocolName, "RTP") == 0;
+      if (protocolIsRTP) {
+	fClientPortNum = fClientPortNum&~1; // use an even-numbered port for RTP, and the next (odd-numbered) port for RTCP
+      }
       if (isSSM()) {
 	fRTPSocket = new Groupsock(env(), tempAddr, fSourceFilterAddr, fClientPortNum);
       } else {
@@ -611,18 +669,14 @@ Boolean MediaSubsession::initiate(int useSpecialRTPoffset) {
 	break;
       }
       
-      // Set our RTCP port to be the RTP port +1
-      portNumBits const rtcpPortNum = fClientPortNum|1;
-      if (isSSM()) {
-	fRTCPSocket = new Groupsock(env(), tempAddr, fSourceFilterAddr, rtcpPortNum);
-      } else {
-	fRTCPSocket = new Groupsock(env(), tempAddr, rtcpPortNum, 255);
-      }
-      if (fRTCPSocket == NULL) {
-	char tmpBuf[100];
-	sprintf(tmpBuf, "Failed to create RTCP socket (port %d)", rtcpPortNum);
-	env().setResultMsg(tmpBuf);
-	break;
+      if (protocolIsRTP) {
+	// Set our RTCP port to be the RTP port +1
+	portNumBits const rtcpPortNum = fClientPortNum|1;
+	if (isSSM()) {
+	  fRTCPSocket = new Groupsock(env(), tempAddr, fSourceFilterAddr, rtcpPortNum);
+	} else {
+	  fRTCPSocket = new Groupsock(env(), tempAddr, rtcpPortNum, 255);
+	}
       }
     } else {
       // Port numbers were not specified in advance, so we use ephemeral port numbers.
@@ -632,6 +686,7 @@ Boolean MediaSubsession::initiate(int useSpecialRTPoffset) {
       HashTable* socketHashTable = HashTable::create(ONE_WORD_HASH_KEYS);
       if (socketHashTable == NULL) break;
       Boolean success = False;
+      NoReuse dummy(env()); // ensures that our new ephemeral port number won't be one that's already in use
 
       while (1) {
 	// Create a new socket:
@@ -666,12 +721,14 @@ Boolean MediaSubsession::initiate(int useSpecialRTPoffset) {
 	} else {
 	  fRTCPSocket = new Groupsock(env(), tempAddr, rtcpPortNum, 255);
 	}
-	if (fRTCPSocket != NULL) {
+	if (fRTCPSocket != NULL && fRTCPSocket->socketNum() >= 0) {
 	  // Success! Use these two sockets.
 	  success = True;
 	  break;
 	} else {
 	  // We couldn't create the RTCP socket (perhaps that port number's already in use elsewhere?).
+	  delete fRTCPSocket;
+
 	  // Record the first socket in our table, and keep trying:
 	  unsigned key = (unsigned)fClientPortNum;
 	  Groupsock* existing = (Groupsock*)socketHashTable->Add((char const*)key, fRTPSocket);
@@ -690,195 +747,20 @@ Boolean MediaSubsession::initiate(int useSpecialRTPoffset) {
       if (!success) break; // a fatal error occurred trying to create the RTP and RTCP sockets; we can't continue
     }
 
-    // ASSERT: fRTPSocket != NULL && fRTCPSocket != NULL
-    if (isSSM()) {
+    // Try to use a big receive buffer for RTP - at least 0.1 second of
+    // specified bandwidth and at least 50 KB
+    unsigned rtpBufSize = fBandwidth * 25 / 2; // 1 kbps * 0.1 s = 12.5 bytes
+    if (rtpBufSize < 50 * 1024)
+      rtpBufSize = 50 * 1024;
+    increaseReceiveBufferTo(env(), fRTPSocket->socketNum(), rtpBufSize);
+
+    if (isSSM() && fRTCPSocket != NULL) {
       // Special case for RTCP SSM: Send RTCP packets back to the source via unicast:
       fRTCPSocket->changeDestinationParameters(fSourceFilterAddr,0,~0);
     }
 
-    // Check "fProtocolName"
-    if (strcmp(fProtocolName, "UDP") == 0) {
-      // A UDP-packetized stream (*not* a RTP stream)
-      fReadSource = BasicUDPSource::createNew(env(), fRTPSocket);
-      fRTPSource = NULL; // Note!
-
-      if (strcmp(fCodecName, "MP2T") == 0) { // MPEG-2 Transport Stream
-	fReadSource = MPEG2TransportStreamFramer::createNew(env(), fReadSource);
-	    // this sets "durationInMicroseconds" correctly, based on the PCR values
-      }
-    } else {
-      // Check "fCodecName" against the set of codecs that we support,
-      // and create our RTP source accordingly
-      // (Later make this code more efficient, as this set grows #####)
-      // (Also, add more fmts that can be implemented by SimpleRTPSource#####)
-      Boolean createSimpleRTPSource = False;
-      Boolean doNormalMBitRule = False; // used if "createSimpleRTPSource"
-      if (strcmp(fCodecName, "QCELP") == 0) { // QCELP audio
-	fReadSource =
-	  QCELPAudioRTPSource::createNew(env(), fRTPSocket, fRTPSource,
-					 fRTPPayloadFormat,
-					 fRTPTimestampFrequency);
-	// Note that fReadSource will differ from fRTPSource in this case
-      } else if (strcmp(fCodecName, "AMR") == 0) { // AMR audio (narrowband)
-	fReadSource =
-	  AMRAudioRTPSource::createNew(env(), fRTPSocket, fRTPSource,
-				       fRTPPayloadFormat, 0 /*isWideband*/,
-				       fNumChannels, fOctetalign, fInterleaving,
-				       fRobustsorting, fCRC);
-	// Note that fReadSource will differ from fRTPSource in this case
-      } else if (strcmp(fCodecName, "AMR-WB") == 0) { // AMR audio (wideband)
-	fReadSource =
-	  AMRAudioRTPSource::createNew(env(), fRTPSocket, fRTPSource,
-				       fRTPPayloadFormat, 1 /*isWideband*/,
-				       fNumChannels, fOctetalign, fInterleaving,
-				       fRobustsorting, fCRC);
-	// Note that fReadSource will differ from fRTPSource in this case
-      } else if (strcmp(fCodecName, "MPA") == 0) { // MPEG-1 or 2 audio
-	fReadSource = fRTPSource
-	  = MPEG1or2AudioRTPSource::createNew(env(), fRTPSocket,
-					      fRTPPayloadFormat,
-					      fRTPTimestampFrequency);
-      } else if (strcmp(fCodecName, "MPA-ROBUST") == 0) { // robust MP3 audio
-	fRTPSource
-	  = MP3ADURTPSource::createNew(env(), fRTPSocket, fRTPPayloadFormat,
-				       fRTPTimestampFrequency);
-	if (fRTPSource == NULL) break;
-
-	// Add a filter that deinterleaves the ADUs after depacketizing them:
-	MP3ADUdeinterleaver* deinterleaver
-	  = MP3ADUdeinterleaver::createNew(env(), fRTPSource);
-	if (deinterleaver == NULL) break;
-
-	// Add another filter that converts these ADUs to MP3 frames:
-	fReadSource = MP3FromADUSource::createNew(env(), deinterleaver);
-      } else if (strcmp(fCodecName, "X-MP3-DRAFT-00") == 0) {
-	// a non-standard variant of "MPA-ROBUST" used by RealNetworks
-	// (one 'ADU'ized MP3 frame per packet; no headers)
-	fRTPSource
-	  = SimpleRTPSource::createNew(env(), fRTPSocket, fRTPPayloadFormat,
-				       fRTPTimestampFrequency,
-				       "audio/MPA-ROBUST" /*hack*/);
-	if (fRTPSource == NULL) break;
-
-	// Add a filter that converts these ADUs to MP3 frames:
-	fReadSource = MP3FromADUSource::createNew(env(), fRTPSource,
-						  False /*no ADU header*/);
-      } else if (strcmp(fCodecName, "MP4A-LATM") == 0) { // MPEG-4 LATM audio
-	fReadSource = fRTPSource
-	  = MPEG4LATMAudioRTPSource::createNew(env(), fRTPSocket,
-					       fRTPPayloadFormat,
-					       fRTPTimestampFrequency);
-      } else if (strcmp(fCodecName, "AC3") == 0) { // AC3 audio
-	fReadSource = fRTPSource
-	  = AC3AudioRTPSource::createNew(env(), fRTPSocket,
-					 fRTPPayloadFormat,
-					 fRTPTimestampFrequency);
-      } else if (strcmp(fCodecName, "MP4V-ES") == 0) { // MPEG-4 Elem Str vid
-	fReadSource = fRTPSource
-	  = MPEG4ESVideoRTPSource::createNew(env(), fRTPSocket,
-					     fRTPPayloadFormat,
-					     fRTPTimestampFrequency);
-      } else if (strcmp(fCodecName, "MPEG4-GENERIC") == 0) {
-	fReadSource = fRTPSource
-	  = MPEG4GenericRTPSource::createNew(env(), fRTPSocket,
-					     fRTPPayloadFormat,
-					     fRTPTimestampFrequency,
-					     fMediumName, fMode,
-					     fSizelength, fIndexlength,
-					     fIndexdeltalength);
-      } else if (strcmp(fCodecName, "MPV") == 0) { // MPEG-1 or 2 video
-	fReadSource = fRTPSource
-	  = MPEG1or2VideoRTPSource::createNew(env(), fRTPSocket,
-					      fRTPPayloadFormat,
-					      fRTPTimestampFrequency);
-      } else if (strcmp(fCodecName, "MP2T") == 0) { // MPEG-2 Transport Stream
-	fRTPSource = SimpleRTPSource::createNew(env(), fRTPSocket, fRTPPayloadFormat,
-						fRTPTimestampFrequency, "video/MP2T",
-						0, False);
-	fReadSource = MPEG2TransportStreamFramer::createNew(env(), fRTPSource);
-	    // this sets "durationInMicroseconds" correctly, based on the PCR values
-      } else if (strcmp(fCodecName, "H261") == 0) { // H.261
-	fReadSource = fRTPSource
-	  = H261VideoRTPSource::createNew(env(), fRTPSocket,
-					  fRTPPayloadFormat,
-					  fRTPTimestampFrequency);
-      } else if (strcmp(fCodecName, "H263-1998") == 0 ||
-		 strcmp(fCodecName, "H263-2000") == 0) { // H.263+
-	fReadSource = fRTPSource
-	  = H263plusVideoRTPSource::createNew(env(), fRTPSocket,
-					      fRTPPayloadFormat,
-					      fRTPTimestampFrequency);
-      } else if (strcmp(fCodecName, "H264") == 0) {
-	fReadSource = fRTPSource
-	  = H264VideoRTPSource::createNew(env(), fRTPSocket,
-					  fRTPPayloadFormat,
-					  fRTPTimestampFrequency);
-      } else if (strcmp(fCodecName, "JPEG") == 0) { // motion JPEG
-	fReadSource = fRTPSource
-	  = JPEGVideoRTPSource::createNew(env(), fRTPSocket,
-					  fRTPPayloadFormat,
-					  fRTPTimestampFrequency,
-					  videoWidth(),
-					  videoHeight());
-      } else if (strcmp(fCodecName, "X-QT") == 0
-		 || strcmp(fCodecName, "X-QUICKTIME") == 0) {
-	// Generic QuickTime streams, as defined in
-	// <http://developer.apple.com/quicktime/icefloe/dispatch026.html>
-	char* mimeType
-	  = new char[strlen(mediumName()) + strlen(codecName()) + 2] ;
-	sprintf(mimeType, "%s/%s", mediumName(), codecName());
-	fReadSource = fRTPSource
-	  = QuickTimeGenericRTPSource::createNew(env(), fRTPSocket,
-						 fRTPPayloadFormat,
-						 fRTPTimestampFrequency,
-						 mimeType);
-	delete[] mimeType;
-#ifdef SUPPORT_REAL_RTSP
-      } else if (strcmp(fCodecName, "X-PN-REALAUDIO") == 0 ||
-		 strcmp(fCodecName, "X-PN-MULTIRATE-REALAUDIO-LIVE") == 0 ||
-		 strcmp(fCodecName, "X-PN-REALVIDEO") == 0 ||
-		 strcmp(fCodecName, "X-PN-MULTIRATE-REALVIDEO-LIVE") == 0) {
-	// A RealNetworks 'RDT' stream (*not* a RTP stream)
-	fReadSource = RealRDTSource::createNew(env());
-	fRTPSource = NULL; // Note!
-	parentSession().isRealNetworksRDT = True;
-#endif
-      } else if (  strcmp(fCodecName, "PCMU") == 0 // PCM u-law audio
-		   || strcmp(fCodecName, "GSM") == 0 // GSM audio
-		   || strcmp(fCodecName, "PCMA") == 0 // PCM a-law audio
-		   || strcmp(fCodecName, "L16") == 0 // 16-bit linear audio
-		   || strcmp(fCodecName, "MP1S") == 0 // MPEG-1 System Stream
-		   || strcmp(fCodecName, "MP2P") == 0 // MPEG-2 Program Stream
-		   || strcmp(fCodecName, "L8") == 0 // 8-bit linear audio
-		   || strcmp(fCodecName, "G726-16") == 0 // G.726, 16 kbps
-		   || strcmp(fCodecName, "G726-24") == 0 // G.726, 24 kbps
-		   || strcmp(fCodecName, "G726-32") == 0 // G.726, 32 kbps
-		   || strcmp(fCodecName, "G726-40") == 0 // G.726, 40 kbps
-		   || strcmp(fCodecName, "SPEEX") == 0 // SPEEX audio
-		   ) {
-	createSimpleRTPSource = True;
-	useSpecialRTPoffset = 0;
-      } else if (useSpecialRTPoffset >= 0) {
-	// We don't know this RTP payload format, but try to receive
-	// it using a 'SimpleRTPSource' with the specified header offset:
-	createSimpleRTPSource = True;
-      } else {
-	env().setResultMsg("RTP payload format unknown or not supported");
-	break;
-      }
-
-      if (createSimpleRTPSource) {
-	char* mimeType
-	  = new char[strlen(mediumName()) + strlen(codecName()) + 2] ;
-	sprintf(mimeType, "%s/%s", mediumName(), codecName());
-	fReadSource = fRTPSource
-	  = SimpleRTPSource::createNew(env(), fRTPSocket, fRTPPayloadFormat,
-				       fRTPTimestampFrequency, mimeType,
-				       (unsigned)useSpecialRTPoffset,
-				       doNormalMBitRule);
-	delete[] mimeType;
-      }
-    }
+    // Create "fRTPSource" and "fReadSource":
+    if (!createSourceObjects(useSpecialRTPoffset)) break;
 
     if (fReadSource == NULL) {
       env().setResultMsg("Failed to create read source");
@@ -886,8 +768,11 @@ Boolean MediaSubsession::initiate(int useSpecialRTPoffset) {
     }
 
     // Finally, create our RTCP instance. (It starts running automatically)
-    if (fRTPSource != NULL) {
-      unsigned totSessionBandwidth = 500; // HACK - later get from SDP#####
+    if (fRTPSource != NULL && fRTCPSocket != NULL) {
+      // If bandwidth is specified, use it and add 5% for RTCP overhead.
+      // Otherwise make a guess at 500 kbps.
+      unsigned totSessionBandwidth
+	= fBandwidth ? fBandwidth + fBandwidth / 20 : 500;
       fRTCPInstance = RTCPInstance::createNew(env(), fRTCPSocket,
 					      totSessionBandwidth,
 					      (unsigned char const*)
@@ -969,16 +854,20 @@ void MediaSubsession::setDestinations(netAddressBits defaultDestAddress) {
   if (fRTCPSocket != NULL && !isSSM()) {
     // Note: For SSM sessions, the dest address for RTCP was already set.
     Port destPort(serverPortNum+1);
-    fRTCPSocket->
-      changeDestinationParameters(destAddr, destPort, destTTL);
+    fRTCPSocket->changeDestinationParameters(destAddr, destPort, destTTL);
   }
 }
 
+void MediaSubsession::setSessionId(char const* sessionId) {
+  delete[] fSessionId;
+  fSessionId = strDup(sessionId);
+}
+
 double MediaSubsession::getNormalPlayTime(struct timeval const& presentationTime) {
-  // First, check whether our "RTPSource" object has already been synchronized using RTCP.
-  // If it hasn't, then - as a special case - we need to use the RTP timestamp to compute the NPT.
   if (rtpSource() == NULL || rtpSource()->timestampFrequency() == 0) return 0.0; // no RTP source, or bad freq!
 
+  // First, check whether our "RTPSource" object has already been synchronized using RTCP.
+  // If it hasn't, then - as a special case - we need to use the RTP timestamp to compute the NPT.
   if (!rtpSource()->hasBeenSynchronizedUsingRTCP()) {
     if (!rtpInfo.infoIsNew) return 0.0; // the "rtpInfo" structure has not been filled in
     u_int32_t timestampOffset = rtpSource()->curPacketRTPTimestamp() - rtpInfo.timestamp;
@@ -994,6 +883,7 @@ double MediaSubsession::getNormalPlayTime(struct timeval const& presentationTime
     if (rtpInfo.infoIsNew) {
       // This is the first time we've been called with a synchronized presentation time since the "rtpInfo"
       // structure was last filled in.  Use this "presentationTime" to compute "fNPT_PTS_Offset":
+      if (seqNumLT(rtpSource()->curPacketRTPSeqNum(), rtpInfo.seqNum)) return -0.1; // sanity check; ignore old packets
       u_int32_t timestampOffset = rtpSource()->curPacketRTPTimestamp() - rtpInfo.timestamp;
       double nptOffset = (timestampOffset/(double)(rtpSource()->timestampFrequency()))*scale();
       double npt = playStartTime() + nptOffset;
@@ -1021,6 +911,12 @@ Boolean MediaSubsession::parseSDPLine_c(char const* sdpLine) {
   }
 
   return False;
+}
+
+Boolean MediaSubsession::parseSDPLine_b(char const* sdpLine) {
+  // Check for "b=<bwtype>:<bandwidth>" line
+  // RTP applications are expected to use bwtype="AS"
+  return sscanf(sdpLine, "b=AS:%u", &fBandwidth) == 1;
 }
 
 Boolean MediaSubsession::parseSDPAttribute_rtpmap(char const* sdpLine) {
@@ -1094,6 +990,8 @@ Boolean MediaSubsession::parseSDPAttribute_range(char const* sdpLine) {
 	fParent.playEndTime() = playEndTime;
       }
     }
+  } else if (parseRangeAttribute(sdpLine, _absStartTime(), _absEndTime())) {
+    parseSuccess = True;
   }
 
   return parseSuccess;
@@ -1161,13 +1059,20 @@ Boolean MediaSubsession::parseSDPAttribute_fmtp(char const* sdpLine) {
 	fCpresent = u != 0;
       } else if (sscanf(line, " randomaccessindication = %u", &u) == 1) {
 	fRandomaccessindication = u != 0;
-      } else if (sscanf(line, " config = %[^; \t\r\n]", valueStr) == 1) {
+      } else if (sscanf(sdpLine, " config = %[^; \t\r\n]", valueStr) == 1 ||
+		 sscanf(sdpLine, " configuration = %[^; \t\r\n]", valueStr) == 1) {
+	// Note: We used "sdpLine" here, because the value may be case-sensitive (if it's Base-64).
 	delete[] fConfig; fConfig = strDup(valueStr);
       } else if (sscanf(line, " mode = %[^; \t\r\n]", valueStr) == 1) {
 	delete[] fMode; fMode = strDup(valueStr);
       } else if (sscanf(sdpLine, " sprop-parameter-sets = %[^; \t\r\n]", valueStr) == 1) {
 	// Note: We used "sdpLine" here, because the value is case-sensitive.
 	delete[] fSpropParameterSets; fSpropParameterSets = strDup(valueStr);
+      } else if (sscanf(line, " emphasis = %[^; \t\r\n]", valueStr) == 1) {
+	delete[] fEmphasis; fEmphasis = strDup(valueStr);
+      } else if (sscanf(sdpLine, " channel-order = %[^; \t\r\n]", valueStr) == 1) {
+	// Note: We used "sdpLine" here, because the value is case-sensitive.
+	delete[] fChannelOrder; fChannelOrder = strDup(valueStr);
       } else {
 	// Some of the above parameters are Boolean.  Check whether the parameter
 	// names appear alone, without a "= 1" at the end:
@@ -1238,4 +1143,213 @@ Boolean MediaSubsession::parseSDPAttribute_framerate(char const* sdpLine) {
   }
 
   return parseSuccess;
+}
+
+Boolean MediaSubsession::createSourceObjects(int useSpecialRTPoffset) {
+  do {
+    // First, check "fProtocolName"
+    if (strcmp(fProtocolName, "UDP") == 0) {
+      // A UDP-packetized stream (*not* a RTP stream)
+      fReadSource = BasicUDPSource::createNew(env(), fRTPSocket);
+      fRTPSource = NULL; // Note!
+      
+      if (strcmp(fCodecName, "MP2T") == 0) { // MPEG-2 Transport Stream
+	fReadSource = MPEG2TransportStreamFramer::createNew(env(), fReadSource);
+	// this sets "durationInMicroseconds" correctly, based on the PCR values
+      }
+    } else {
+      // Check "fCodecName" against the set of codecs that we support,
+      // and create our RTP source accordingly
+      // (Later make this code more efficient, as this set grows #####)
+      // (Also, add more fmts that can be implemented by SimpleRTPSource#####)
+      Boolean createSimpleRTPSource = False; // by default; can be changed below
+      Boolean doNormalMBitRule = False; // default behavior if "createSimpleRTPSource" is True
+      if (strcmp(fCodecName, "QCELP") == 0) { // QCELP audio
+	fReadSource =
+	  QCELPAudioRTPSource::createNew(env(), fRTPSocket, fRTPSource,
+					 fRTPPayloadFormat,
+					 fRTPTimestampFrequency);
+	// Note that fReadSource will differ from fRTPSource in this case
+      } else if (strcmp(fCodecName, "AMR") == 0) { // AMR audio (narrowband)
+	fReadSource =
+	  AMRAudioRTPSource::createNew(env(), fRTPSocket, fRTPSource,
+				       fRTPPayloadFormat, False /*isWideband*/,
+				       fNumChannels, fOctetalign != 0, fInterleaving,
+				       fRobustsorting != 0, fCRC != 0);
+	// Note that fReadSource will differ from fRTPSource in this case
+      } else if (strcmp(fCodecName, "AMR-WB") == 0) { // AMR audio (wideband)
+	fReadSource =
+	  AMRAudioRTPSource::createNew(env(), fRTPSocket, fRTPSource,
+				       fRTPPayloadFormat, True /*isWideband*/,
+				       fNumChannels, fOctetalign != 0, fInterleaving,
+				       fRobustsorting != 0, fCRC != 0);
+	// Note that fReadSource will differ from fRTPSource in this case
+      } else if (strcmp(fCodecName, "MPA") == 0) { // MPEG-1 or 2 audio
+	fReadSource = fRTPSource
+	  = MPEG1or2AudioRTPSource::createNew(env(), fRTPSocket,
+					      fRTPPayloadFormat,
+					      fRTPTimestampFrequency);
+      } else if (strcmp(fCodecName, "MPA-ROBUST") == 0) { // robust MP3 audio
+	fReadSource = fRTPSource
+	  = MP3ADURTPSource::createNew(env(), fRTPSocket, fRTPPayloadFormat,
+				       fRTPTimestampFrequency);
+	if (fRTPSource == NULL) break;
+	
+	if (!fReceiveRawMP3ADUs) {
+	  // Add a filter that deinterleaves the ADUs after depacketizing them:
+	  MP3ADUdeinterleaver* deinterleaver
+	    = MP3ADUdeinterleaver::createNew(env(), fRTPSource);
+	  if (deinterleaver == NULL) break;
+	
+	  // Add another filter that converts these ADUs to MP3 frames:
+	  fReadSource = MP3FromADUSource::createNew(env(), deinterleaver);
+	}
+      } else if (strcmp(fCodecName, "X-MP3-DRAFT-00") == 0) {
+	// a non-standard variant of "MPA-ROBUST" used by RealNetworks
+	// (one 'ADU'ized MP3 frame per packet; no headers)
+	fRTPSource
+	  = SimpleRTPSource::createNew(env(), fRTPSocket, fRTPPayloadFormat,
+				       fRTPTimestampFrequency,
+				       "audio/MPA-ROBUST" /*hack*/);
+	if (fRTPSource == NULL) break;
+	
+	// Add a filter that converts these ADUs to MP3 frames:
+	fReadSource = MP3FromADUSource::createNew(env(), fRTPSource,
+						  False /*no ADU header*/);
+      } else if (strcmp(fCodecName, "MP4A-LATM") == 0) { // MPEG-4 LATM audio
+	fReadSource = fRTPSource
+	  = MPEG4LATMAudioRTPSource::createNew(env(), fRTPSocket,
+					       fRTPPayloadFormat,
+					       fRTPTimestampFrequency);
+      } else if (strcmp(fCodecName, "VORBIS") == 0) { // Vorbis audio
+	fReadSource = fRTPSource
+	  = VorbisAudioRTPSource::createNew(env(), fRTPSocket,
+					    fRTPPayloadFormat,
+					    fRTPTimestampFrequency);
+      } else if (strcmp(fCodecName, "VP8") == 0) { // VP8 video
+	fReadSource = fRTPSource
+	  = VP8VideoRTPSource::createNew(env(), fRTPSocket,
+					 fRTPPayloadFormat,
+					 fRTPTimestampFrequency);
+      } else if (strcmp(fCodecName, "AC3") == 0 || strcmp(fCodecName, "EAC3") == 0) { // AC3 audio
+	fReadSource = fRTPSource
+	  = AC3AudioRTPSource::createNew(env(), fRTPSocket,
+					 fRTPPayloadFormat,
+					 fRTPTimestampFrequency);
+      } else if (strcmp(fCodecName, "MP4V-ES") == 0) { // MPEG-4 Elementary Stream video
+	fReadSource = fRTPSource
+	  = MPEG4ESVideoRTPSource::createNew(env(), fRTPSocket,
+					     fRTPPayloadFormat,
+					     fRTPTimestampFrequency);
+      } else if (strcmp(fCodecName, "MPEG4-GENERIC") == 0) {
+	fReadSource = fRTPSource
+	  = MPEG4GenericRTPSource::createNew(env(), fRTPSocket,
+					     fRTPPayloadFormat,
+					     fRTPTimestampFrequency,
+					     fMediumName, fMode,
+					     fSizelength, fIndexlength,
+					     fIndexdeltalength);
+      } else if (strcmp(fCodecName, "MPV") == 0) { // MPEG-1 or 2 video
+	fReadSource = fRTPSource
+	  = MPEG1or2VideoRTPSource::createNew(env(), fRTPSocket,
+					      fRTPPayloadFormat,
+					      fRTPTimestampFrequency);
+      } else if (strcmp(fCodecName, "MP2T") == 0) { // MPEG-2 Transport Stream
+	fRTPSource = SimpleRTPSource::createNew(env(), fRTPSocket, fRTPPayloadFormat,
+						fRTPTimestampFrequency, "video/MP2T",
+						0, False);
+	fReadSource = MPEG2TransportStreamFramer::createNew(env(), fRTPSource);
+	// this sets "durationInMicroseconds" correctly, based on the PCR values
+      } else if (strcmp(fCodecName, "H261") == 0) { // H.261
+	fReadSource = fRTPSource
+	  = H261VideoRTPSource::createNew(env(), fRTPSocket,
+					  fRTPPayloadFormat,
+					  fRTPTimestampFrequency);
+      } else if (strcmp(fCodecName, "H263-1998") == 0 ||
+		 strcmp(fCodecName, "H263-2000") == 0) { // H.263+
+	fReadSource = fRTPSource
+	  = H263plusVideoRTPSource::createNew(env(), fRTPSocket,
+					      fRTPPayloadFormat,
+					      fRTPTimestampFrequency);
+      } else if (strcmp(fCodecName, "H264") == 0) {
+	fReadSource = fRTPSource
+	  = H264VideoRTPSource::createNew(env(), fRTPSocket,
+					  fRTPPayloadFormat,
+					  fRTPTimestampFrequency);
+      } else if (strcmp(fCodecName, "DV") == 0) {
+	fReadSource = fRTPSource
+	  = DVVideoRTPSource::createNew(env(), fRTPSocket,
+					fRTPPayloadFormat,
+					fRTPTimestampFrequency);
+      } else if (strcmp(fCodecName, "JPEG") == 0) { // motion JPEG
+	fReadSource = fRTPSource
+	  = JPEGVideoRTPSource::createNew(env(), fRTPSocket,
+					  fRTPPayloadFormat,
+					  fRTPTimestampFrequency,
+					  videoWidth(),
+					  videoHeight());
+      } else if (strcmp(fCodecName, "X-QT") == 0
+		 || strcmp(fCodecName, "X-QUICKTIME") == 0) {
+	// Generic QuickTime streams, as defined in
+	// <http://developer.apple.com/quicktime/icefloe/dispatch026.html>
+	char* mimeType
+	  = new char[strlen(mediumName()) + strlen(codecName()) + 2] ;
+	sprintf(mimeType, "%s/%s", mediumName(), codecName());
+	fReadSource = fRTPSource
+	  = QuickTimeGenericRTPSource::createNew(env(), fRTPSocket,
+						 fRTPPayloadFormat,
+						 fRTPTimestampFrequency,
+						 mimeType);
+	delete[] mimeType;
+      } else if (  strcmp(fCodecName, "PCMU") == 0 // PCM u-law audio
+		   || strcmp(fCodecName, "GSM") == 0 // GSM audio
+		   || strcmp(fCodecName, "DVI4") == 0 // DVI4 (IMA ADPCM) audio
+		   || strcmp(fCodecName, "PCMA") == 0 // PCM a-law audio
+		   || strcmp(fCodecName, "MP1S") == 0 // MPEG-1 System Stream
+		   || strcmp(fCodecName, "MP2P") == 0 // MPEG-2 Program Stream
+		   || strcmp(fCodecName, "L8") == 0 // 8-bit linear audio
+		   || strcmp(fCodecName, "L16") == 0 // 16-bit linear audio
+		   || strcmp(fCodecName, "L20") == 0 // 20-bit linear audio (RFC 3190)
+		   || strcmp(fCodecName, "L24") == 0 // 24-bit linear audio (RFC 3190)
+		   || strcmp(fCodecName, "G726-16") == 0 // G.726, 16 kbps
+		   || strcmp(fCodecName, "G726-24") == 0 // G.726, 24 kbps
+		   || strcmp(fCodecName, "G726-32") == 0 // G.726, 32 kbps
+		   || strcmp(fCodecName, "G726-40") == 0 // G.726, 40 kbps
+		   || strcmp(fCodecName, "SPEEX") == 0 // SPEEX audio
+		   || strcmp(fCodecName, "T140") == 0 // T.140 text (RFC 4103)
+		   || strcmp(fCodecName, "DAT12") == 0 // 12-bit nonlinear audio (RFC 3190)
+		   || strcmp(fCodecName, "VND.ONVIF.METADATA") == 0 // 'ONVIF' 'metadata' (a XML document)
+		   ) {
+	createSimpleRTPSource = True;
+	useSpecialRTPoffset = 0;
+	if (strcmp(fCodecName, "VND.ONVIF.METADATA") == 0) {
+	  // This RTP payload format uses the RTP "M" bit to indicate the end of the content (a XML document):
+	  doNormalMBitRule = True;
+	}
+      } else if (useSpecialRTPoffset >= 0) {
+	// We don't know this RTP payload format, but try to receive
+	// it using a 'SimpleRTPSource' with the specified header offset:
+	createSimpleRTPSource = True;
+      } else {
+	env().setResultMsg("RTP payload format unknown or not supported");
+	break;
+      }
+      
+      if (createSimpleRTPSource) {
+	char* mimeType
+	  = new char[strlen(mediumName()) + strlen(codecName()) + 2] ;
+	sprintf(mimeType, "%s/%s", mediumName(), codecName());
+	fReadSource = fRTPSource
+	  = SimpleRTPSource::createNew(env(), fRTPSocket, fRTPPayloadFormat,
+				       fRTPTimestampFrequency, mimeType,
+				       (unsigned)useSpecialRTPoffset,
+				       doNormalMBitRule);
+	delete[] mimeType;
+      }
+    }
+
+    return True;
+  } while (0);
+
+  return False; // an error occurred
 }

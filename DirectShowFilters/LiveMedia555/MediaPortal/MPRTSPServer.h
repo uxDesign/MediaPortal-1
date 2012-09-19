@@ -54,8 +54,8 @@ public:
 			int clientSocket, struct sockaddr_in clientAddr);
 		virtual ~MPRTSPClientSession();
 		ServerMediaSession* getOurServerMediaSession(){return fOurServerMediaSession;}
-		Boolean IsSessionIsActive() {return fSessionIsActive;}
-		struct sockaddr_in getClientAddr() {return fClientAddr;}
+		//Boolean IsSessionIsActive() {return fSessionIsActive;}
+		//struct sockaddr_in getClientAddr() {return fClientAddr;}
 		LONG getStartDateTime() {return startDateTime;}
 		bool isPaused() {return m_bPaused;}
 
@@ -63,10 +63,10 @@ public:
 		LONG startDateTime;
 		bool m_bPaused;
 		MPRTSPServer& fOurMPServer;
-		virtual void handleCmd_PLAY(ServerMediaSubsession* subsession,
-			char const* cseq, char const* fullRequestStr);
-		virtual void handleCmd_PAUSE(ServerMediaSubsession* subsession,
-			char const* cseq);
+		virtual void handleCmd_PLAY(RTSPClientConnection* ourClientConnection,
+				ServerMediaSubsession* subsession, char const* fullRequestStr);
+		virtual void handleCmd_PAUSE(RTSPClientConnection* ourClientConnection,
+				 ServerMediaSubsession* subsession);
 		static void livenessTimeoutTaskMP(MPRTSPClientSession* clientSession);
 		virtual void noteLiveness();
 

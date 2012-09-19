@@ -14,7 +14,7 @@ along with this library; if not, write to the Free Software Foundation, Inc.,
 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA
 **********/
 // "liveMedia"
-// Copyright (c) 1996-2009 Live Networks, Inc.  All rights reserved.
+// Copyright (c) 1996-2012 Live Networks, Inc.  All rights reserved.
 // A 'ServerMediaSubsession' object that represents an existing
 // 'RTPSink', rather than one that creates new 'RTPSink's on demand.
 // C++ header
@@ -62,12 +62,18 @@ protected: // redefined virtual functions
 			   TaskFunc* rtcpRRHandler,
 			   void* rtcpRRHandlerClientData,
                            unsigned short& rtpSeqNum,
-                           unsigned& rtpTimestamp);
+                           unsigned& rtpTimestamp,
+			   ServerRequestAlternativeByteHandler* serverRequestAlternativeByteHandler,
+                           void* serverRequestAlternativeByteHandlerClientData);
+  virtual void deleteStream(unsigned clientSessionId, void*& streamToken);
+
+protected:
+  char* fSDPLines;
 
 private:
   RTPSink& fRTPSink;
   RTCPInstance* fRTCPInstance;
-  char* fSDPLines;
+  HashTable* fClientRTCPSourceRecords; // indexed by client session id; used to implement RTCP "RR" handling
 };
 
 #endif

@@ -14,12 +14,16 @@ along with this library; if not, write to the Free Software Foundation, Inc.,
 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA
 **********/
 // "liveMedia"
-// Copyright (c) 1996-2009 Live Networks, Inc.  All rights reserved.
+// Copyright (c) 1996-2012 Live Networks, Inc.  All rights reserved.
 // Bit Vector data structure
 // C++ header
 
 #ifndef _BIT_VECTOR_HH
 #define _BIT_VECTOR_HH
+
+#ifndef _BOOLEAN_HH
+#include "Boolean.hh"
+#endif
 
 class BitVector {
 public:
@@ -36,12 +40,16 @@ public:
 
   unsigned getBits(unsigned numBits); // "numBits" <= 32
   unsigned get1Bit();
+  Boolean get1BitBoolean() { return get1Bit() != 0; }
 
   void skipBits(unsigned numBits);
 
   unsigned curBitIndex() const { return fCurBitIndex; }
   unsigned totNumBits() const { return fTotNumBits; }
   unsigned numBitsRemaining() const { return fTotNumBits - fCurBitIndex; }
+
+  unsigned get_expGolomb();
+      // Returns the value of the next bits, assuming that they were encoded using an exponential-Golomb code of order 0
 
 private:
   unsigned char* fBaseBytePtr;

@@ -14,7 +14,7 @@ along with this library; if not, write to the Free Software Foundation, Inc.,
 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA
 **********/
 // "liveMedia"
-// Copyright (c) 1996-2009 Live Networks, Inc.  All rights reserved.
+// Copyright (c) 1996-2012 Live Networks, Inc.  All rights reserved.
 // A generic SIP client
 // C++ header
 
@@ -67,8 +67,6 @@ public:
   static Boolean parseSIPURLUsernamePassword(char const* url,
 					     char*& username,
 					     char*& password);
-
-  unsigned inviteStatus() const { return fInviteStatusCode; }
 
 protected:
   virtual ~SIPClient();
@@ -141,8 +139,6 @@ private:
   Authenticator* fWorkingAuthenticator;
   inviteClientState fInviteClientState;
   char fEventLoopStopFlag;
-  unsigned fInviteStatusCode;
-  // 0: OK; 1: connection failed; 2: stream unavailable
 };
 
 #endif

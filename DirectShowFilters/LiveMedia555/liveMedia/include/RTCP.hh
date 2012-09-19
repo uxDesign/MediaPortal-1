@@ -14,7 +14,7 @@ along with this library; if not, write to the Free Software Foundation, Inc.,
 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA
 **********/
 // "liveMedia"
-// Copyright (c) 1996-2009 Live Networks, Inc.  All rights reserved.
+// Copyright (c) 1996-2012 Live Networks, Inc.  All rights reserved.
 // RTCP
 // C++ header
 
@@ -54,6 +54,7 @@ public:
                               RTCPInstance*& resultInstance);
 
   unsigned numMembers() const;
+  unsigned totSessionBW() const { return fTotSessionBW; }
 
   void setByeHandler(TaskFunc* handlerTask, void* clientData,
 		     Boolean handleActiveParticipantsOnly = True);
@@ -78,6 +79,7 @@ public:
       // Like "setRRHandler()", but applies only to "RR" packets that come from
       // a specific source address and port.  (Note that if both a specific
       // and a general "RR" handler function is set, then both will be called.)
+  void unsetSpecificRRHandler(netAddressBits fromAddress, Port fromPort); // equivalent to setSpecificRRHandler(..., NULL, NULL);
 
   Groupsock* RTCPgs() const { return fRTCPInterface.gs(); }
 
@@ -126,10 +128,9 @@ private:
   void incomingReportHandler1();
   void onReceive(int typeOfPacket, int totPacketSize, u_int32_t ssrc);
 
-  void unsetSpecificRRHandler(netAddressBits fromAddress, Port fromPort);
-
 private:
   unsigned char* fInBuf;
+  unsigned fNumBytesAlreadyRead;
   OutPacketBuffer* fOutBuf;
   RTPInterface fRTCPInterface;
   unsigned fTotSessionBW;

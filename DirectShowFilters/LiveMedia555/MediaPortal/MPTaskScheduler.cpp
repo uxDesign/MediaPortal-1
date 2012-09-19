@@ -24,12 +24,12 @@
 
 ////////// BasicTaskScheduler //////////
 
-MPTaskScheduler* MPTaskScheduler::createNew() {
-	return new MPTaskScheduler();
+MPTaskScheduler* MPTaskScheduler::createNew(unsigned maxSchedulerGranularity) {
+	return new MPTaskScheduler(maxSchedulerGranularity);
 }
 
-MPTaskScheduler::MPTaskScheduler()
-: BasicTaskScheduler() {
+MPTaskScheduler::MPTaskScheduler(unsigned maxSchedulerGranularity)
+: BasicTaskScheduler(maxSchedulerGranularity) {
 }
 
 MPTaskScheduler::~MPTaskScheduler() {

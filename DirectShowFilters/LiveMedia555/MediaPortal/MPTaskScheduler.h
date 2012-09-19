@@ -27,11 +27,11 @@
 
 class MPTaskScheduler: public BasicTaskScheduler {
 public:
-	static MPTaskScheduler* createNew();
+	static MPTaskScheduler* createNew(unsigned maxSchedulerGranularity = 10000/*microseconds*/);
 	virtual ~MPTaskScheduler();
 
 protected:
-	MPTaskScheduler();
+	MPTaskScheduler(unsigned maxSchedulerGranularity);
 	// called only by "createNew()"
 
 protected:

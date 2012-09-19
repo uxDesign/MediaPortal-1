@@ -14,7 +14,7 @@ along with this library; if not, write to the Free Software Foundation, Inc.,
 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA
 **********/
 // "liveMedia"
-// Copyright (c) 1996-2009 Live Networks, Inc.  All rights reserved.
+// Copyright (c) 1996-2012 Live Networks, Inc.  All rights reserved.
 // Common routines used by both RTSP clients and servers
 // Implementation
 
@@ -22,6 +22,13 @@ along with this library; if not, write to the Free Software Foundation, Inc.,
 #include "Locale.hh"
 #include <string.h>
 #include <stdio.h>
+#include <time.h> // for "strftime()" and "gmtime()"
+
+#if defined(__WIN32__) || defined(_WIN32) || defined(_QNX4)
+#else
+#include <signal.h>
+#define USE_SIGNALS 1
+#endif
 
 Boolean parseRTSPRequestString(char const* reqStr,
 			       unsigned reqStrSize,
@@ -32,7 +39,10 @@ Boolean parseRTSPRequestString(char const* reqStr,
 			       char* resultURLSuffix,
 			       unsigned resultURLSuffixMaxSize,
 			       char* resultCSeq,
-			       unsigned resultCSeqMaxSize) {
+			       unsigned resultCSeqMaxSize,
+                               char* resultSessionIdStr,
+                               unsigned resultSessionIdStrMaxSize,
+			       unsigned& contentLength) {
   // This parser is currently rather dumb; it should be made smarter #####
 
   // Read everything up to the first space as the command name:
@@ -81,23 +91,28 @@ Boolean parseRTSPRequestString(char const* reqStr,
       while (--k >= i && reqStr[k] == ' ') {} // go back over all spaces before "RTSP/"
       unsigned k1 = k;
       while (k1 > i && reqStr[k1] != '/') --k1;
-      // the URL suffix comes from [k1+1,k]
 
+      // ASSERT: At this point
+      //   i: first space or slash after "host" or "host:port"
+      //   k: last non-space before "RTSP/"
+      //   k1: last slash in the range [i,k]
+
+      // The URL suffix comes from [k1+1,k]
       // Copy "resultURLSuffix":
-      if (k - k1 + 1 > resultURLSuffixMaxSize) return False; // there's no room
       unsigned n = 0, k2 = k1+1;
-      while (k2 <= k) resultURLSuffix[n++] = reqStr[k2++];
+      if (i <= k) { // There's a slash after "host" or "host:port"
+        if (k - k1 + 1 > resultURLSuffixMaxSize) return False; // there's no room
+        while (k2 <= k) resultURLSuffix[n++] = reqStr[k2++];
+      }
       resultURLSuffix[n] = '\0';
 
-      // Also look for the URL 'pre-suffix' before this:
-      unsigned k3 = (k1 == 0) ? 0 : --k1;
-      while (k3 > i && reqStr[k3] != '/') --k3;
-      // the URL pre-suffix comes from [k3+1,k1]
-
+      // The URL 'pre-suffix' comes from [i+1,k1-1]
       // Copy "resultURLPreSuffix":
-      if (k1 - k3 + 1 > resultURLPreSuffixMaxSize) return False; // there's no room
-      n = 0; k2 = k3+1;
-      while (k2 <= k1) resultURLPreSuffix[n++] = reqStr[k2++];
+      n = 0; k2 = i + 1;
+      if (i <= k) { // There's a slash after "host" or "host:port"
+        if (k1 - i > resultURLPreSuffixMaxSize) return False; // there's no room
+        while (k2 <= k1 - 1) resultURLPreSuffix[n++] = reqStr[k2++];
+      }
       resultURLPreSuffix[n] = '\0';
 
       i = k + 7; // to go past " RTSP/"
@@ -107,15 +122,14 @@ Boolean parseRTSPRequestString(char const* reqStr,
   }
   if (!parseSucceeded) return False;
 
-  // Look for "CSeq:", skip whitespace,
+  // Look for "CSeq:" (mandatory, case insensitive), skip whitespace,
   // then read everything up to the next \r or \n as 'CSeq':
   parseSucceeded = False;
   for (j = i; (int)j < (int)(reqStrSize-5); ++j) {
-    if (reqStr[j] == 'C' && reqStr[j+1] == 'S' && reqStr[j+2] == 'e' &&
-	reqStr[j+3] == 'q' && reqStr[j+4] == ':') {
+    if (_strncasecmp("CSeq:", &reqStr[j], 5) == 0) {
       j += 5;
-      unsigned n;
       while (j < reqStrSize && (reqStr[j] ==  ' ' || reqStr[j] == '\t')) ++j;
+      unsigned n;
       for (n = 0; n < resultCSeqMaxSize-1 && j < reqStrSize; ++n,++j) {
 	char c = reqStr[j];
 	if (c == '\r' || c == '\n') {
@@ -131,10 +145,91 @@ Boolean parseRTSPRequestString(char const* reqStr,
   }
   if (!parseSucceeded) return False;
 
+  // Look for "Session:" (optional, case insensitive), skip whitespace,
+  // then read everything up to the next \r or \n as 'Session':
+  resultSessionIdStr[0] = '\0'; // default value (empty string)
+  for (j = i; (int)j < (int)(reqStrSize-8); ++j) {
+    if (_strncasecmp("Session:", &reqStr[j], 8) == 0) {
+      j += 8;
+      while (j < reqStrSize && (reqStr[j] ==  ' ' || reqStr[j] == '\t')) ++j;
+      unsigned n;
+      for (n = 0; n < resultSessionIdStrMaxSize-1 && j < reqStrSize; ++n,++j) {
+	char c = reqStr[j];
+	if (c == '\r' || c == '\n') {
+	  break;
+	}
+
+	resultSessionIdStr[n] = c;
+      }
+      resultSessionIdStr[n] = '\0';
+      break;
+    }
+  }
+
+  // Also: Look for "Content-Length:" (optional, case insensitive)
+  contentLength = 0; // default value
+  for (j = i; (int)j < (int)(reqStrSize-15); ++j) {
+    if (_strncasecmp("Content-Length:", &(reqStr[j]), 15) == 0) {
+      j += 15;
+      while (j < reqStrSize && (reqStr[j] ==  ' ' || reqStr[j] == '\t')) ++j;
+      unsigned num;
+      if (sscanf(&reqStr[j], "%u", &num) == 1) {
+	contentLength = num;
+      }
+    }
+  }
   return True;
 }
 
-Boolean parseRangeHeader(char const* buf, double& rangeStart, double& rangeEnd) {
+Boolean parseRangeParam(char const* paramStr, double& rangeStart, double& rangeEnd, char*& absStartTime, char*& absEndTime) {
+  delete[] absStartTime; delete[] absEndTime;
+  absStartTime = absEndTime = NULL; // by default, unless "paramStr" is a "clock=..." string
+  double start, end;
+  int numCharsMatched = 0;
+  Locale l("C", Numeric);
+  if (sscanf(paramStr, "npt = %lf - %lf", &start, &end) == 2) {
+    rangeStart = start;
+    rangeEnd = end;
+  } else if (sscanf(paramStr, "npt = %lf -", &start) == 1) {
+    if (start < 0.0) {
+      // special case for "npt = -<endtime>", which seems to match here:
+      rangeStart = 0.0;
+      rangeEnd = -start;
+    } else {
+      rangeStart = start;
+      rangeEnd = 0.0;
+    }
+  } else if (strcmp(paramStr, "npt=now-") == 0) {
+    rangeStart = 0.0;
+    rangeEnd = 0.0;
+  } else if (sscanf(paramStr, "clock = %n", &numCharsMatched) == 0 && numCharsMatched > 0) {
+    rangeStart = rangeEnd = 0.0;
+
+    char const* utcTimes = &paramStr[numCharsMatched];
+    size_t len = strlen(utcTimes) + 1;
+    char* as = new char[len];
+    char* ae = new char[len];
+    int sscanfResult = sscanf(utcTimes, "%[^-]-%s", as, ae);
+    if (sscanfResult == 2) {
+      absStartTime = as;
+      absEndTime = ae;
+    } else if (sscanfResult == 1) {
+      absStartTime = as;
+      delete[] ae;
+    } else {
+      delete[] as; delete[] ae;
+      return False;
+    }
+  } else if (sscanf(paramStr, "smtpe = %n", &numCharsMatched) == 0 && numCharsMatched > 0) {
+    // We accept "smtpe=" parameters, but currently do not interpret them.
+  } else {
+    return False; // The header is malformed
+  }
+
+  return True;
+}
+
+Boolean parseRangeHeader(char const* buf, double& rangeStart, double& rangeEnd, char*& absStartTime, char*& absEndTime) {
   // First, find "Range:"
   while (1) {
     if (*buf == '\0') return False; // not found
@@ -145,17 +240,44 @@ Boolean parseRangeHeader(char const* buf, double& rangeStart, double& rangeEnd) 
   // Then, run through each of the fields, looking for ones we handle:
   char const* fields = buf + 7;
   while (*fields == ' ') ++fields;
-  double start, end;
-  Locale l("C", LC_NUMERIC);
-  if (sscanf(fields, "npt = %lf - %lf", &start, &end) == 2) {
-    rangeStart = start;
-    rangeEnd = end;
-  } else if (sscanf(fields, "npt = %lf -", &start) == 1) {
-    rangeStart = start;
-    rangeEnd = 0.0;
-  } else {
-    return False; // The header is malformed
-  }
+  return parseRangeParam(fields, rangeStart, rangeEnd, absStartTime, absEndTime);
+}
 
-  return True;
+char const* dateHeader() {
+  static char buf[200];
+#if !defined(_WIN32_WCE)
+  time_t tt = time(NULL);
+  strftime(buf, sizeof buf, "Date: %a, %b %d %Y %H:%M:%S GMT\r\n", gmtime(&tt));
+#else
+  // WinCE apparently doesn't have "time()", "strftime()", or "gmtime()",
+  // so generate the "Date:" header a different, WinCE-specific way.
+  // (Thanks to Pierre l'Hussiez for this code)
+  // RSF: But where is the "Date: " string?  This code doesn't look quite right...
+  SYSTEMTIME SystemTime;
+  GetSystemTime(&SystemTime);
+  WCHAR dateFormat[] = L"ddd, MMM dd yyyy";
+  WCHAR timeFormat[] = L"HH:mm:ss GMT\r\n";
+  WCHAR inBuf[200];
+  DWORD locale = LOCALE_NEUTRAL;
+
+  int ret = GetDateFormat(locale, 0, &SystemTime,
+                          (LPTSTR)dateFormat, (LPTSTR)inBuf, sizeof inBuf);
+  inBuf[ret - 1] = ' ';
+  ret = GetTimeFormat(locale, 0, &SystemTime,
+                      (LPTSTR)timeFormat,
+                      (LPTSTR)inBuf + ret, (sizeof inBuf) - ret);
+  wcstombs(buf, inBuf, wcslen(inBuf));
+#endif
+  return buf;
+}
+
+void ignoreSigPipeOnSocket(int socketNum) {
+#ifdef USE_SIGNALS
+#ifdef SO_NOSIGPIPE
+  int set_option = 1;
+  setsockopt(socketNum, SOL_SOCKET, SO_NOSIGPIPE, &set_option, sizeof set_option);
+#else
+  signal(SIGPIPE, SIG_IGN);
+#endif
+#endif
 }

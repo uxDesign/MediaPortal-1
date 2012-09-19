@@ -13,7 +13,7 @@ You should have received a copy of the GNU Lesser General Public License
 along with this library; if not, write to the Free Software Foundation, Inc.,
 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA
 **********/
-// Copyright (c) 1996-2009 Live Networks, Inc.  All rights reserved.
+// Copyright (c) 1996-2012 Live Networks, Inc.  All rights reserved.
 // 'Group sockets'
 // Implementation
 
@@ -22,16 +22,8 @@ along with this library; if not, write to the Free Software Foundation, Inc.,
 //##### Eventually fix the following #include; we shouldn't know about tunnels
 #include "TunnelEncaps.hh"
 
-#ifndef NO_STRSTREAM
-#if (defined(__WIN32__) || defined(_WIN32)) && !defined(__MINGW32__)
-#include <strstrea.h>
-#else
-#if defined(__GNUC__) && (__GNUC__ > 3 || __GNUC__ == 3 && __GNUC_MINOR__ > 0)
-#include <strstream>
-#else
-#include <strstream.h>
-#endif
-#endif
+#ifndef NO_SSTREAM
+#include <sstream>
 #endif
 #include <stdio.h>
 
@@ -245,10 +237,14 @@ void Groupsock::removeAllDestinations() {
 }
 
 void Groupsock::multicastSendOnly() {
+  // We disable this code for now, because - on some systems - leaving the multicast group seems to cause sent packets
+  // to not be received by other applications (at least, on the same host).
+#if 0
   socketLeaveGroup(env(), socketNum(), fIncomingGroupEId.groupAddress().s_addr);
   for (destRecord* dests = fDests; dests != NULL; dests = dests->fNext) {
     socketLeaveGroup(env(), socketNum(), dests->fGroupEId.groupAddress().s_addr);
   }
+#endif
 }
 
 Boolean Groupsock::output(UsageEnvironment& env, u_int8_t ttlToSend,
@@ -339,8 +335,7 @@ Boolean Groupsock::handleRead(unsigned char* buffer, unsigned bufferMaxSize,
     }
   }
   if (DebugLevel >= 3) {
-    env() << *this << ": read " << bytesRead << " bytes from ";
-    env() << our_inet_ntoa(fromAddress.sin_addr);
+    env() << *this << ": read " << bytesRead << " bytes from " << AddressString(fromAddress).val();
     if (numMembers > 0) {
       env() << "; relayed to " << numMembers << " members";
     }
@@ -403,7 +398,7 @@ int Groupsock::outputToAllMembersExcept(DirectedNetInterface* exceptInterface,
 	= (TunnelEncapsulationTrailer*)&data[size];
       TunnelEncapsulationTrailer* trailer;
 
-      Boolean misaligned = ((unsigned long)trailerInPacket & 3) != 0;
+      Boolean misaligned = ((uintptr_t)trailerInPacket & 3) != 0;
       unsigned trailerOffset;
       u_int8_t tunnelCmd;
       if (isSSM()) {
@@ -451,11 +446,11 @@ int Groupsock::outputToAllMembersExcept(DirectedNetInterface* exceptInterface,
 UsageEnvironment& operator<<(UsageEnvironment& s, const Groupsock& g) {
   UsageEnvironment& s1 = s << timestampString() << " Groupsock("
 			   << g.socketNum() << ": "
-			   << our_inet_ntoa(g.groupAddress())
+			   << AddressString(g.groupAddress()).val()
 			   << ", " << g.port() << ", ";
   if (g.isSSM()) {
     return s1 << "SSM source: "
-	      <<  our_inet_ntoa(g.sourceFilterAddress()) << ")";
+	      <<  AddressString(g.sourceFilterAddress()).val() << ")";
   } else {
     return s1 << (unsigned)(g.ttl()) << ")";
   }
@@ -467,11 +462,12 @@ UsageEnvironment& operator<<(UsageEnvironment& s, const Groupsock& g) {
 
 // A hash table used to index Groupsocks by socket number.
 
-static HashTable* getSocketTable(UsageEnvironment& env) {
-  if (env.groupsockPriv == NULL) { // We need to create it
-    env.groupsockPriv = HashTable::create(ONE_WORD_HASH_KEYS);
+static HashTable*& getSocketTable(UsageEnvironment& env) {
+  _groupsockPriv* priv = groupsockPriv(env);
+  if (priv->socketTable == NULL) { // We need to create it
+    priv->socketTable = HashTable::create(ONE_WORD_HASH_KEYS);
   }
-  return (HashTable*)(env.groupsockPriv);
+  return priv->socketTable;
 }
 
 static Boolean unsetGroupsockBySocket(Groupsock const* groupsock) {
@@ -482,8 +478,7 @@ static Boolean unsetGroupsockBySocket(Groupsock const* groupsock) {
     // Make sure "sock" is in bounds:
     if (sock < 0) break;
 
-    HashTable* sockets = getSocketTable(groupsock->env());
-    if (sockets == NULL) break;
+    HashTable*& sockets = getSocketTable(groupsock->env());
 
     Groupsock* gs = (Groupsock*)sockets->Lookup((char*)(long)sock);
     if (gs == NULL || gs != groupsock) break;
@@ -491,8 +486,8 @@ static Boolean unsetGroupsockBySocket(Groupsock const* groupsock) {
 
     if (sockets->IsEmpty()) {
       // We can also delete the table (to reclaim space):
-      delete sockets;
-      (gs->env()).groupsockPriv = NULL;
+      delete sockets; sockets = NULL;
+      reclaimGroupsockPriv(gs->env());
     }
 
     return True;
@@ -513,10 +508,8 @@ static Boolean setGroupsockBySocket(UsageEnvironment& env, int sock,
     }
 
     HashTable* sockets = getSocketTable(env);
-    if (sockets == NULL) break;
 
-    // Make sure we're not replacing an existing Groupsock
-    // That shouldn't happen
+    // Make sure we're not replacing an existing Groupsock (although that shouldn't happen)
     Boolean alreadyExists
       = (sockets->Lookup((char*)(long)sock) != 0);
     if (alreadyExists) {
@@ -541,8 +534,6 @@ static Groupsock* getGroupsockBySocket(UsageEnvironment& env, int sock) {
     if (sock < 0) break;
 
     HashTable* sockets = getSocketTable(env);
-    if (sockets == NULL) break;
-
     return (Groupsock*)sockets->Lookup((char*)(long)sock);
   } while (0);
 

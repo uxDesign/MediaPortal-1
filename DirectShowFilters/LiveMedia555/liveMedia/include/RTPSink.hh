@@ -14,7 +14,7 @@ along with this library; if not, write to the Free Software Foundation, Inc.,
 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA
 **********/
 // "liveMedia"
-// Copyright (c) 1996-2009 Live Networks, Inc.  All rights reserved.
+// Copyright (c) 1996-2012 Live Networks, Inc.  All rights reserved.
 // RTP Sinks
 // C++ header
 
@@ -79,6 +79,9 @@ public:
   }
   void removeStreamSocket(int sockNum, unsigned char streamChannelId) {
     fRTPInterface.removeStreamSocket(sockNum, streamChannelId);
+  }
+  void setServerRequestAlternativeByteHandler(int socketNum, ServerRequestAlternativeByteHandler* handler, void* clientData) {
+    fRTPInterface.setServerRequestAlternativeByteHandler(socketNum, handler, clientData);
   }
     // hacks to allow sending RTP over TCP (RFC 2236, section 10.12)
 
@@ -181,7 +184,6 @@ public:
   void getTotalPacketCount(u_int32_t& hi, u_int32_t& lo);
 
   // Information which requires at least two RRs to have been received:
-  Boolean oldValid() const {return fOldValid;} // Have two RRs been received?
   unsigned packetsReceivedSinceLastRR() const;
   u_int8_t packetLossRatio() const { return fPacketLossRatio; }
      // as an 8-bit fixed-point number
@@ -209,7 +211,7 @@ private:
   unsigned fLastSRTime;
   unsigned fDiffSR_RRTime;
   struct timeval fTimeCreated, fTimeReceived;
-  Boolean fOldValid;
+  Boolean fAtLeastTwoRRsHaveBeenReceived;
   unsigned fOldLastPacketNumReceived;
   unsigned fOldTotNumPacketsLost;
   Boolean fFirstPacket;

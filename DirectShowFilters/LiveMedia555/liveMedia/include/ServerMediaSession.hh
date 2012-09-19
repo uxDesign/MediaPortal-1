@@ -14,7 +14,7 @@ along with this library; if not, write to the Free Software Foundation, Inc.,
 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA
 **********/
 // "liveMedia"
-// Copyright (c) 1996-2009 Live Networks, Inc.  All rights reserved.
+// Copyright (c) 1996-2012 Live Networks, Inc.  All rights reserved.
 // A data structure that represents a session that consists of
 // potentially multiple (audio and/or video) sub-sessions
 // (This data structure is used for media *streamers* - i.e., servers.
@@ -27,8 +27,14 @@ along with this library; if not, write to the Free Software Foundation, Inc.,
 #ifndef _MEDIA_HH
 #include "Media.hh"
 #endif
+#ifndef _FRAMED_SOURCE_HH
+#include "FramedSource.hh"
+#endif
 #ifndef _GROUPEID_HH
 #include "GroupEId.hh"
+#endif
+#ifndef _RTP_INTERFACE_HH
+#include "RTPInterface.hh" // for ServerRequestAlternativeByteHandler
 #endif
 
 class ServerMediaSubsession; // forward
@@ -54,11 +60,12 @@ public:
   char const* streamName() const { return fStreamName; }
 
   Boolean addSubsession(ServerMediaSubsession* subsession);
+  unsigned numSubsessions() const { return fSubsessionCounter; }
 
   void testScaleFactor(float& scale); // sets "scale" to the actual supported scale
   float duration() const;
     // a result == 0 means an unbounded session (the default)
-    // a result < 0 means: subsession durations differ; the result is -(the largest)
+    // a result < 0 means: subsession durations differ; the result is -(the largest).
     // a result > 0 means: this is the duration of a bounded session
 
   unsigned referenceCount() const { return fReferenceCount; }
@@ -133,16 +140,29 @@ public:
 			   TaskFunc* rtcpRRHandler,
 			   void* rtcpRRHandlerClientData,
 			   unsigned short& rtpSeqNum,
-			   unsigned& rtpTimestamp) = 0;
+			   unsigned& rtpTimestamp,
+			   ServerRequestAlternativeByteHandler* serverRequestAlternativeByteHandler,
+			   void* serverRequestAlternativeByteHandlerClientData) = 0;
   virtual void pauseStream(unsigned clientSessionId, void* streamToken);
-  virtual void seekStream(unsigned clientSessionId, void* streamToken, double seekNPT);
+  virtual void seekStream(unsigned clientSessionId, void* streamToken, double& seekNPT, double streamDuration, u_int64_t& numBytes);
+     // This routine is used to seek by relative (i.e., NPT) time.
+     // "streamDuration", if >0.0, specifies how much data to stream, past "seekNPT".  (If <=0.0, all remaining data is streamed.)
+     // "numBytes" returns the size (in bytes) of the data to be streamed, or 0 if unknown or unlimited.
+  virtual void seekStream(unsigned clientSessionId, void* streamToken, char*& absStart, char*& absEnd);
+     // This routine is used to seek by 'absolute' time.
+     // "absStart" should be a string of the form "YYYYMMDDTHHMMSSZ" or "YYYYMMDDTHHMMSS.<frac>Z".
+     // "absEnd" should be either NULL (for no end time), or a string of the same form as "absStart".
+     // These strings may be modified in-place, or can be reassigned to a newly-allocated value (after delete[]ing the original).
   virtual void setStreamScale(unsigned clientSessionId, void* streamToken, float scale);
+  virtual FramedSource* getStreamSource(void* streamToken);
   virtual void deleteStream(unsigned clientSessionId, void*& streamToken);
 
   virtual void testScaleFactor(float& scale); // sets "scale" to the actual supported scale
   virtual float duration() const;
     // returns 0 for an unbounded session (the default)
     // returns > 0 for a bounded session
+  virtual void getAbsoluteTimeRange(char*& absStartTime, char*& absEndTime) const;
+    // Subclasses can reimplement this iff they support seeking by 'absolute' time.
 
   // The following may be called by (e.g.) SIP servers, for which the
   // address and port number fields in SDP descriptions need to be non-zero:
