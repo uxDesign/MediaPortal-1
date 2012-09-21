@@ -194,6 +194,7 @@ public: // should be protected, but some old compilers complain otherwise
     unsigned fRequestBytesAlreadySeen, fRequestBufferBytesLeft;
     unsigned char* fLastCRLF;
     unsigned char fResponseBuffer[RTSP_BUFFER_SIZE];
+    Boolean fIsMulticast, fSessionIsActive, fStreamAfterSETUP;
     unsigned fRecursionCount;
     char const* fCurrentCSeq;
     Authenticator fCurrentAuthenticator; // used if access control is needed
@@ -204,7 +205,7 @@ public: // should be protected, but some old compilers complain otherwise
   // The state of an individual client session (using one or more sequential TCP connections) handled by a RTSP server:
   class RTSPClientSession {
   public:
-    RTSPClientSession(RTSPServer& ourServer, u_int32_t sessionId);
+    RTSPClientSession(RTSPServer& ourServer, u_int32_t sessionId, int clientSocket, struct sockaddr_in clientAddr);
     virtual ~RTSPClientSession();
   protected:
     friend class RTSPServer;
@@ -237,7 +238,8 @@ public: // should be protected, but some old compilers complain otherwise
     RTSPServer& fOurServer;
     u_int32_t fOurSessionId;
     ServerMediaSession* fOurServerMediaSession;
-    Boolean fIsMulticast, fStreamAfterSETUP;
+    Boolean fIsMulticast, fSessionIsActive, fStreamAfterSETUP;
+    struct sockaddr_in fClientAddr;
     unsigned char fTCPStreamIdCount; // used for (optional) RTP/TCP
     TaskToken fLivenessCheckTask;
     unsigned fNumStreamStates;
@@ -256,7 +258,7 @@ protected:
   // If you subclass "RTSPClientSession", then you must also redefine this virtual function in order
   // to create new objects of your subclass:
   virtual RTSPClientSession*
-  createNewClientSession(u_int32_t sessionId);
+  createNewClientSession(u_int32_t sessionId, int clientSocket, struct sockaddr_in clientAddr);
 
   // An iterator over our "ServerMediaSession" objects:
   class ServerMediaSessionIterator {

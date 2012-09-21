@@ -75,7 +75,7 @@ MPRTSPServer::createNewClientSession(unsigned sessionId, int clientSocket, struc
 MPRTSPServer::MPRTSPClientSession
 ::MPRTSPClientSession(MPRTSPServer& ourServer, unsigned sessionId,
 					  int clientSocket, struct sockaddr_in clientAddr)
-					  : RTSPClientSession(ourServer,sessionId),
+					  : RTSPClientSession(ourServer,sessionId,clientSocket,clientAddr),
 					  fOurMPServer(ourServer) {
 						  startDateTime=time(NULL);
 						  m_bPaused=false;

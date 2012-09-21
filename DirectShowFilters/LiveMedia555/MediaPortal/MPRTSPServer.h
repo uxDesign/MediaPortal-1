@@ -54,8 +54,8 @@ public:
 			int clientSocket, struct sockaddr_in clientAddr);
 		virtual ~MPRTSPClientSession();
 		ServerMediaSession* getOurServerMediaSession(){return fOurServerMediaSession;}
-		//Boolean IsSessionIsActive() {return fSessionIsActive;}
-		//struct sockaddr_in getClientAddr() {return fClientAddr;}
+		Boolean IsSessionIsActive() {return fSessionIsActive;}
+		struct sockaddr_in getClientAddr() {return fClientAddr;}
 		LONG getStartDateTime() {return startDateTime;}
 		bool isPaused() {return m_bPaused;}
 

@@ -746,7 +746,7 @@ void RTSPServer::RTSPClientConnection::handleRequestBytes(int newBytesRead) {
       } else if (strcmp(cmdName, "DESCRIBE") == 0) {
 	handleCmd_DESCRIBE(urlPreSuffix, urlSuffix, (char const*)fRequestBuffer);
       } else if (strcmp(cmdName, "SETUP") == 0) {
-	if (sessionIdStr[0] == '\0') {
+	/*if (sessionIdStr[0] == '\0') {
 	  // No session id was present in the request.  So create a new "RTSPClientSession" object for this request.
 	  // Choose a random (unused) 32-bit integer for the session id (it will be encoded as a 8-digit hex number).
 	  // (We avoid choosing session id 0, because that has a special use (by "OnDemandServerMediaSubsession").)
@@ -755,7 +755,7 @@ void RTSPServer::RTSPClientConnection::handleRequestBytes(int newBytesRead) {
 	    sessionId = (u_int32_t)our_random32();
 	    sprintf(sessionIdStr, "%08X", sessionId);
 	  } while (sessionId == 0 || fOurServer.fClientSessions->Lookup(sessionIdStr) != NULL);
-	  clientSession = fOurServer.createNewClientSession(sessionId);
+	  clientSession = fOurServer.createNewClientSession(sessionId, clientSocket, clientAddr);
 	  fOurServer.fClientSessions->Add(sessionIdStr, clientSession);
 	} else {
 	  // The request included a session id.  Make sure it's one that we have already set up:
@@ -764,7 +764,7 @@ void RTSPServer::RTSPClientConnection::handleRequestBytes(int newBytesRead) {
 	  if (clientSession == NULL) {
 	    handleCmd_sessionNotFound();
 	  }
-	}
+	}*/
 	if (clientSession != NULL) clientSession->handleCmd_SETUP(this, urlPreSuffix, urlSuffix, (char const*)fRequestBuffer);
       } else if (strcmp(cmdName, "TEARDOWN") == 0
 		 || strcmp(cmdName, "PLAY") == 0
@@ -1027,7 +1027,8 @@ void RTSPServer::RTSPClientConnection
 ////////// RTSPServer::RTSPClientSession implementation //////////
 
 RTSPServer::RTSPClientSession
-::RTSPClientSession(RTSPServer& ourServer, u_int32_t sessionId)
+::RTSPClientSession(RTSPServer& ourServer, u_int32_t sessionId,
+	      int clientSocket, struct sockaddr_in clientAddr)
   : fOurServer(ourServer), fOurSessionId(sessionId), fOurServerMediaSession(NULL), fIsMulticast(False), fStreamAfterSETUP(False),
     fTCPStreamIdCount(0), fLivenessCheckTask(NULL), fNumStreamStates(0), fStreamStates(NULL) {
   noteLiveness();
@@ -1736,8 +1737,8 @@ RTSPServer::createNewClientConnection(int clientSocket, struct sockaddr_in clien
 }
 
 RTSPServer::RTSPClientSession*
-RTSPServer::createNewClientSession(u_int32_t sessionId) {
-  return new RTSPClientSession(*this, sessionId);
+RTSPServer::createNewClientSession(u_int32_t sessionId, int clientSocket, struct sockaddr_in clientAddr) {
+  return new RTSPClientSession(*this, sessionId, clientSocket, clientAddr);
 }
 
 void RTSPServer::RTSPClientSession::noteLiveness() {
