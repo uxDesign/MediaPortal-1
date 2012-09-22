@@ -91,11 +91,11 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
     LogRotate();
     if (NO_MP_AUD_REND)
     {
-      Log("--- v1.6.661a Experimental DWM queued mode --- instance 0x%x", this);
+      Log("--- v1.6.661b Experimental DWM queued mode --- instance 0x%x", this);
     }
     else
     {
-      Log("--- v1.6.661a Experimental DWM queued mode --- instance 0x%x", this);
+      Log("--- v1.6.661b Experimental DWM queued mode --- instance 0x%x", this);
       Log("-------- audio renderer enabled ------------ instance 0x%x", this);
     }
     m_hMonitor = monitor;
@@ -2454,7 +2454,9 @@ HRESULT STDMETHODCALLTYPE MPEVRCustomPresenter::OnClockStop(MFTIME hnsSystemTime
   if (m_state != MP_RENDER_STATE_STOPPED)
   {
     m_state = MP_RENDER_STATE_STOPPED;
+    PauseThread(m_hScheduler, &m_schedulerParams);
     DoFlush(FALSE);
+    WakeThread(m_hScheduler, &m_schedulerParams);
   }
 
   return S_OK;
