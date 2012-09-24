@@ -124,8 +124,6 @@ typedef struct _SchedulerParams
   CAMEvent eHasWorkLP; //Low-priority event
   CAMEvent eTimerEnd;  //Timer thread event
   BOOL bDone;
-  long iPause;
-  BOOL bPauseAck;
   LONGLONG llTime;     //Timer target time
 } SchedulerParams;
 
@@ -279,8 +277,6 @@ protected:
   void           StopWorkers();
   void           StartThread(PHANDLE handle, SchedulerParams* pParams, UINT (CALLBACK *ThreadProc)(void*), UINT* threadId, int threadPriority);
   void           EndThread(HANDLE hThread, SchedulerParams* params);
-  void           PauseThread(HANDLE hThread, SchedulerParams* params);
-  void           WakeThread(HANDLE hThread, SchedulerParams* params);
   void           NotifyThread(SchedulerParams* params, bool setWork, bool setWorkLP, LONGLONG llTime);
   void           NotifyScheduler(bool forceWake);
   void           NotifyWorker(bool setInAvail);

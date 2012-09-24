@@ -91,11 +91,11 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
     LogRotate();
     if (NO_MP_AUD_REND)
     {
-      Log("--- v1.6.661b Experimental DWM queued mode --- instance 0x%x", this);
+      Log("--- v1.6.662a Experimental DWM queued mode --- instance 0x%x", this);
     }
     else
     {
-      Log("--- v1.6.661b Experimental DWM queued mode --- instance 0x%x", this);
+      Log("--- v1.6.662a Experimental DWM queued mode --- instance 0x%x", this);
       Log("-------- audio renderer enabled ------------ instance 0x%x", this);
     }
     m_hMonitor = monitor;
@@ -871,10 +871,10 @@ void MPEVRCustomPresenter::ReAllocSurfaces()
 {
   Log("ReallocSurfaces");
   //make sure all threads are paused
-  CAutoLock tLock(&m_timerParams.csLock);
   CAutoLock wLock(&m_workerParams.csLock);
   CAutoLock sLock(&m_schedulerParams.csLock);
-
+  CAutoLock tLock(&m_timerParams.csLock);
+  
   ReleaseSurfaces();
 
   // set the presentation parameters
@@ -1091,9 +1091,9 @@ HRESULT MPEVRCustomPresenter::LogOutputTypes()
 
 HRESULT MPEVRCustomPresenter::RenegotiateMediaOutputType()
 {
-  CAutoLock tLock(&m_timerParams.csLock);
-  CAutoLock wLock(&m_workerParams.csLock);
+  //This can be called via the Worker thread, so don't lock that thread here...
   CAutoLock sLock(&m_schedulerParams.csLock);
+  CAutoLock tLock(&m_timerParams.csLock);
   m_bFirstInputNotify = FALSE;
   Log("RenegotiateMediaOutputType");
   HRESULT hr = S_OK;
@@ -1598,7 +1598,7 @@ HRESULT MPEVRCustomPresenter::CheckForScheduledSample(LONGLONG *pTargetTime, LON
                   
       // If video frame rate is higher than display refresh then we'll get lots of dropped frames
       // so it's better to not report them in the log normally.          
-      if (m_bDrawStats && !m_bScrubbing && !m_bDVDMenu)
+      if (m_bDrawStats && (m_frameRateRatio > 0) && !m_bScrubbing && !m_bDVDMenu)
       {
         Log("Dropping frame, nextSampleTime %.2f ms, last sleep %.2f ms, last pres %.2f ms, paint %.2f ms, queue count %d, SOP %d, EOP %d, RawFRRatio %d, dropped %d, drawn %d",
              (double)nextSampleTime/10000, 
@@ -1877,8 +1877,6 @@ void MPEVRCustomPresenter::StartThread(PHANDLE handle, SchedulerParams* pParams,
   Log("Starting thread!");
   pParams->pPresenter = this;
   pParams->bDone = FALSE;
-  pParams->iPause = 0;
-  pParams->bPauseAck = FALSE;
   pParams->llTime = 0;
 
   *handle = (HANDLE)_beginthreadex(NULL, 0, ThreadProc, pParams, 0, threadId);
@@ -1892,7 +1890,6 @@ void MPEVRCustomPresenter::EndThread(HANDLE hThread, SchedulerParams* params)
   Log("Ending thread 0x%x, 0x%x", hThread, params);
   params->csLock.Lock();
   Log("Got lock.");
-  params->iPause = 0;
   params->bDone = TRUE;
   Log("Notifying thread...");
   params->eHasWork.Set();
@@ -1902,52 +1899,6 @@ void MPEVRCustomPresenter::EndThread(HANDLE hThread, SchedulerParams* params)
   WaitForSingleObject(hThread, INFINITE);
   Log("Waiting done");
   CloseHandle(hThread);
-}
-
-void MPEVRCustomPresenter::PauseThread(HANDLE hThread, SchedulerParams* params)
-{
-  if (!m_bSchedulerRunning)
-  {
-    return;
-  }
-  //Log("Pausing thread 0x%x, 0x%x, %d", hThread, params, params->iPause);
-
-  InterlockedIncrement(&params->iPause);
-
-  int i = 0;
-  
-  for (i = 0; i < THREAD_PAUSE_TIMEOUT; i++)
-  {
-    params->eHasWork.Set(); //Wake thread (in case it's sleeping)
-    Sleep(1);
-    if (params->bPauseAck)
-    {
-      break;
-    }
-  }
-  
-  if (i >= THREAD_PAUSE_TIMEOUT)
-  {
-    Log("***** Warning - PauseThread() timeout 0x%x, 0x%x, %d", hThread, params, params->iPause);
-  }
-  else
-  {
-    //Log("Thread paused, 0x%x, 0x%x, %d", hThread, params, params->iPause);
-  }
-}
-
-void MPEVRCustomPresenter::WakeThread(HANDLE hThread, SchedulerParams* params)
-{
-  if (!m_bSchedulerRunning)
-  {
-    return;
-  }
-
-  InterlockedDecrement(&params->iPause);
-
-  params->eHasWork.Set();
-
-  //Log("Waking thread 0x%x, 0x%x, %d", hThread, params, params->iPause);  
 }
 
 
@@ -2045,7 +1996,7 @@ BOOL MPEVRCustomPresenter::PopSample()
 {
   CAutoLock sLock(&m_lockSamples);
   LOG_TRACE("Removing scheduled sample, size: %d", m_qScheduledSamples.Count());
-  if (!m_qScheduledSamples.IsEmpty())
+  if (!m_qScheduledSamples.IsEmpty() && (m_iFreeSamples < NUM_SURFACES))
   {
     m_qScheduledSamples.Get();
     m_qGoodPopCnt++;
@@ -2071,7 +2022,7 @@ bool MPEVRCustomPresenter::SampleAvailable()
 IMFSample* MPEVRCustomPresenter::PeekSample()
 {
   CAutoLock sLock(&m_lockSamples);
-  if (m_qScheduledSamples.IsEmpty())
+  if (m_qScheduledSamples.IsEmpty() || (m_iFreeSamples >= NUM_SURFACES))
   {
     Log("ERR: PeekSample: empty queue!");
     return NULL;
@@ -2254,10 +2205,8 @@ HRESULT MPEVRCustomPresenter::ProcessInputNotify(int* samplesProcessed, bool set
         // no errors, just infos why it didn't succeed
         Log("ProcessOutput: change of type");
         bhasMoreSamples = FALSE;
-        PauseThread(m_hScheduler, &m_schedulerParams);
-        //LogOutputTypes();
+       //LogOutputTypes();
         hr = RenegotiateMediaOutputType();
-        WakeThread(m_hScheduler, &m_schedulerParams);
       break;
 
       default:
@@ -2299,12 +2248,11 @@ HRESULT STDMETHODCALLTYPE MPEVRCustomPresenter::ProcessMessage(MFVP_MESSAGE_TYPE
     case MFVP_MESSAGE_INVALIDATEMEDIATYPE:
       // The mixer's output format has changed. The EVR will initiate format negotiation.
       Log("ProcessMessage MFVP_MESSAGE_INVALIDATEMEDIATYPE");
-      PauseThread(m_hWorker, &m_workerParams);
-      PauseThread(m_hScheduler, &m_schedulerParams);
       //LogOutputTypes();
-      hr = RenegotiateMediaOutputType();
-      WakeThread(m_hScheduler, &m_schedulerParams);
-      WakeThread(m_hWorker, &m_workerParams);
+      { //Context for CAutoLock
+        CAutoLock wLock(&m_workerParams.csLock);
+        hr = RenegotiateMediaOutputType();
+      }
     break;
 
     case MFVP_MESSAGE_PROCESSINPUTNOTIFY:
@@ -2416,14 +2364,12 @@ HRESULT STDMETHODCALLTYPE MPEVRCustomPresenter::OnClockStart(MFTIME hnsSystemTim
 
   m_state = MP_RENDER_STATE_STARTED;
   
-  PauseThread(m_hWorker, &m_workerParams);
-  PauseThread(m_hScheduler, &m_schedulerParams);
-  
-  ResetTraceStats();
-  ResetFrameStats();
-
-  WakeThread(m_hScheduler, &m_schedulerParams);
-  WakeThread(m_hWorker, &m_workerParams);
+  { //Context for CAutoLock
+    CAutoLock wLock(&m_workerParams.csLock);
+    CAutoLock sLock(&m_schedulerParams.csLock);
+    ResetTraceStats();
+    ResetFrameStats();
+  }
 
   NotifyWorker(true);
   NotifyScheduler(true);
@@ -2454,9 +2400,8 @@ HRESULT STDMETHODCALLTYPE MPEVRCustomPresenter::OnClockStop(MFTIME hnsSystemTime
   if (m_state != MP_RENDER_STATE_STOPPED)
   {
     m_state = MP_RENDER_STATE_STOPPED;
-    PauseThread(m_hScheduler, &m_schedulerParams);
+    CAutoLock sLock(&m_schedulerParams.csLock);
     DoFlush(FALSE);
-    WakeThread(m_hScheduler, &m_schedulerParams);
   }
 
   return S_OK;

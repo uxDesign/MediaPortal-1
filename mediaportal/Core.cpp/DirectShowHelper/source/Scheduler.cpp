@@ -1,4 +1,4 @@
-// Copyright (C) 2005-2010 Team MediaPortal
+// Copyright (C) 2005-2012 Team MediaPortal
 // http://www.team-mediaportal.com
 // 
 // MediaPortal is free software: you can redistribute it and/or modify
@@ -81,24 +81,8 @@ UINT CALLBACK TimerThread(void* param)
   while (!p->bDone)
   {    
     LOG_TRACE("Timer sleeping.");
-    if (p->iPause <= 0)
-    {
-      dwObject = WaitForMultipleObjects (2, hEvts, FALSE, INFINITE);
-    }
 
-    if (p->iPause > 0)
-    {
-      p->bPauseAck = TRUE;
-      while (p->iPause > 0)
-      {
-        Sleep(1);
-      }
-      p->bPauseAck = FALSE;
-      dwObject = (WAIT_FAILED - 1); // Make sure we fall through the switch
-      p->eHasWork.Reset();
-      p->eHasWorkLP.Reset();
-      p->eTimerEnd.Reset();
-    }
+    dwObject = WaitForMultipleObjects (2, hEvts, FALSE, INFINITE);
 
     switch (dwObject)
     {
@@ -116,6 +100,7 @@ UINT CALLBACK TimerThread(void* param)
         }
         if ((p->llTime > 0) && !p->bDone)
         {
+          CAutoLock sLock(&p->csLock);
           p->pPresenter->NotifySchedulerTimer(); //wake up scheduler thread
         }   
         
@@ -124,11 +109,10 @@ UINT CALLBACK TimerThread(void* param)
           diff = GetCurrentTimestamp() - p->llTime;
           if ((diff > 100000) && (p->llTime > 0))
             Log("High latency in TimerThread: %.2f ms", (double)diff/10000);
-        }
-        
+        }       
         break;
     }
-
+      
     LOG_TRACE("Timer woken up");
   }
   
@@ -182,55 +166,43 @@ UINT CALLBACK WorkerThread(void* param)
   while (!p->bDone)
   {    
     LOG_TRACE("Worker sleeping.");
-    if (p->iPause <= 0)
-    {
-//      dwObject = WaitForMultipleObjects (2, hEvts, FALSE, INFINITE);
-      if(p->pPresenter->m_bScrubbing)
-        dwObject = WaitForMultipleObjects (2, hEvts, FALSE, 5);
-      else
-        dwObject = WaitForMultipleObjects (2, hEvts, FALSE, 50);
-    }
 
-    if (p->iPause > 0)
-    {
-      p->bPauseAck = TRUE;
-      while (p->iPause > 0)
+    if(p->pPresenter->m_bScrubbing)
+      dwObject = WaitForMultipleObjects (2, hEvts, FALSE, 5);
+    else
+      dwObject = WaitForMultipleObjects (2, hEvts, FALSE, 50);
+
+    {	//Context for CAutoLock			
+      CAutoLock sLock(&p->csLock);
+      
+      if (LOG_DELAYS)
+        now = GetCurrentTimestamp();
+    
+      switch (dwObject)
       {
-        Sleep(1);
+        case WAIT_OBJECT_0 :     //eHasWork
+          p->eHasWork.Reset();
+          p->pPresenter->CheckForInput(true);
+          break;
+        case WAIT_OBJECT_0 + 1 : //eHasWorkLP
+          p->eHasWorkLP.Reset();
+          p->pPresenter->CheckForInput(false);
+          break;
+        case WAIT_TIMEOUT :
+          p->pPresenter->CheckForInput(false);
+          break;
+      }      
+
+      if (LOG_DELAYS)
+      {
+        diff = GetCurrentTimestamp()-now;
+        if (diff > 1000000)
+          Log("High CheckForInput() latency in WorkerThread: %.2f ms", (double)diff/10000);
       }
-      p->bPauseAck = FALSE;
-      dwObject = (WAIT_FAILED - 1); // Make sure we fall through the switch by default
-      p->eHasWork.Reset();
-      p->eHasWorkLP.Reset();
-      p->eTimerEnd.Reset();
+      
+      LOG_TRACE("Worker woken up");
     }
 
-    if (LOG_DELAYS)
-      now = GetCurrentTimestamp();
-    
-    switch (dwObject)
-    {
-      case WAIT_OBJECT_0 :     //eHasWork
-        p->eHasWork.Reset();
-        p->pPresenter->CheckForInput(true);
-        break;
-      case WAIT_OBJECT_0 + 1 : //eHasWorkLP
-        p->eHasWorkLP.Reset();
-        p->pPresenter->CheckForInput(false);
-        break;
-      case WAIT_TIMEOUT :
-        p->pPresenter->CheckForInput(false);
-        break;
-    }
-
-    if (LOG_DELAYS)
-    {
-      diff = GetCurrentTimestamp()-now;
-      if (diff > 1000000)
-        Log("High CheckForInput() latency in WorkerThread: %.2f ms", (double)diff/10000);
-    }
-    
-    LOG_TRACE("Worker woken up");
   }
   
   // quit
@@ -291,8 +263,7 @@ UINT CALLBACK SchedulerThread(void* param)
 
   while (!p->bDone)
   {   
-    // delErr = 0;
-    delay  = 0;
+    delay  = 0;   
     dwObject = (WAIT_FAILED - 1); // Make sure we fall through the switch by default
     
     now = GetCurrentTimestamp();
@@ -311,43 +282,24 @@ UINT CALLBACK SchedulerThread(void* param)
     }
     p->eTimerEnd.Reset();
     p->pPresenter->NotifyTimer(0); //Disable Timer thread
-    
-    if (p->iPause <= 0)
-    {
-      if (idleWait)
-      {     
-        delay = 100000;
-        timDel = (DWORD)(delay/10000);
-        LOG_TRACE("Setting Scheduler Timer to %d ms idle time", timDel);
-        dwObject = WaitForMultipleObjects (3, hEvts3, FALSE, timDel );
-      }
-      else if (delay >= 10000) // set timer if hnsTargetTime is at least 1 ms in the future
-      {     
-        timDel = (DWORD)(delay/10000);
-        LOG_TRACE("Setting Scheduler Timer to %d ms video delay", timDel);
-  
-        p->pPresenter->NotifyTimer(hnsTargetTime); //Wake up Timer thread
-  
-        dwObject = WaitForMultipleObjects (2, hEvts2, FALSE, timDel + 1);
-      }
-    }
 
-    if (p->iPause > 0)
-    {
-      p->bPauseAck = TRUE;
-      while (p->iPause > 0)
-      {
-        Sleep(1);
-      }
-      p->bPauseAck = FALSE;
-      hnsTargetTime = 0;   
-      delay = 0;
-      dwObject = (WAIT_FAILED - 1); // Make sure we fall through the switch
-      p->eHasWork.Reset();
-      p->eHasWorkLP.Reset();
-      p->eTimerEnd.Reset();
+    if (idleWait)
+    {     
+      delay = 100000;
+      timDel = (DWORD)(delay/10000);
+      LOG_TRACE("Setting Scheduler Timer to %d ms idle time", timDel);
+      dwObject = WaitForMultipleObjects (3, hEvts3, FALSE, timDel );
     }
-      
+    else if (delay >= 10000) // set timer if hnsTargetTime is at least 1 ms in the future
+    {     
+      timDel = (DWORD)(delay/10000);
+      LOG_TRACE("Setting Scheduler Timer to %d ms video delay", timDel);
+
+      p->pPresenter->NotifyTimer(hnsTargetTime); //Wake up Timer thread
+
+      dwObject = WaitForMultipleObjects (2, hEvts2, FALSE, timDel + 1);
+    }
+          
     switch (dwObject)
     {
       case WAIT_OBJECT_0 :     //eHasWork
@@ -379,23 +331,26 @@ UINT CALLBACK SchedulerThread(void* param)
         break;
     }
 
-    idleWait = true;
-    
-    if (LOG_DELAYS)
-      now = GetCurrentTimestamp();
+    { //Context for CAutoLock	
+  	  CAutoLock sLock(&p->csLock);	  
+
+      idleWait = true;
       
-    p->pPresenter->CheckForScheduledSample(&hnsTargetTime, delay, &idleWait);
-    
-    LOG_TRACE("Got scheduling time: %I64d", hnsTargetTime);
-    
-    if (LOG_DELAYS)
-      diff = GetCurrentTimestamp()-now;
+      if (LOG_DELAYS)
+        now = GetCurrentTimestamp();
       
-    LOG_TRACE("Scheduler Timer woken up");
-    
-    if (LOG_DELAYS && (diff > (500000 + delay)))
-      Log("High CheckForScheduledSample() latency in SchedulerThread: %.2f ms", ((double)diff)/10000.0);
-    
+  	  p->pPresenter->CheckForScheduledSample(&hnsTargetTime, delay, &idleWait);      
+      
+      LOG_TRACE("Got scheduling time: %I64d", hnsTargetTime);
+      
+      if (LOG_DELAYS)
+        diff = GetCurrentTimestamp()-now;
+        
+      LOG_TRACE("Scheduler Timer woken up");
+      
+      if (LOG_DELAYS && (diff > (500000 + delay)))
+        Log("High CheckForScheduledSample() latency in SchedulerThread: %.2f ms", ((double)diff)/10000.0);
+    }
   }
   
   // quit
