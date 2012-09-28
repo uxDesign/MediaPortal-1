@@ -48,7 +48,7 @@ using namespace std;
 #define NB_RFPSIZE 64
 
 #define NB_DFTHSIZE 8
-#define NB_CFPSIZE 16
+#define NB_CFPSIZE 24
 
 #define NB_PCDSIZE 32
 #define FRAME_PROC_THRESH 32
@@ -320,7 +320,6 @@ protected:
   CComPtr<IMFSample>                samples[NUM_SURFACES];
   CCritSec                          m_lockSamples;
   CCritSec                          m_lockRasterData;
-  CCritSec                          m_lockRefreshEstimator;
   CCritSec                          m_lockCallback;
   int                               m_iFreeSamples;
   IMFSample*                        m_vFreeSamples[NUM_SURFACES];

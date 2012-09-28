@@ -91,11 +91,11 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
     LogRotate();
     if (NO_MP_AUD_REND)
     {
-      Log("--- v1.6.662a Experimental DWM queued mode --- instance 0x%x", this);
+      Log("--- v1.6.663 Experimental DWM queued mode --- instance 0x%x", this);
     }
     else
     {
-      Log("--- v1.6.662a Experimental DWM queued mode --- instance 0x%x", this);
+      Log("--- v1.6.663 Experimental DWM queued mode --- instance 0x%x", this);
       Log("-------- audio renderer enabled ------------ instance 0x%x", this);
     }
     m_hMonitor = monitor;
@@ -2042,8 +2042,8 @@ void MPEVRCustomPresenter::ScheduleSample(IMFSample* pSample)
   CHECK_HR(hr = GetTimeToSchedule(pSample, &nextSampleTime, &systemTime), "Couldn't get time to schedule!");
   if (SUCCEEDED(hr))
   {
-    // consider 5 ms "just-in-time" for log-length's sake
-    if (nextSampleTime < -50000 && !m_bDVDMenu && !m_bScrubbing && m_state != MP_RENDER_STATE_PAUSED)
+    // log really late (>50ms) samples
+    if (nextSampleTime < -500000 && !m_bDVDMenu && !m_bScrubbing && m_state != MP_RENDER_STATE_PAUSED)
     {
       Log("Scheduling sample from the past (%.2f ms, last call to NotifyWorker: %.2f ms, Queue: %d)", 
         (double)-nextSampleTime/10000, (GetCurrentTimestamp()-(double)m_llLastWorkerNotification)/10000, m_qScheduledSamples.Count());
@@ -2985,7 +2985,7 @@ int MPEVRCustomPresenter::MeasureScanLines(LONGLONG startTime, double *times, do
 
 BOOL MPEVRCustomPresenter::EstimateRefreshTimings(int numFrames, int threadPriority)
 {
-  CAutoLock ertLock(&m_lockRefreshEstimator); // Lock to ensure only one instance is running
+  CAutoLock ertLock(this); // Lock to ensure only one instance is running
   
   DisplayParams dParams = m_displayParams;
   dParams.estRefreshLock = false;
@@ -3934,7 +3934,7 @@ void MPEVRCustomPresenter::CalculateAvgNstOffset(LONGLONG timeStamp, LONGLONG fr
   if ((m_frameRateRatio <= 0) || m_bDVDMenu || m_bScrubbing)
   {
     //Display and video FPS unrelated - allow NST offset to decay away to zero
-    timeStamp = (LONGLONG)((double)m_fCFPMean * 0.8);
+    timeStamp = (LONGLONG)((double)m_fCFPMean * 0.9);
   }  
         
   int tempNextCFP = (m_nNextCFP % NB_CFPSIZE);
