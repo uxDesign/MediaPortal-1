@@ -267,6 +267,16 @@ namespace TvLibrary.Implementations
             string name = devices[i].Name ?? "unknown";
             name = name.ToLowerInvariant();
             Log.Log.WriteFile("Found card:{0}", name);
+
+            // North American CableCARD tuners.
+            if (name.Contains("hdhomerun prime") || name.Contains("ceton infinitv"))
+            {
+              Log.Log.WriteFile("Detected CableCARD tuner:{0}", name);
+              TvCardNaCable cableTuner = new TvCardNaCable(_epgEvents, devices[i]);
+              _cards.Add(cableTuner);
+              continue;
+            }
+
             //silicondust work-around for dvb type detection issue. generic provider would always use dvb-t
             if (name.Contains("silicondust hdhomerun tuner"))
             {
@@ -287,13 +297,6 @@ namespace TvLibrary.Implementations
             //Use the Microsoft Network Provider method first but only if available
             if (genericNP)
             {
-              Guid digitalCableNetworkType = new Guid("{143827ab-f77b-498d-81ca-5a007aec28bf}");
-              bool isCableCardTuner = false;
-              if (name.Contains("hdhomerun prime") || name.Contains("ceton infinitv"))
-              {
-                isCableCardTuner = true;
-              }
-
               IBaseFilter networkDVB = FilterGraphTools.AddFilterFromClsid(graphBuilder, networkProviderClsId,
                                                                            "Microsoft Network Provider");
               if (ConnectFilter(graphBuilder, networkDVB, tmp))
@@ -329,13 +332,6 @@ namespace TvLibrary.Implementations
                     Log.Log.WriteFile("Detected DVB-C* card:{0}", name);
                     TvCardDVBC dvbcCard = new TvCardDVBC(_epgEvents, devices[i]);
                     _cards.Add(dvbcCard);
-                    connected = true;
-                  }
-                  else if (isCableCardTuner && pguidNetworkTypes[n] == digitalCableNetworkType)
-                  {
-                    Log.Log.WriteFile("Detected CableCARD tuner:{0}", name);
-                    TvCardNaCable cableTuner = new TvCardNaCable(_epgEvents, devices[i]);
-                    _cards.Add(cableTuner);
                     connected = true;
                   }
                   else if (pguidNetworkTypes[n] == (typeof (ATSCNetworkProvider).GUID))
