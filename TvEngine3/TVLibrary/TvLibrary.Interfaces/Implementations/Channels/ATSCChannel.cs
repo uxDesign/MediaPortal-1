@@ -172,9 +172,24 @@ namespace TvLibrary.Channels
       {
         return true;
       }
-      return atscChannel.MajorChannel != MajorChannel ||
-             atscChannel.MinorChannel != MinorChannel ||
-             atscChannel.PhysicalChannel != PhysicalChannel;
+
+      if (_modulation != atscChannel.ModulationType)
+      {
+        return true;
+      }
+
+      // ATSC (over-the-air digital television).
+      if (_modulation == ModulationType.Mod8Vsb || _modulation == ModulationType.Mod16Vsb)
+      {
+        return atscChannel.PhysicalChannel != _physicalChannel;
+      }
+      // QAM (cable television).
+      else if (_modulation != ModulationType.ModNotSet)
+      {
+        return atscChannel.Frequency != Frequency;
+      }
+      // Encrypted digital cable - CableCARD.
+      return atscChannel.PhysicalChannel != _physicalChannel;
     }
   }
 }

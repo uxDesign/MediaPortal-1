@@ -75,8 +75,9 @@ namespace TvLibrary.Implementations.DVB
           CreateTuningSpace();
           AddMpeg2DemuxerToGraph();
         }
-        AddAndConnectBDABoardFilters(_device);
-        AddBdaTransportFiltersToGraph();
+        IBaseFilter lastFilter;
+        AddAndConnectBDABoardFilters(_device, out lastFilter);
+        CompleteGraph(ref lastFilter);
         string graphName = _device.Name + " - ATSC Graph.grf";
         FilterGraphTools.SaveGraphFile(_graphBuilder, graphName);
         GetTunerSignalStatistics();
@@ -242,7 +243,7 @@ namespace TvLibrary.Implementations.DVB
       }
     }
 
-    private bool BeforeTune(IChannel channel)
+    protected virtual bool BeforeTune(IChannel channel)
     {
       ATSCChannel atscChannel = channel as ATSCChannel;
       if (atscChannel == null)

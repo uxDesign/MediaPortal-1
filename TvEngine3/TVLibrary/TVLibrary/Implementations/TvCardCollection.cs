@@ -287,6 +287,13 @@ namespace TvLibrary.Implementations
             //Use the Microsoft Network Provider method first but only if available
             if (genericNP)
             {
+              Guid digitalCableNetworkType = new Guid("{143827ab-f77b-498d-81ca-5a007aec28bf}");
+              bool isCableCardTuner = false;
+              if (name.Contains("hdhomerun prime") || name.Contains("ceton infinitv"))
+              {
+                isCableCardTuner = true;
+              }
+
               IBaseFilter networkDVB = FilterGraphTools.AddFilterFromClsid(graphBuilder, networkProviderClsId,
                                                                            "Microsoft Network Provider");
               if (ConnectFilter(graphBuilder, networkDVB, tmp))
@@ -324,11 +331,18 @@ namespace TvLibrary.Implementations
                     _cards.Add(dvbcCard);
                     connected = true;
                   }
+                  else if (isCableCardTuner && pguidNetworkTypes[n] == digitalCableNetworkType)
+                  {
+                    Log.Log.WriteFile("Detected CableCARD tuner:{0}", name);
+                    TvCardNaCable cableTuner = new TvCardNaCable(_epgEvents, devices[i]);
+                    _cards.Add(cableTuner);
+                    connected = true;
+                  }
                   else if (pguidNetworkTypes[n] == (typeof (ATSCNetworkProvider).GUID))
                   {
                     Log.Log.WriteFile("Detected ATSC* card:{0}", name);
-                    TvCardATSC dvbsCard = new TvCardATSC(_epgEvents, devices[i]);
-                    _cards.Add(dvbsCard);
+                    TvCardATSC atscCard = new TvCardATSC(_epgEvents, devices[i]);
+                    _cards.Add(atscCard);
                     connected = true;
                   }
                   if (connected)

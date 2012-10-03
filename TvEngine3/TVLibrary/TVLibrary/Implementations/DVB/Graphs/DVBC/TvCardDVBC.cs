@@ -75,7 +75,9 @@ namespace TvLibrary.Implementations.DVB
           CreateTuningSpace();
           AddMpeg2DemuxerToGraph();
         }
-        AddAndConnectBDABoardFilters(_device);
+        IBaseFilter lastFilter;
+        AddAndConnectBDABoardFilters(_device, out lastFilter);
+        CompleteGraph(ref lastFilter);
         string graphName = _device.Name + " - DVBC Graph.grf";
         FilterGraphTools.SaveGraphFile(_graphBuilder, graphName);
         GetTunerSignalStatistics();
