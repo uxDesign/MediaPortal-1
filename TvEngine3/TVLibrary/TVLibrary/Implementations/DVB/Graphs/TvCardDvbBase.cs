@@ -1450,7 +1450,7 @@ namespace TvLibrary.Implementations.DVB
     /// or whether it can be directly connected to an inf tee.
     /// </summary>
     /// <returns><c>true</c> if the tuner filter must be connected to a capture filter, otherwise <c>false</c></returns>
-    private bool UseCaptureFilter()
+    protected virtual bool UseCaptureFilter()
     {
       // First: check the media types and formats on the tuner output
       // pin. The WDK specifies (http://msdn.microsoft.com/en-us/library/ff557729%28v=vs.85%29.aspx)
