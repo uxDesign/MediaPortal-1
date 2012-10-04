@@ -69,11 +69,7 @@ namespace SetupTv.Sections
 
     private void Init()
     {
-      mpComboBoxFrequencies.Enabled = false;
-      if ((string)mpComboBoxTuningMode.SelectedItem == "Clear QAM Cable")
-      {
-        mpComboBoxFrequencies.Enabled = true;
-      }
+      UpdateQamFrequencyFieldAvailability();
       mpComboBoxFrequencies.Items.Clear();
       try
       {
@@ -367,7 +363,7 @@ namespace SetupTv.Sections
         RemoteControl.Instance.EpgGrabberEnabled = true;
         progressBar1.Value = 100;
         mpComboBoxTuningMode.Enabled = true;
-        mpComboBoxFrequencies.Enabled = true;
+        UpdateQamFrequencyFieldAvailability();
         mpButtonScanTv.Text = buttonText;
         _isScanning = false;
       }
@@ -381,6 +377,11 @@ namespace SetupTv.Sections
     }
 
     private void mpComboBoxTuningMode_SelectedIndexChanged(object sender, EventArgs e)
+    {
+      UpdateQamFrequencyFieldAvailability();
+    }
+
+    private void UpdateQamFrequencyFieldAvailability()
     {
       if ((string)mpComboBoxTuningMode.SelectedItem == "Clear QAM Cable")
       {
