@@ -230,6 +230,7 @@ public:
   double         GetRealFramePeriod();
   double         GetVideoFramePeriod(FPS_SOURCE_METHOD fpsSource);
   void           GetFrameRateRatio();
+  int            CheckQueueCount();
 
   void           NotifyTimer(LONGLONG targetTime);
   void           NotifySchedulerTimer();
@@ -287,7 +288,6 @@ protected:
   IMFSample*     PeekSample();
   BOOL           PopSample();
   BOOL           PutSample(IMFSample* pSample);
-  int            CheckQueueCount();
   bool           SampleAvailable();
   HRESULT        TrackSample(IMFSample *pSample);
   HRESULT        GetFreeSample(IMFSample** ppSample);

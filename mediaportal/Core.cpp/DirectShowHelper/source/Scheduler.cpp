@@ -169,6 +169,8 @@ UINT CALLBACK WorkerThread(void* param)
 
     if(p->pPresenter->m_bScrubbing)
       dwObject = WaitForMultipleObjects (2, hEvts, FALSE, 5);
+    else if(p->pPresenter->CheckQueueCount() <= 1)
+      dwObject = WaitForMultipleObjects (2, hEvts, FALSE, 10);
     else
       dwObject = WaitForMultipleObjects (2, hEvts, FALSE, 50);
 

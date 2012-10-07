@@ -91,11 +91,11 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
     LogRotate();
     if (NO_MP_AUD_REND)
     {
-      Log("--- v1.6.663 Experimental DWM queued mode --- instance 0x%x", this);
+      Log("--- v1.6.663b Experimental DWM queued mode --- instance 0x%x", this);
     }
     else
     {
-      Log("--- v1.6.663 Experimental DWM queued mode --- instance 0x%x", this);
+      Log("--- v1.6.663b Experimental DWM queued mode --- instance 0x%x", this);
       Log("-------- audio renderer enabled ------------ instance 0x%x", this);
     }
     m_hMonitor = monitor;
@@ -1402,7 +1402,7 @@ HRESULT MPEVRCustomPresenter::CheckForScheduledSample(LONGLONG *pTargetTime, LON
       m_earliestPresentTime = 0;
       break;
     }
-
+     
     *pIdleWait = false;
 
     IMFSample* pSample = PeekSample();
@@ -1412,6 +1412,11 @@ HRESULT MPEVRCustomPresenter::CheckForScheduledSample(LONGLONG *pTargetTime, LON
       break;
     }
   
+    if (m_state != MP_RENDER_STATE_STARTED) 
+    {
+      m_lastPresentTime = 0;
+    }
+
     // get scheduled time, if none is available the sample will be presented immediately
     CHECK_HR(hr = GetTimeToSchedule(pSample, &realSampleTime, &systemTime), "Couldn't get time to schedule!");
     if (FAILED(hr))
@@ -1493,18 +1498,23 @@ HRESULT MPEVRCustomPresenter::CheckForScheduledSample(LONGLONG *pTargetTime, LON
           m_earliestPresentTime = systemTime + (displayTime * (m_rawFRRatio - 1)) + offsetTime;
         }    
         
+
+      
         if (nextSampleTime > (max(frameTime, displayTime) + earlyLimit))
         {      
-          if ((m_frameRateRatio > 0) && !m_bDVDMenu && !m_bScrubbing)
+          if ((systemTime - m_lastPresentTime < (500*10000)) && (m_lastPresentTime > 0))
           {
-            //Count the early/stalled frames
-            m_iEarlyFrCnt++;
+            if ((m_frameRateRatio > 0) && !m_bDVDMenu && !m_bScrubbing)
+            {
+              //Count the early/stalled frames
+              m_iEarlyFrCnt++;
+            }
+            // It's too early to present sample, so delay for a while          
+            m_stallTime = m_earliestPresentTime - systemTime;
+            *pTargetTime = systemTime + (m_stallTime/2); //delay in smaller chunks
+            
+            break;
           }
-          // It's too early to present sample, so delay for a while          
-          m_stallTime = m_earliestPresentTime - systemTime;
-          *pTargetTime = systemTime + (m_stallTime/2); //delay in smaller chunks
-          
-          break;
         }    
                
       }
@@ -2033,6 +2043,7 @@ IMFSample* MPEVRCustomPresenter::PeekSample()
 void MPEVRCustomPresenter::ScheduleSample(IMFSample* pSample)
 {
   LOG_TRACE("Scheduling Sample, size: %d", m_qScheduledSamples.Count());
+  BOOL onTimeSample = true;
   
   VideoFpsFromSample(pSample);
 
@@ -2042,19 +2053,36 @@ void MPEVRCustomPresenter::ScheduleSample(IMFSample* pSample)
   CHECK_HR(hr = GetTimeToSchedule(pSample, &nextSampleTime, &systemTime), "Couldn't get time to schedule!");
   if (SUCCEEDED(hr))
   {
-    // log really late (>50ms) samples
-    if (nextSampleTime < -500000 && !m_bDVDMenu && !m_bScrubbing && m_state != MP_RENDER_STATE_PAUSED)
+    // log really late (>10ms) samples
+    if (nextSampleTime < -100000 && !m_bDVDMenu && !m_bScrubbing && m_state != MP_RENDER_STATE_PAUSED)
     {
+      onTimeSample = false; //Allow sample to be dropped
       Log("Scheduling sample from the past (%.2f ms, last call to NotifyWorker: %.2f ms, Queue: %d)", 
         (double)-nextSampleTime/10000, (GetCurrentTimestamp()-(double)m_llLastWorkerNotification)/10000, m_qScheduledSamples.Count());
     }
   }
 
-  PutSample(pSample);
-  m_SampleAddedEvent.Set();
-  if (SampleAvailable())
+  if (onTimeSample)
   {
-    NotifyScheduler(false);
+    PutSample(pSample);
+    m_SampleAddedEvent.Set();
+    m_qGoodPutCnt++;
+    if (SampleAvailable())
+    {
+      NotifyScheduler(false);
+    }
+  }
+  else
+  {
+    ReturnSample(pSample, FALSE);
+    m_qBadPutCnt++;
+    // Notify EVR of sample latency
+    if( m_pEventSink )
+    {
+      LONGLONG sampleLatency = -nextSampleTime;
+      m_pEventSink->Notify(EC_SAMPLE_LATENCY, (LONG_PTR)&sampleLatency, 0);
+      LOG_TRACE("Sample Latency: %I64d", sampleLatency);
+    }
   }
 }
 
@@ -2175,8 +2203,8 @@ HRESULT MPEVRCustomPresenter::ProcessInputNotify(int* samplesProcessed, bool set
         m_pEventSink->Notify(EC_PROCESSING_LATENCY, (LONG_PTR)&mixerLatency, 0);
         LOG_TRACE("Mixer Latency: %I64d", mixerLatency);
       }
+      
       ScheduleSample(sample);
-      m_qGoodPutCnt++;
     }
     else 
     {
