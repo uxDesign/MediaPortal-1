@@ -91,11 +91,11 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
     LogRotate();
     if (NO_MP_AUD_REND)
     {
-      Log("--- v1.6.663b Experimental DWM queued mode --- instance 0x%x", this);
+      Log("--- v1.6.664 Unicode with DWM queue support --- instance 0x%x", this);
     }
     else
     {
-      Log("--- v1.6.663b Experimental DWM queued mode --- instance 0x%x", this);
+      Log("--- v1.6.664 Unicode with DWM queue support --- instance 0x%x", this);
       Log("-------- audio renderer enabled ------------ instance 0x%x", this);
     }
     m_hMonitor = monitor;
@@ -192,7 +192,7 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
   m_bEnableDWMQueued = ENABLE_DWM_QUEUED;
   m_bDWMEnableMMCSS = DWM_ENABLE_MMCSS;
   m_bSchedulerEnableMMCSS = SCHED_ENABLE_MMCSS;
-  if (ERROR_SUCCESS==RegCreateKeyEx(HKEY_CURRENT_USER, "Software\\Team MediaPortal\\EVR Presenter", 0, NULL, 
+  if (ERROR_SUCCESS==RegCreateKeyEx(HKEY_CURRENT_USER, _T("Software\\Team MediaPortal\\EVR Presenter"), 0, NULL, 
                                     REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, NULL, &key, NULL))
   {
     DWORD keyValue;

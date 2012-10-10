@@ -195,14 +195,14 @@ void StatsRenderer::DrawStats()
     int TextHeight = int(25.0*m_TextScale + 0.5);
     int BlankHeight = int(10.0*m_TextScale + 0.5);
     
-    strText.Format("Display: %d x %d @ %.6f Hz | Meas rfsh: %.6f Hz | MaxLine: %d | PCD: %.6f", 
+    strText.Format(_T("Display: %d x %d @ %.6f Hz | Meas rfsh: %.6f Hz | MaxLine: %d | PCD: %.6f"), 
       m_pPresenter->m_displayMode.Width, m_pPresenter->m_displayMode.Height,
       m_pPresenter->m_dD3DRefreshRate, 1000.0/m_pPresenter->m_displayParams.dEstRefreshCycle, m_pPresenter->m_displayParams.maxScanLine,
       m_pPresenter->m_fPCDMean);
     DrawText(rc, strText);
     OffsetRect(&rc, 0, TextHeight);
 
-    strText.Format("Video: %d x %d %d:%d | Act FPS: %.4f (red)| Drawn: %d | Drop: %d | Rep: %d", 
+    strText.Format(_T("Video: %d x %d %d:%d | Act FPS: %.4f (red)| Drawn: %d | Drop: %d | Rep: %d"), 
       m_pPresenter->m_iVideoWidth, m_pPresenter->m_iVideoHeight, 
       m_pPresenter->m_iARX, m_pPresenter->m_iARY, 
       10000000.0 / m_pPresenter->m_fJitterMean, m_pPresenter->m_iFramesDrawn, m_pPresenter->m_iFramesDropped, m_pPresenter->m_iEarlyFrCnt);
@@ -211,20 +211,20 @@ void StatsRenderer::DrawStats()
 
     OffsetRect(&rc, 0, BlankHeight); // Extra "line feed"
 
-    strText.Format("Render time (grn): %+5.1f ms | NST: %+3.1f ms | NSToffs: %+3.1f ms | FrRat: %d | Stall: %+3.1f ms", 
+    strText.Format(_T("Render time (grn): %+5.1f ms | NST: %+3.1f ms | NSToffs: %+3.1f ms | FrRat: %d | Stall: %+3.1f ms"), 
       m_pPresenter->m_fSyncOffsetAvr/10000.0, m_pPresenter->m_llLastCFPts/10000.0, 
       m_pPresenter->m_fCFPMean/10000.0, m_pPresenter->m_frameRateRatio, m_pPresenter->m_stallTime/10000.0);
     DrawText(rc, strText);
     OffsetRect(&rc, 0, TextHeight);
 
-    strText.Format("Raster offset (ylw): %5.2f ms | SOP: %4d | EOP: %4d | Lkd: %d | DWM: %d | Q: %d | Derr: %5.2f ms",
+    strText.Format(_T("Raster offset (ylw): %5.2f ms | SOP: %4d | EOP: %4d | Lkd: %d | DWM: %d | Q: %d | Derr: %5.2f ms"),
       m_pPresenter->m_rasterSyncOffset, m_pPresenter->m_LastStartOfPaintScanline, m_pPresenter->m_LastEndOfPaintScanline, 
       m_pPresenter->m_DetectedLock, m_pPresenter->m_bEnableDWMQueued, m_pPresenter->m_qScheduledSamples.Count(), 
       m_pPresenter->m_lastDelayErr/10000.0 );
     DrawText(rc, strText);
     OffsetRect(&rc, 0, TextHeight);
 
-    strText.Format("Rptd FPS: %.3f | Detd FPS: %.3f | DetFrT_SD: %+5.3f ms | DetSDur: %+5.3f ms | ver: 663b",  
+    strText.Format(_T("Rptd FPS: %.3f | Detd FPS: %.3f | DetFrT_SD: %+5.3f ms | DetSDur: %+5.3f ms | ver: 664"),  
       ((m_pPresenter->m_rtTimePerFrame > 0) ? (10000000.0/m_pPresenter->m_rtTimePerFrame) : 0), 
       ((m_pPresenter->m_DetFrameTimeAve > 0) ? (1.0/(m_pPresenter->m_DetFrameTimeAve)) : 0),
       (m_pPresenter->m_DetectedFrameTimeStdDev/10000.0), (m_pPresenter->m_SampDuration/10000.0) );
@@ -235,7 +235,7 @@ void StatsRenderer::DrawStats()
     {
       OffsetRect(&rc, 0, BlankHeight); // Extra "line feed"
   
-      strText.Format("Detd bias: %.7f | BiasAdj: %d | AudAdj: %.6f | AvePhDiff: %.6f | NumAdj: %d", 
+      strText.Format(_T("Detd bias: %.7f | BiasAdj: %d | AudAdj: %.6f | AvePhDiff: %.6f | NumAdj: %d"), 
         m_pPresenter->m_dBias, m_pPresenter->m_bBiasAdjustmentDone, m_pPresenter->m_dVariableFreq, 
         m_pPresenter->m_avPhaseDiff, m_pPresenter->m_iClockAdjustmentsDone);
       DrawText(rc, strText);
@@ -244,7 +244,7 @@ void StatsRenderer::DrawStats()
       CLOCKDATA clockData;
       m_pPresenter->m_pAVSyncClock->GetClockData(&clockData);
 
-      strText.Format("HW vs system: %.7fx HW vs. sys: %+.3f ms resampling adj.: %.7f Drift: %+.3f ms", 
+      strText.Format(_T("HW vs system: %.7fx HW vs. sys: %+.3f ms resampling adj.: %.7f Drift: %+.3f ms"), 
         clockData.driftMultiplier, clockData.driftHWvsSystem, clockData.resamplingAdjustment, clockData.currentDrift);
       DrawText(rc, strText);
       OffsetRect(&rc, 0, TextHeight);
@@ -254,7 +254,7 @@ void StatsRenderer::DrawStats()
     {
       OffsetRect(&rc, 0, BlankHeight); // Extra "line feed"
       
-      strText.Format("");
+      strText.Format(_T(""));
       for (int i=0; i < 3 && i < m_pPresenter->m_numFilters; i++)
       {
         strText += m_pPresenter->m_filterNames[i];
@@ -266,7 +266,7 @@ void StatsRenderer::DrawStats()
 
     if (m_pPresenter->m_numFilters > 3) 
     {
-      strText.Format("");
+      strText.Format(_T(""));
       for (int i=3; i < 6 && i < m_pPresenter->m_numFilters; i++)
       {
         strText += m_pPresenter->m_filterNames[i];
@@ -278,7 +278,7 @@ void StatsRenderer::DrawStats()
 
     if (m_pPresenter->m_numFilters > 6)
     {
-      strText.Format("");
+      strText.Format(_T(""));
       for (int i=6; i < FILTER_LIST_SIZE && i < m_pPresenter->m_numFilters; i++)
       {
         strText += m_pPresenter->m_filterNames[i];
@@ -288,7 +288,7 @@ void StatsRenderer::DrawStats()
       OffsetRect(&rc, 0, TextHeight);
     }
     
-//    strText.Format("QPut: %d | QNoPut: %d | QPop: %d | QPut-QPop: %d | BadSTimCnt: %d", 
+//    strText.Format(_T("QPut: %d | QNoPut: %d | QPop: %d | QPut-QPop: %d | BadSTimCnt: %d"), 
 //       m_pPresenter->m_qGoodPutCnt, m_pPresenter->m_qBadPutCnt, m_pPresenter->m_qGoodPopCnt, 
 //       (m_pPresenter->m_qGoodPutCnt - m_pPresenter->m_qGoodPopCnt), m_pPresenter->m_qBadSampTimCnt );
 //    DrawText(rc, strText);
