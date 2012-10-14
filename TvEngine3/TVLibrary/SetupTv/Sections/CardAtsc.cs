@@ -182,7 +182,7 @@ namespace SetupTv.Sections
         else if ((string)mpComboBoxTuningMode.SelectedItem == "Digital Cable")
         {
           minchan = 1;
-          maxchan = 1000;
+          maxchan = 2;
         }
         for (int index = minchan; index < maxchan; ++index)
         {

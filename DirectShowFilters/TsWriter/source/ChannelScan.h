@@ -22,6 +22,8 @@
 #include "criticalsection.h"
 #include "entercriticalsection.h"
 #include "nitdecoder.h"
+#include "SvctParser.h"
+#include "NttParser.h"
 
 using namespace Mediaportal;
 
@@ -34,7 +36,7 @@ DEFINE_GUID(IID_ITSChannelScan, 0x1663dc42, 0xd169, 0x41da, 0xbc, 0xe2, 0xee, 0x
 
 DECLARE_INTERFACE_(ITSChannelScan, IUnknown)
 {
-	STDMETHOD(Start)(THIS_ bool waitForVCT)PURE;
+	STDMETHOD(Start)(THIS_ bool waitForVCT, bool isCableScan)PURE;
 	STDMETHOD(Stop)(THIS_)PURE;
 	STDMETHOD(GetCount)(THIS_ int* channelCount)PURE;
 	STDMETHOD(IsReady)(THIS_ BOOL* yesNo)PURE;
@@ -66,7 +68,7 @@ DECLARE_INTERFACE_(ITSChannelScan, IUnknown)
 
 class CMpTsFilter;
 
-class CChannelScan: public CUnknown, public ITSChannelScan
+class CChannelScan: public CUnknown, public ITSChannelScan, ISvctCallBack, INttCallBack
 {
 public:
 	CChannelScan(LPUNKNOWN pUnk, HRESULT *phr, CMpTsFilter* filter);
@@ -74,7 +76,7 @@ public:
 	
   DECLARE_IUNKNOWN
 	
-	STDMETHODIMP Start(bool waitForVCT);
+	STDMETHODIMP Start(bool waitForVCT, bool isCableScan);
 	STDMETHODIMP Stop();
 	STDMETHODIMP GetCount(int* channelCount);
 	STDMETHODIMP IsReady( BOOL* yesNo);
@@ -102,13 +104,23 @@ public:
 	STDMETHODIMP GetNITCount(int* transponderCount);
 	STDMETHODIMP GetNITChannel(int channel,int* type, int* frequency,int *polarisation, int* modulation, int* symbolrate, int* bandwidth, int* fecInner, int* rollOff, char** networkName);
 
+  void CleanUp();
 	void OnTsPacket(byte* tsPacket);
+  void OnOobSiSection(CSection& section);
+
+  void OnSvctReceived(const CChannelInfo& vctInfo);
+  void OnNttReceived(int sourceId, int applicationType, char* name, unsigned int lang);
+
 private:
 	CPatParser m_patParser;
 	bool m_bIsParsing;
 	bool m_bIsParsingNIT;
+  bool m_bIsCableScan;
 	CMpTsFilter* m_pFilter;
 	CCriticalSection m_section;
 	IChannelScanCallback* m_pCallback;
   CNITDecoder m_nit;
+  CSvctParser m_svctParser;
+  CNttParser m_nttParser;
+  map<int, CChannelInfo*> m_mCableServices;
 };

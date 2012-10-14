@@ -23,6 +23,7 @@ using TvLibrary.Interfaces;
 using TvLibrary.Interfaces.Analyzer;
 using TvLibrary.Channels;
 using TvLibrary.Implementations.DVB.Structures;
+using DirectShowLib.BDA;
 
 namespace TvLibrary.Implementations.DVB
 {
@@ -58,6 +59,7 @@ namespace TvLibrary.Implementations.DVB
       : base(card)
     {
       _enableWaitForVCT = true;
+      _isDigitalCableScan = true;
     }
 
     /// <summary>
@@ -75,11 +77,20 @@ namespace TvLibrary.Implementations.DVB
       atscChannel.Provider = info.service_provider_name;
       atscChannel.ModulationType = tuningChannel.ModulationType;
       atscChannel.Frequency = tuningChannel.Frequency;
-      atscChannel.PhysicalChannel = tuningChannel.PhysicalChannel;
+      if (tuningChannel.ModulationType == ModulationType.ModNotSet)
+      {
+        atscChannel.PhysicalChannel = info.LCN;
+        atscChannel.IsTv = true;
+        atscChannel.IsRadio = false;
+      }
+      else
+      {
+        atscChannel.PhysicalChannel = tuningChannel.PhysicalChannel;
+        atscChannel.IsTv = IsTvService(info.serviceType);
+        atscChannel.IsRadio = IsRadioService(info.serviceType);
+      }
       atscChannel.MajorChannel = info.majorChannel;
       atscChannel.MinorChannel = info.minorChannel;
-      atscChannel.IsTv = IsTvService(info.serviceType);
-      atscChannel.IsRadio = IsRadioService(info.serviceType);
       atscChannel.NetworkId = info.networkID;
       atscChannel.ServiceId = info.serviceID;
       atscChannel.TransportId = info.transportStreamID;

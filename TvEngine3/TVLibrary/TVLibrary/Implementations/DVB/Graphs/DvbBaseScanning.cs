@@ -178,6 +178,7 @@ namespace TvLibrary.Implementations.DVB
     /// Enable wait for VCT indicator
     /// </summary>
     protected bool _enableWaitForVCT;
+    protected bool _isDigitalCableScan;
 
     #endregion
 
@@ -190,6 +191,7 @@ namespace TvLibrary.Implementations.DVB
     public DvbBaseScanning(TvCardDvbBase card)
     {
       _card = card;
+      _isDigitalCableScan = false;
     }
 
     #endregion
@@ -290,20 +292,20 @@ namespace TvLibrary.Implementations.DVB
           return new List<IChannel>();
         }
         ResetSignalUpdate();
-        if (_card.IsTunerLocked == false)
+        if (_card.IsTunerLocked == false && !_isDigitalCableScan)
         {
           Thread.Sleep(settings.TimeOutTune * 1000);
           ResetSignalUpdate();
         }
         Log.Log.WriteFile("Scan: tuner locked:{0} signal:{1} quality:{2}", _card.IsTunerLocked, _card.SignalLevel,
                           _card.SignalQuality);
-        if (_card.IsTunerLocked || _card.SignalLevel > 0 || _card.SignalQuality > 0)
+        if (_card.IsTunerLocked || _card.SignalLevel > 0 || _card.SignalQuality > 0 || _isDigitalCableScan)
         {
           try
           {
             _event = new ManualResetEvent(false);
             _analyzer.SetCallBack(this);
-            _analyzer.Start(_enableWaitForVCT);
+            _analyzer.Start(_enableWaitForVCT, _isDigitalCableScan);
             _event.WaitOne(settings.TimeOutSDT * 1000, true);
 
             int found = 0;

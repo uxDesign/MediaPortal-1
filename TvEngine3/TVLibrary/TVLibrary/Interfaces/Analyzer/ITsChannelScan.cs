@@ -53,7 +53,7 @@ namespace TvLibrary.Interfaces.Analyzer
     /// <param name="waitForVCT">Tells the analyzer to wait for a vct section in addition to just the pmt</param>
     /// <returns></returns>
     [PreserveSig]
-    int Start(bool waitForVCT);
+    int Start(bool waitForVCT, bool isCableScan);
 
     /// <summary>
     /// Stops scanning.

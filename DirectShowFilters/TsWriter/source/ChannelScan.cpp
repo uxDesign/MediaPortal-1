@@ -37,11 +37,13 @@ CChannelScan::CChannelScan(LPUNKNOWN pUnk, HRESULT *phr, CMpTsFilter* filter)
 {
   m_bIsParsingNIT=false;
 	m_bIsParsing=false;
+  m_bIsCableScan = false;
 	m_pFilter=filter;
 	m_pCallback=NULL;
 }
 CChannelScan::~CChannelScan(void)
 {
+  CleanUp();
 }
 
 STDMETHODIMP CChannelScan::SetCallBack(IChannelScanCallback* callback)
@@ -49,13 +51,22 @@ STDMETHODIMP CChannelScan::SetCallBack(IChannelScanCallback* callback)
 	m_pCallback=callback;
 	return S_OK;
 }
-STDMETHODIMP CChannelScan::Start(bool waitForVCT)
+STDMETHODIMP CChannelScan::Start(bool waitForVCT, bool isCableScan)
 {
 	CEnterCriticalSection enter(m_section);
 	try
 	{
 		m_patParser.Reset(m_pCallback,waitForVCT);
 		m_bIsParsing=true;
+    m_bIsCableScan = isCableScan;
+    if (isCableScan)
+    {
+      CleanUp();
+      m_nttParser.Reset();
+      m_nttParser.SetCallBack(this);
+      m_svctParser.Reset();
+      m_svctParser.SetCallBack(this);
+    }
 	}
 	catch(...)
 	{
@@ -71,6 +82,8 @@ STDMETHODIMP CChannelScan::Stop()
 	{
 		m_pCallback=NULL;
 		m_patParser.Reset(NULL,false);
+    m_nttParser.SetCallBack(NULL);
+    m_svctParser.SetCallBack(NULL);
 	}
 	catch(...)
 	{
@@ -84,7 +97,14 @@ STDMETHODIMP CChannelScan::GetCount(int* channelCount)
 	CEnterCriticalSection enter(m_section);
 	try
 	{
-		*channelCount=m_patParser.Count();
+    if (m_bIsCableScan)
+    {
+      *channelCount = m_mCableServices.size();
+    }
+    else
+    {
+		  *channelCount=m_patParser.Count();
+    }
 	}
 	catch(...)
 	{
@@ -98,6 +118,11 @@ STDMETHODIMP CChannelScan::IsReady( BOOL* yesNo)
 	CEnterCriticalSection enter(m_section);
 	try
 	{
+    if (m_bIsCableScan)
+    {
+      *yesNo = false;
+      return S_OK;
+    }
 		*yesNo=m_patParser.IsReady();
 		if (*yesNo)
 		{
@@ -141,6 +166,32 @@ STDMETHODIMP CChannelScan::GetChannel(int index,
 		*pmtPid=0;
 		*lcn=10000;
 
+    if (m_bIsCableScan)
+    {
+      map<int, CChannelInfo*>::iterator it = m_mCableServices.begin();
+      int pos = 0;
+      while (it != m_mCableServices.end())
+      {
+        if (pos == index)
+        {
+          CChannelInfo* info = it->second;
+          *networkId = it->first; // source_id
+          *serviceId = info->ServiceId;
+          *lcn = info->LCN;
+          *pmtPid = 0;
+          strcpy(sServiceName, info->ServiceName);
+          *serviceName = sServiceName;
+          *serviceType = 2; // digital TV
+          LogDebug("%4d) %-25s  source ID = 0x%4x service ID = 0x%4x LCN = %d",
+            index, info->ServiceName, info->NetworkId, info->ServiceId, info->LCN);
+          return S_OK;
+        }
+        pos++;
+        it++;
+      }
+      return S_OK;
+    }
+
 		CChannelInfo info;
 		info.Reset();
 		if ( m_patParser.GetChannel(index, info))
@@ -182,6 +233,82 @@ void CChannelScan::OnTsPacket(byte* tsPacket)
     m_nit.OnTsPacket(tsPacket);
 }
 
+void CChannelScan::CleanUp()
+{
+  map<int, CChannelInfo*>::iterator it = m_mCableServices.begin();
+  while (it != m_mCableServices.end())
+  {
+    CChannelInfo* info = it->second;
+    if (info != NULL)
+    {
+      delete info;
+    }
+  }
+  m_mCableServices.clear();
+}
+
+void CChannelScan::OnOobSiSection(CSection& section)
+{
+	CEnterCriticalSection enter(m_section);
+
+	if (m_bIsParsing && m_bIsCableScan)
+  {
+    m_nttParser.OnNewSection(section);
+    m_svctParser.OnNewSection(section);
+  }
+}
+
+void CChannelScan::OnSvctReceived(const CChannelInfo& vctInfo)
+{
+  CChannelInfo* info = NULL;
+  map<int, CChannelInfo*>::iterator it = m_mCableServices.find(vctInfo.NetworkId);
+  if (it == m_mCableServices.end())
+  {
+    info = new CChannelInfo();
+    m_mCableServices[vctInfo.NetworkId] = info;
+  }
+  else
+  {
+    info = it->second;
+  }
+
+  if (info != NULL)
+  {
+    info->NetworkId = vctInfo.NetworkId;
+    info->LCN = vctInfo.LCN;
+    info->ServiceId = vctInfo.ServiceId;
+    info->SdtReceived = true;
+  }
+}
+
+void CChannelScan::OnNttReceived(int sourceId, int applicationType, char* name, unsigned int lang)
+{
+  if (applicationType == 1)
+  {
+    // Not supported - a data service.
+    return;
+  }
+  CChannelInfo* info = NULL;
+  map<int, CChannelInfo*>::iterator it = m_mCableServices.find(sourceId);
+  if (it == m_mCableServices.end())
+  {
+    info = new CChannelInfo();
+    m_mCableServices[sourceId] = info;
+  }
+  else
+  {
+    info = it->second;
+  }
+
+  if (info != NULL)
+  {
+    info->NetworkId = sourceId;
+    if (name != NULL && strlen(name) < 254)
+    {
+      strcpy(info->ServiceName, name);
+    }
+  }
+}
 
 STDMETHODIMP CChannelScan::ScanNIT()
 {

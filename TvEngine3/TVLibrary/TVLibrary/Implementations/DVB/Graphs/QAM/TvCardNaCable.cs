@@ -86,6 +86,8 @@ namespace TvLibrary.Implementations.DVB
         }
         AddPbdaFilter(ref lastFilter);
         CompleteGraph(ref lastFilter);
+        bool connected = ConnectTsWriter(_filterTuner);
+        Log.Log.Debug("debug: connect OOB pin result = {0}", connected);
         CheckCableCardInfo();
         string graphName = _device.Name + " - NA Cable Graph.grf";
         FilterGraphTools.SaveGraphFile(_graphBuilder, graphName);
@@ -309,10 +311,75 @@ namespace TvLibrary.Implementations.DVB
     /// </returns>
     public override bool CanTune(IChannel channel)
     {
-      //TODO
-      if ((channel as ATSCChannel) == null)
+      ATSCChannel atscChannel = channel as ATSCChannel;
+      if (atscChannel == null)
+      {
         return false;
+      }
+      if (atscChannel.ModulationType != ModulationType.ModNotSet)
+      {
+        return false;
+      }
       return true;
+    }
+
+    /// <summary>
+    /// Scans the specified channel.
+    /// </summary>
+    /// <param name="subChannelId">The sub channel id.</param>
+    /// <param name="channel">The channel.</param>
+    /// <returns>true if succeeded else false</returns>
+    public override ITvSubChannel Scan(int subChannelId, IChannel channel)
+    {
+      Log.Log.WriteFile("NA Cable: scan");
+      try
+      {
+        if (_graphState == GraphState.Idle)
+        {
+          BuildGraph();
+        }
+        // It is enough to check that the OOB tuner is locked.
+        SmartCardStatusType status;
+        SmartCardAssociationType association;
+        string error;
+        bool isOutOfBandTunerLocked = false;
+        int hr = _bdaCa.get_SmartCardStatus(out status, out association, out error, out isOutOfBandTunerLocked);
+        if (hr == 0)
+        {
+          Log.Log.Debug("NA Cable: got smart card status");
+          Log.Log.Debug("  status      = {0}", status);
+          Log.Log.Debug("  association = {0}", association);
+          Log.Log.Debug("  OOB locked  = {0}", isOutOfBandTunerLocked);
+          Log.Log.Debug("  error       = {0}", error);
+        }
+        else
+        {
+          Log.Log.Debug("NA Cable: failed to read smart card status, hr = 0x{0:x}", hr);
+        }
+
+        if (hr != 0 || !isOutOfBandTunerLocked)
+        {
+          throw new TvExceptionNoSignal();
+        }
+
+        // Create a subchannel.
+        if (_mapSubChannels.ContainsKey(subChannelId) == false)
+        {
+          Log.Log.Info("NA Cable: creating new subchannel");
+          subChannelId = GetNewSubChannel(channel);
+        }
+        else
+        {
+          Log.Log.Info("NA Cable: using existing subchannel");
+        }
+        RunGraph(-1);
+        return _mapSubChannels[subChannelId];
+      }
+      catch (Exception ex)
+      {
+        Log.Log.Debug("NA Cable: caught exception when attempting to scan\r\n{0}", ex.ToString());
+      }
+      return null;
     }
 
     protected override bool BeforeTune(IChannel channel)
