@@ -91,11 +91,11 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
     LogRotate();
     if (NO_MP_AUD_REND)
     {
-      Log("--- v1.6.664 Unicode with DWM queue support --- instance 0x%x", this);
+      Log("--- v1.6.665 Unicode with DWM queue support --- instance 0x%x", this);
     }
     else
     {
-      Log("--- v1.6.664 Unicode with DWM queue support --- instance 0x%x", this);
+      Log("--- v1.6.665 Unicode with DWM queue support --- instance 0x%x", this);
       Log("-------- audio renderer enabled ------------ instance 0x%x", this);
     }
     m_hMonitor = monitor;
@@ -204,6 +204,11 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
       Log("--- Enable DWM Queued mode ---");
       m_bEnableDWMQueued = true;
     }
+    else
+    {
+      Log("--- Disable DWM Queued mode ---");
+      m_bEnableDWMQueued = false;
+    }
 
     keyValue = DWM_ENABLE_MMCSS ? 1 : 0;
     LPCTSTR enableDWM_MMCS = TEXT("EnableMMCSSforDWM");
@@ -213,6 +218,11 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
       Log("--- Enable MMCS for DWM ---");
       m_bDWMEnableMMCSS = true;
     }
+    else
+    {
+      Log("--- Disable MMCS for DWM ---");
+      m_bDWMEnableMMCSS = false;
+    }
     
     keyValue = SCHED_ENABLE_MMCSS ? 1 : 0;
     LPCTSTR enableScheduler_MMCS = TEXT("EnableMMCSSforSchedulerThread");
@@ -221,6 +231,11 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
     {
       Log("--- Enable MMCS for Scheduler Thread ---");
       m_bSchedulerEnableMMCSS = true;
+    }
+    else
+    {
+      Log("--- Disable MMCS for Scheduler Thread ---");
+      m_bSchedulerEnableMMCSS = false;
     }
     
     RegCloseKey(key);

@@ -33,7 +33,7 @@ using namespace std;
 #define NO_MP_AUD_REND false
 
 //Enables DWM queued mode if true
-#define ENABLE_DWM_QUEUED true
+#define ENABLE_DWM_QUEUED false
 //#define ENABLE_DWM_SETUP false
 //Enables reset of DWM parameters if true
 #define ENABLE_DWM_RESET true
