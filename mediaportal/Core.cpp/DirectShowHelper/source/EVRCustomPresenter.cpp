@@ -91,11 +91,11 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
     LogRotate();
     if (NO_MP_AUD_REND)
     {
-      Log("--- v1.6.665 Unicode with DWM queue support --- instance 0x%x", this);
+      Log("--- v1.6.666 Unicode with DWM queue support --- instance 0x%x", this);
     }
     else
     {
-      Log("--- v1.6.665 Unicode with DWM queue support --- instance 0x%x", this);
+      Log("--- v1.6.666 Unicode with DWM queue support --- instance 0x%x", this);
       Log("-------- audio renderer enabled ------------ instance 0x%x", this);
     }
     m_hMonitor = monitor;
@@ -148,6 +148,7 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
     m_bDwmCompEnabled  = false;
     m_bDWMinit         = false;
     m_dwmBuffers       = 0;
+    m_regNumDWMBuffers = NUM_DWM_BUFFERS;
     m_hDwmWinHandle    = NULL;
     
     // sample time correction variables
@@ -192,6 +193,7 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
   m_bEnableDWMQueued = ENABLE_DWM_QUEUED;
   m_bDWMEnableMMCSS = DWM_ENABLE_MMCSS;
   m_bSchedulerEnableMMCSS = SCHED_ENABLE_MMCSS;
+  m_regNumDWMBuffers = NUM_DWM_BUFFERS;
   if (ERROR_SUCCESS==RegCreateKeyEx(HKEY_CURRENT_USER, _T("Software\\Team MediaPortal\\EVR Presenter"), 0, NULL, 
                                     REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, NULL, &key, NULL))
   {
@@ -201,12 +203,12 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
     ReadRegistryKeyDword(key, enableDWMQueued, keyValue);
     if (keyValue)
     {
-      Log("--- Enable DWM Queued mode ---");
+      Log("--- Enable DWM Queued mode");
       m_bEnableDWMQueued = true;
     }
     else
     {
-      Log("--- Disable DWM Queued mode ---");
+      Log("--- Disable DWM Queued mode");
       m_bEnableDWMQueued = false;
     }
 
@@ -215,12 +217,12 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
     ReadRegistryKeyDword(key, enableDWM_MMCS, keyValue);
     if (keyValue)
     {
-      Log("--- Enable MMCS for DWM ---");
+      Log("--- Enable MMCS for DWM");
       m_bDWMEnableMMCSS = true;
     }
     else
     {
-      Log("--- Disable MMCS for DWM ---");
+      Log("--- Disable MMCS for DWM");
       m_bDWMEnableMMCSS = false;
     }
     
@@ -229,13 +231,27 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
     ReadRegistryKeyDword(key, enableScheduler_MMCS, keyValue);
     if (keyValue)
     {
-      Log("--- Enable MMCS for Scheduler Thread ---");
+      Log("--- Enable MMCS for Scheduler Thread");
       m_bSchedulerEnableMMCSS = true;
     }
     else
     {
-      Log("--- Disable MMCS for Scheduler Thread ---");
+      Log("--- Disable MMCS for Scheduler Thread");
       m_bSchedulerEnableMMCSS = false;
+    }
+
+    keyValue = (DWORD)m_regNumDWMBuffers;
+    LPCTSTR numDWM_Buffers = TEXT("NumDWMBuffers");
+    ReadRegistryKeyDword(key, numDWM_Buffers, keyValue);
+    if ((keyValue >= 3) && (keyValue <= 7))
+    {
+      m_regNumDWMBuffers = (UINT)keyValue;
+      Log("--- Number of DWM buffers = %d", m_regNumDWMBuffers);
+    }
+    else
+    {
+      m_regNumDWMBuffers = NUM_DWM_BUFFERS;
+      Log("--- Number of DWM buffers = %d (default value, allowed range is 3 - 7)", m_regNumDWMBuffers);
     }
     
     RegCloseKey(key);
@@ -266,7 +282,7 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
   m_pStatsRenderer = new StatsRenderer(this, m_pD3DDev);
   
   //Setup the Desktop Window Manager (DWM)
-  DwmInit(NUM_DWM_BUFFERS, NUM_DWM_FRAMES);
+  DwmInit(m_regNumDWMBuffers, NUM_DWM_FRAMES);
 }
 
 void MPEVRCustomPresenter::SetFrameSkipping(bool onOff)
@@ -1548,7 +1564,7 @@ HRESULT MPEVRCustomPresenter::CheckForScheduledSample(LONGLONG *pTargetTime, LON
       
       m_lastPresentTime = systemTime;
       CHECK_HR(PresentSample(pSample), "PresentSample failed");
-      if ((m_iFramesDrawn < NUM_DWM_BUFFERS) && m_bDwmCompEnabled) //Push extra samples into the pipeline at start of play
+      if ((m_iFramesDrawn < (int)m_regNumDWMBuffers) && m_bDwmCompEnabled) //Push extra samples into the pipeline at start of play
       {
         CHECK_HR(PresentSample(pSample), "PresentSample failed");
         DwmFlush();
@@ -2323,7 +2339,7 @@ HRESULT STDMETHODCALLTYPE MPEVRCustomPresenter::ProcessMessage(MFVP_MESSAGE_TYPE
       m_bFirstInputNotify = FALSE;
       m_state = MP_RENDER_STATE_PAUSED;
 //      //Setup the Desktop Window Manager (DWM)
-//      DwmInit(NUM_DWM_BUFFERS, NUM_DWM_FRAMES);
+//      DwmInit(m_regNumDWMBuffers, NUM_DWM_FRAMES);
       StartWorkers();
       //DwmEnableMMCSSOnOff(false);
 
@@ -3731,7 +3747,7 @@ void MPEVRCustomPresenter::UpdateDisplayFPS()
       {
         //Setup the Desktop Window Manager (DWM)
         DwmReset(false);
-        DwmInit(NUM_DWM_BUFFERS, NUM_DWM_FRAMES);
+        DwmInit(m_regNumDWMBuffers, NUM_DWM_FRAMES);
       }
     }
   }
@@ -4175,6 +4191,15 @@ void MPEVRCustomPresenter::GetAVSyncClockInterface()
       m_bBiasAdjustmentDone = false;
       Log("  Failed to adjust bias to : %1.10f", m_dBias);
     }
+    double audioDelayRequired = (double) m_dwmBuffers * m_dFrameCycle;
+    if (S_OK == m_pAVSyncClock->SetEVRPresentationDelay(audioDelayRequired))
+    {
+      Log("SetupAudioRenderer: Delayed Audio by : %1.10f", audioDelayRequired);
+    }
+    else
+    {
+      Log("SetupAudioRenderer: failed to set audio delay of: %1.10f", audioDelayRequired);
+    }
   }
 }
 
@@ -4215,6 +4240,15 @@ void MPEVRCustomPresenter::SetupAudioRenderer()
     {
       m_bBiasAdjustmentDone = false;
       Log("SetupAudioRenderer: failed to adjust bias to : %1.10f", m_dBias);
+    }
+    double audioDelayRequired = (double) m_dwmBuffers * m_dFrameCycle;
+    if (S_OK == m_pAVSyncClock->SetEVRPresentationDelay(audioDelayRequired))
+    {
+      Log("SetupAudioRenderer: Delayed Audio by : %1.10f", audioDelayRequired);
+    }
+    else
+    {
+      Log("SetupAudioRenderer: failed to set audio delay of: %1.10f", audioDelayRequired);
     }
   }
   else

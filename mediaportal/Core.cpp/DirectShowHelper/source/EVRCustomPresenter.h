@@ -486,6 +486,7 @@ protected:
   LONGLONG      m_lastDelayErr;
 
   UINT          m_dwmBuffers;
+  UINT          m_regNumDWMBuffers;
   HWND          m_hDwmWinHandle;
   bool          m_bDWMinit;
   BOOL          m_bDwmCompEnabled;
