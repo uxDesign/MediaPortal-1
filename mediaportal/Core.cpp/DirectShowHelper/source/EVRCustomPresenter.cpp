@@ -91,12 +91,12 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
     LogRotate();
     if (NO_MP_AUD_REND)
     {
-      Log("--- v1.6.666 Unicode with DWM queue support --- instance 0x%x", this);
+      Log("--- v1.6.667 Unicode with DWM queue support --- instance 0x%x", this);
     }
     else
     {
-      Log("--- v1.6.666 Unicode with DWM queue support --- instance 0x%x", this);
-      Log("-------- audio renderer enabled ------------ instance 0x%x", this);
+      Log("--- v1.6.667 Unicode with DWM queue support --- instance 0x%x", this);
+      Log("---------- audio renderer enabled ------------- instance 0x%x", this);
     }
     m_hMonitor = monitor;
     m_pD3DDev = direct3dDevice;
@@ -1472,8 +1472,8 @@ HRESULT MPEVRCustomPresenter::CheckForScheduledSample(LONGLONG *pTargetTime, LON
     
     *pTargetTime = 0;      
         
-    // Centralise nextSampleTime timing window (using average NST offset) when MP Audio Renderer is inactive
-    if (!m_pAVSyncClock && (realSampleTime != 0))
+    // Centralise nextSampleTime timing window (using average NST offset)
+    if (realSampleTime != 0)
     {
       nextSampleTime = (realSampleTime + (frameTime/2)) - m_hnsAvgNSToffset;
     }
