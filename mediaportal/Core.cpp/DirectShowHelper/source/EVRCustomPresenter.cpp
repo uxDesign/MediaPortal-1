@@ -194,6 +194,7 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
   m_bDWMEnableMMCSS = DWM_ENABLE_MMCSS;
   m_bSchedulerEnableMMCSS = SCHED_ENABLE_MMCSS;
   m_regNumDWMBuffers = NUM_DWM_BUFFERS;
+  m_bEnableAudioDelayComp = ENABLE_AUDIO_DELAY_COMP;
   if (ERROR_SUCCESS==RegCreateKeyEx(HKEY_CURRENT_USER, _T("Software\\Team MediaPortal\\EVR Presenter"), 0, NULL, 
                                     REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, NULL, &key, NULL))
   {
@@ -243,7 +244,7 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
     keyValue = (DWORD)m_regNumDWMBuffers;
     LPCTSTR numDWM_Buffers = TEXT("NumDWMBuffers");
     ReadRegistryKeyDword(key, numDWM_Buffers, keyValue);
-    if ((keyValue >= 3) && (keyValue <= 7))
+    if ((keyValue >= 3) && (keyValue <= 8))
     {
       m_regNumDWMBuffers = (UINT)keyValue;
       Log("--- Number of DWM buffers = %d", m_regNumDWMBuffers);
@@ -252,6 +253,20 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
     {
       m_regNumDWMBuffers = NUM_DWM_BUFFERS;
       Log("--- Number of DWM buffers = %d (default value, allowed range is 3 - 7)", m_regNumDWMBuffers);
+    }
+
+    keyValue = ENABLE_AUDIO_DELAY_COMP ? 1 : 0;
+    LPCTSTR enableAudioDelayComp_DWM = TEXT("EnableDWMAudioDelayComp");
+    ReadRegistryKeyDword(key, enableAudioDelayComp_DWM, keyValue);
+    if (keyValue)
+    {
+      Log("--- Enable DWM audio delay compensation");
+      m_bEnableAudioDelayComp = true;
+    }
+    else
+    {
+      Log("--- Disable DWM audio delay compensation");
+      m_bEnableAudioDelayComp = false;
     }
     
     RegCloseKey(key);
@@ -1333,16 +1348,16 @@ HRESULT MPEVRCustomPresenter::PresentSample(IMFSample* pSample)
     m_iFramesDrawn++;
     if (m_pClock != NULL)
     {
-      LONGLONG hnsTimeNow, hnsSystemTime, hnsTimeScheduled;
-      m_pClock->GetCorrelatedTime(0, &hnsTimeNow, &hnsSystemTime);
+      LONGLONG hnsTimeScheduled, hnsSubTime;
 
       pSample->GetSampleTime(&hnsTimeScheduled);
-      if (hnsTimeScheduled > 0)
+      hnsSubTime = hnsTimeScheduled - (100*10000);
+      if (hnsSubTime > 0)
       {
-        m_pCallback->SetSampleTime(hnsTimeScheduled);
+        m_pCallback->SetSampleTime(hnsSubTime);
       }
-      pSample->SetSampleTime(0); //Big experiment !!
-      pSample->SetSampleDuration((LONGLONG)(GetDisplayCycle() * 10000.0)); //Big experiment !!
+      pSample->SetSampleTime(0);
+      pSample->SetSampleDuration((LONGLONG)(GetDisplayCycle() * 10000.0));
     }
 
     // Present the swap surface
@@ -2093,7 +2108,7 @@ void MPEVRCustomPresenter::ScheduleSample(IMFSample* pSample)
     }
   }
 
-  if (onTimeSample)
+  if (onTimeSample || m_bDoPreBuffering)
   {
     PutSample(pSample);
     m_SampleAddedEvent.Set();
@@ -4191,14 +4206,18 @@ void MPEVRCustomPresenter::GetAVSyncClockInterface()
       m_bBiasAdjustmentDone = false;
       Log("  Failed to adjust bias to : %1.10f", m_dBias);
     }
-    double audioDelayRequired = (double) m_dwmBuffers * m_dFrameCycle;
-    if (S_OK == m_pAVSyncClock->SetEVRPresentationDelay(audioDelayRequired))
+    
+    if (m_bEnableAudioDelayComp)
     {
-      Log("SetupAudioRenderer: Delayed Audio by : %1.10f", audioDelayRequired);
-    }
-    else
-    {
-      Log("SetupAudioRenderer: failed to set audio delay of: %1.10f", audioDelayRequired);
+      double audioDelayRequired = (double) m_dwmBuffers * GetDisplayCycle();
+      if (S_OK == m_pAVSyncClock->SetEVRPresentationDelay(audioDelayRequired))
+      {
+        Log("SetupAudioRenderer: Delayed Audio by : %1.10f", audioDelayRequired);
+      }
+      else
+      {
+        Log("SetupAudioRenderer: failed to set audio delay of: %1.10f", audioDelayRequired);
+      }
     }
   }
 }
@@ -4241,14 +4260,18 @@ void MPEVRCustomPresenter::SetupAudioRenderer()
       m_bBiasAdjustmentDone = false;
       Log("SetupAudioRenderer: failed to adjust bias to : %1.10f", m_dBias);
     }
-    double audioDelayRequired = (double) m_dwmBuffers * m_dFrameCycle;
-    if (S_OK == m_pAVSyncClock->SetEVRPresentationDelay(audioDelayRequired))
+    
+    if (m_bEnableAudioDelayComp)
     {
-      Log("SetupAudioRenderer: Delayed Audio by : %1.10f", audioDelayRequired);
-    }
-    else
-    {
-      Log("SetupAudioRenderer: failed to set audio delay of: %1.10f", audioDelayRequired);
+      double audioDelayRequired = (double) m_dwmBuffers * GetDisplayCycle();
+      if (S_OK == m_pAVSyncClock->SetEVRPresentationDelay(audioDelayRequired))
+      {
+        Log("SetupAudioRenderer: Delayed Audio by : %1.10f", audioDelayRequired);
+      }
+      else
+      {
+        Log("SetupAudioRenderer: failed to set audio delay of: %1.10f", audioDelayRequired);
+      }
     }
   }
   else
@@ -4445,14 +4468,16 @@ void MPEVRCustomPresenter::ReadRegistryKeyDword(HKEY hKey, LPCTSTR& lpSubKey, DW
   LONG error = RegQueryValueEx(hKey, lpSubKey, NULL, &dwType, (PBYTE)&data, &dwSize);
   if (error != ERROR_SUCCESS)
   {
+    LPSTR astr;
+    UnicodeToAnsi(lpSubKey, &astr);
     if (error == ERROR_FILE_NOT_FOUND)
     {
-      Log("Create default value for %s", lpSubKey);
+      Log("Create default value for %s", astr);
       WriteRegistryKeyDword(hKey, lpSubKey, data);
     }
     else
     {
-      Log("Faíled to create default value for %s", lpSubKey);
+      Log("Faíled to create default value for %s", astr);
     }
   }
 }
@@ -4461,13 +4486,15 @@ void MPEVRCustomPresenter::WriteRegistryKeyDword(HKEY hKey, LPCTSTR& lpSubKey, D
 {  
   DWORD dwSize = sizeof(DWORD);
   LONG result = RegSetValueEx(hKey, lpSubKey, 0, REG_DWORD, (LPBYTE)&data, dwSize);
+  LPSTR astr;
+  UnicodeToAnsi(lpSubKey, &astr);
   if (result == ERROR_SUCCESS) 
   {
-    Log("Success writing to Registry: %s", lpSubKey);
+    Log("Success writing to Registry: %s", astr);
   } 
   else 
   {
-    Log("Error writing to Registry - subkey: %s error: %d", lpSubKey, result);
+    Log("Error writing to Registry - subkey: %s error: %d", astr, result);
   }
 }
 

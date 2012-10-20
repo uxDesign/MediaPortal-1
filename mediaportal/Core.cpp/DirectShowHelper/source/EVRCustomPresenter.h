@@ -34,16 +34,17 @@ using namespace std;
 
 //Enables DWM queued mode if true
 #define ENABLE_DWM_QUEUED false
-//#define ENABLE_DWM_SETUP false
 //Enables reset of DWM parameters if true
 #define ENABLE_DWM_RESET true
 //Bring Scheduler thread under Multimedia Class Scheduler Service (MMCSS) control if 'true'
-#define SCHED_ENABLE_MMCSS false
+#define SCHED_ENABLE_MMCSS true
+//Enables DWM audio delay compensation if true
+#define ENABLE_AUDIO_DELAY_COMP false
 
 //Thread pause timeout in ms
 #define THREAD_PAUSE_TIMEOUT 2000
 
-#define NUM_SURFACES 4
+#define NUM_SURFACES 5
 #define NB_JITTER 125
 #define NB_RFPSIZE 64
 
@@ -56,15 +57,17 @@ using namespace std;
 #define NUM_PHASE_DEVIATIONS 32
 #define FILTER_LIST_SIZE 9
 
-//Valid range is 2-7
+//Valid range is 2-8
 #define NUM_DWM_BUFFERS 3
+
 #define NUM_DWM_FRAMES 1
-//Compensation for DWM buffering delay (n x video frames)
-#define DWM_DELAY_COMP 0
+
 //skip DwmInit() if display refresh period is > 25.0 ms (i.e. below 40Hz refresh rate)
 #define DWM_REFRESH_THRESH 25.0
+
 //Bring DWM under Multimedia Class Scheduler Service (MMCSS) control if 'true'
 #define DWM_ENABLE_MMCSS false
+
 // magic numbers
 #define DEFAULT_FRAME_TIME 200000 // used when fps information is not provided (PAL interlaced == 50fps)
 
@@ -492,6 +495,7 @@ protected:
   BOOL          m_bDwmCompEnabled;
   bool          m_bEnableDWMQueued;
   bool          m_bDWMEnableMMCSS;
+  bool          m_bEnableAudioDelayComp;
   
   char          m_filterNames[FILTER_LIST_SIZE][MAX_FILTER_NAME];
   int           m_numFilters;
