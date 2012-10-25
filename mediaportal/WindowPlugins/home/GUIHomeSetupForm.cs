@@ -29,7 +29,7 @@ using MediaPortal.UserInterface.Controls;
 
 namespace MediaPortal.GUI.Home
 {
-  [PluginIcons("WindowPlugins.Home.Homemenu.gif", "WindowPlugins.Home.Homemenu_disabled.gif")]
+  [PluginIcons("Home.Homemenu.gif", "Home.Homemenu_disabled.gif")]
   public partial class GUIHomeSetupForm : MPConfigForm, ISetupForm, IComparer
   {
     public GUIHomeSetupForm()
