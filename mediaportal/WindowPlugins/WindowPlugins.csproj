@@ -275,7 +275,6 @@
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="StateBase.cs" />
-    <Compile Include="WindowPluginBase.cs" />
     <Compile Include="GUIDisc\GUIDisc.cs" />
     <Compile Include="GUIMusic\GUIMusicMenu.cs" />
     <Compile Include="GUIPictures\GUISlidePicture.cs" />

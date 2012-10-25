@@ -349,6 +349,7 @@
     <Compile Include="guilib\IStandardKeyboard.cs" />
     <Compile Include="guilib\GUIThemeManager.cs" />
     <Compile Include="guilib\ViewHandler.cs" />
+    <Compile Include="guilib\WindowPluginBase.cs" />
     <Compile Include="guilib\XMLSkinFunctionAttribute.cs" />
     <Compile Include="Player\BDOSDRenderer.cs" />
     <Compile Include="Player\BDPlayer.cs" />
