@@ -35,11 +35,10 @@ using MediaPortal.Player;
 using MediaPortal.Playlists;
 using MediaPortal.Util;
 using Action = MediaPortal.GUI.Library.Action;
-using Point = MediaPortal.Drawing.Point;
 
 namespace MediaPortal.GUI.RADIOLASTFM
 {
-  [PluginIcons("WindowPlugins.GUIRadioLastFM.BallonRadio.gif", "WindowPlugins.GUIRadioLastFM.BallonRadioDisabled.gif")]
+  [PluginIcons("GUIRadioLastFM.BallonRadio.gif", "GUIRadioLastFM.BallonRadioDisabled.gif")]
   public class GUIRadioLastFM : GUIInternalWindow, ISetupForm, IShowPlugin
   {
     #region Event delegates

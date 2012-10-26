@@ -122,6 +122,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GUITetris", "WindowPlugins\
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GUIRSSFeed", "WindowPlugins\GUIRSSFeed\GUIRSSFeed.csproj", "{AC82688B-9871-453B-9218-8AF3844A6B45}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GUIRadioLastFM", "WindowPlugins\GUIRadioLastFM\GUIRadioLastFM.csproj", "{66404069-788F-444F-A8A1-A2D2D12AC27A}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -723,6 +725,22 @@ Global
 		{AC82688B-9871-453B-9218-8AF3844A6B45}.UseCaptureDefintionsRelease|Any CPU.Build.0 = UseCaptureDefintionsRelease|Any CPU
 		{AC82688B-9871-453B-9218-8AF3844A6B45}.UseCaptureDefintionsRelease|x86.ActiveCfg = UseCaptureDefintionsRelease|x86
 		{AC82688B-9871-453B-9218-8AF3844A6B45}.UseCaptureDefintionsRelease|x86.Build.0 = UseCaptureDefintionsRelease|x86
+		{66404069-788F-444F-A8A1-A2D2D12AC27A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{66404069-788F-444F-A8A1-A2D2D12AC27A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{66404069-788F-444F-A8A1-A2D2D12AC27A}.Debug|x86.ActiveCfg = Debug|x86
+		{66404069-788F-444F-A8A1-A2D2D12AC27A}.Debug|x86.Build.0 = Debug|x86
+		{66404069-788F-444F-A8A1-A2D2D12AC27A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{66404069-788F-444F-A8A1-A2D2D12AC27A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{66404069-788F-444F-A8A1-A2D2D12AC27A}.Release|x86.ActiveCfg = Release|x86
+		{66404069-788F-444F-A8A1-A2D2D12AC27A}.Release|x86.Build.0 = Release|x86
+		{66404069-788F-444F-A8A1-A2D2D12AC27A}.UseCaptureCardDefinitions|Any CPU.ActiveCfg = UseCaptureCardDefinitions|Any CPU
+		{66404069-788F-444F-A8A1-A2D2D12AC27A}.UseCaptureCardDefinitions|Any CPU.Build.0 = UseCaptureCardDefinitions|Any CPU
+		{66404069-788F-444F-A8A1-A2D2D12AC27A}.UseCaptureCardDefinitions|x86.ActiveCfg = UseCaptureCardDefinitions|x86
+		{66404069-788F-444F-A8A1-A2D2D12AC27A}.UseCaptureCardDefinitions|x86.Build.0 = UseCaptureCardDefinitions|x86
+		{66404069-788F-444F-A8A1-A2D2D12AC27A}.UseCaptureDefintionsRelease|Any CPU.ActiveCfg = UseCaptureDefintionsRelease|Any CPU
+		{66404069-788F-444F-A8A1-A2D2D12AC27A}.UseCaptureDefintionsRelease|Any CPU.Build.0 = UseCaptureDefintionsRelease|Any CPU
+		{66404069-788F-444F-A8A1-A2D2D12AC27A}.UseCaptureDefintionsRelease|x86.ActiveCfg = UseCaptureDefintionsRelease|x86
+		{66404069-788F-444F-A8A1-A2D2D12AC27A}.UseCaptureDefintionsRelease|x86.Build.0 = UseCaptureDefintionsRelease|x86
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -755,5 +773,6 @@ Global
 		{DA585975-A2CC-4A2C-BC1C-855DDDC7A721} = {DA3EE2DD-2DA4-4DC2-B02D-B4BE32985F85}
 		{2F69E7F3-B325-4A55-A5B6-E1E4A2EFFC86} = {DA3EE2DD-2DA4-4DC2-B02D-B4BE32985F85}
 		{AC82688B-9871-453B-9218-8AF3844A6B45} = {DA3EE2DD-2DA4-4DC2-B02D-B4BE32985F85}
+		{66404069-788F-444F-A8A1-A2D2D12AC27A} = {DA3EE2DD-2DA4-4DC2-B02D-B4BE32985F85}
 	EndGlobalSection
 EndGlobal
