@@ -35,7 +35,7 @@ using Action = MediaPortal.GUI.Library.Action;
 
 namespace MediaPortal.GUI.Weather
 {
-  [PluginIcons("WindowPlugins.GUIWeather.Weather.gif", "WindowPlugins.GUIWeather.WeatherDisabled.gif")]
+  [PluginIcons("Weather.Weather.gif", "Weather.WeatherDisabled.gif")]
   public class GUIWindowWeather : GUIInternalWindow, ISetupForm, IShowPlugin
   {
     #region structs

@@ -29,7 +29,7 @@ namespace MediaPortal.GUI.Video
   /// <summary>
   /// Adds "Play Disc" button to homescreen
   /// </summary>
-  [PluginIcons("WindowPlugins.GUIDisc.DVD.gif", "WindowPlugins.GUIDisc.DVDDisabled.gif")]
+  [PluginIcons("Disc.DVD.gif", "Disc.DVDDisabled.gif")]
   public class GUIDisc : GUIInternalWindow, ISetupForm, IShowPlugin
   {
     public GUIDisc()

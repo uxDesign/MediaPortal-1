@@ -35,7 +35,7 @@ namespace MediaPortal.GUI.Video
   /// <summary>
   /// Service class to display DVD selection dialog
   /// </summary>
-  internal class SelectDVDHandler : ISelectDVDHandler
+  public class SelectDVDHandler : ISelectDVDHandler
   {
     public string ShowSelectDVDDialog(int parentId)
     {
