@@ -239,9 +239,9 @@
     </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>
-    <Content Include="BallonRadio.gif" />
-    <Content Include="BallonRadio.ico" />
-    <Content Include="BallonRadioDisabled.gif" />
+    <EmbeddedResource Include="BallonRadio.gif" />
+    <EmbeddedResource Include="BallonRadio.ico" />
+    <EmbeddedResource Include="BallonRadioDisabled.gif" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>

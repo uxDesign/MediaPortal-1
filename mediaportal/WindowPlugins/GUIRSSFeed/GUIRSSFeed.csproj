@@ -267,8 +267,8 @@
     </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>
-    <Content Include="rssicon.png" />
-    <Content Include="rssicon_disabled.png" />
+    <EmbeddedResource Include="rssicon.png" />
+    <EmbeddedResource Include="rssicon_disabled.png" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>

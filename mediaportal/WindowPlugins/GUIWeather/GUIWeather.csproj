@@ -227,8 +227,8 @@
     </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>
-    <Content Include="Weather.gif" />
-    <Content Include="WeatherDisabled.gif" />
+    <EmbeddedResource Include="Weather.gif" />
+    <EmbeddedResource Include="WeatherDisabled.gif" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>

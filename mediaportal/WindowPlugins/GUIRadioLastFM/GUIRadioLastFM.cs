@@ -1908,7 +1908,7 @@ namespace MediaPortal.GUI.RADIOLASTFM
         _trayBallonSongChange = new NotifyIcon();
         _trayBallonSongChange.ContextMenu = contextMenuLastFM;
 
-        Stream s = GetType().Assembly.GetManifestResourceStream("WindowPlugins.GUIRadioLastFM.BallonRadio.ico");
+        Stream s = GetType().Assembly.GetManifestResourceStream("GUIRadioLastFM.BallonRadio.ico");
         _trayBallonSongChange.Icon = new Icon(s);
         _trayBallonSongChange.Text = "MediaPortal Last.fm Radio";
         _trayBallonSongChange.Visible = false;

@@ -226,8 +226,8 @@
     </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>
-    <Content Include="Wikipedia.gif" />
-    <Content Include="WikipediaDisabled.gif" />
+    <EmbeddedResource Include="Wikipedia.gif" />
+    <EmbeddedResource Include="WikipediaDisabled.gif" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>

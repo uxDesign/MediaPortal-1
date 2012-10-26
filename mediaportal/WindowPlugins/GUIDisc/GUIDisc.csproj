@@ -228,8 +228,8 @@
     </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>
-    <Content Include="DVD.gif" />
-    <Content Include="DVDDisabled.gif" />
+    <EmbeddedResource Include="DVD.gif" />
+    <EmbeddedResource Include="DVDDisabled.gif" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>

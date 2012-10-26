@@ -38,7 +38,7 @@ namespace MediaPortal.GUI.Settings
   /// <summary>
   /// Change and tweak settings like Video codecs, skins, etc from inside MP
   /// </summary>
-  [PluginIcons("Settings.Settings.gif", "Settings.SettingsDisabled.gif")]
+  [PluginIcons("GUISettings.Settings.gif", "GUISettings.SettingsDisabled.gif")]
   public class GUISettings : GUIInternalWindow, ISetupForm, IShowPlugin
   {
     [SkinControl(11)] protected GUIButtonControl btnMiniDisplay = null;

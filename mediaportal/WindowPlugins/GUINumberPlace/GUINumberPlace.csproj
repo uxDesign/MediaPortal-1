@@ -228,8 +228,8 @@
     </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>
-    <Content Include="NumberPlace.gif" />
-    <Content Include="NumberPlaceDisabled.gif" />
+    <EmbeddedResource Include="NumberPlace.gif" />
+    <EmbeddedResource Include="NumberPlaceDisabled.gif" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>

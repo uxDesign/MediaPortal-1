@@ -227,8 +227,8 @@
     </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>
-    <Content Include="Tetris.gif" />
-    <Content Include="TetrisDisabled.gif" />
+    <EmbeddedResource Include="Tetris.gif" />
+    <EmbeddedResource Include="TetrisDisabled.gif" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
