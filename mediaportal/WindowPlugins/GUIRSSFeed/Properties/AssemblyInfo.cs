@@ -27,7 +27,7 @@ using MediaPortal.Common.Utils;
 // associated with an assembly.
 //
 
-[assembly: AssemblyTitle("WindowPlugins")]
+[assembly: AssemblyTitle("GUIRSSFeed")]
 [assembly: AssemblyDescription("")]
 
 [assembly: CompatibleVersion("Own")]
