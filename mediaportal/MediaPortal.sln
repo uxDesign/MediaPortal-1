@@ -104,6 +104,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Music", "WindowPlugins\Musi
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Videos", "WindowPlugins\Videos\Videos.csproj", "{AF59C1DA-B02C-4E58-B6CA-3CF0DDD75C5D}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Pictures", "WindowPlugins\Pictures\Pictures.csproj", "{AA96B4C9-D471-4F47-B94F-1DF0697FBFDB}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -561,6 +563,22 @@ Global
 		{AF59C1DA-B02C-4E58-B6CA-3CF0DDD75C5D}.UseCaptureDefintionsRelease|Any CPU.Build.0 = UseCaptureDefintionsRelease|Any CPU
 		{AF59C1DA-B02C-4E58-B6CA-3CF0DDD75C5D}.UseCaptureDefintionsRelease|x86.ActiveCfg = UseCaptureDefintionsRelease|x86
 		{AF59C1DA-B02C-4E58-B6CA-3CF0DDD75C5D}.UseCaptureDefintionsRelease|x86.Build.0 = UseCaptureDefintionsRelease|x86
+		{AA96B4C9-D471-4F47-B94F-1DF0697FBFDB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AA96B4C9-D471-4F47-B94F-1DF0697FBFDB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AA96B4C9-D471-4F47-B94F-1DF0697FBFDB}.Debug|x86.ActiveCfg = Debug|x86
+		{AA96B4C9-D471-4F47-B94F-1DF0697FBFDB}.Debug|x86.Build.0 = Debug|x86
+		{AA96B4C9-D471-4F47-B94F-1DF0697FBFDB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AA96B4C9-D471-4F47-B94F-1DF0697FBFDB}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AA96B4C9-D471-4F47-B94F-1DF0697FBFDB}.Release|x86.ActiveCfg = Release|x86
+		{AA96B4C9-D471-4F47-B94F-1DF0697FBFDB}.Release|x86.Build.0 = Release|x86
+		{AA96B4C9-D471-4F47-B94F-1DF0697FBFDB}.UseCaptureCardDefinitions|Any CPU.ActiveCfg = UseCaptureCardDefinitions|Any CPU
+		{AA96B4C9-D471-4F47-B94F-1DF0697FBFDB}.UseCaptureCardDefinitions|Any CPU.Build.0 = UseCaptureCardDefinitions|Any CPU
+		{AA96B4C9-D471-4F47-B94F-1DF0697FBFDB}.UseCaptureCardDefinitions|x86.ActiveCfg = UseCaptureCardDefinitions|x86
+		{AA96B4C9-D471-4F47-B94F-1DF0697FBFDB}.UseCaptureCardDefinitions|x86.Build.0 = UseCaptureCardDefinitions|x86
+		{AA96B4C9-D471-4F47-B94F-1DF0697FBFDB}.UseCaptureDefintionsRelease|Any CPU.ActiveCfg = UseCaptureDefintionsRelease|Any CPU
+		{AA96B4C9-D471-4F47-B94F-1DF0697FBFDB}.UseCaptureDefintionsRelease|Any CPU.Build.0 = UseCaptureDefintionsRelease|Any CPU
+		{AA96B4C9-D471-4F47-B94F-1DF0697FBFDB}.UseCaptureDefintionsRelease|x86.ActiveCfg = UseCaptureDefintionsRelease|x86
+		{AA96B4C9-D471-4F47-B94F-1DF0697FBFDB}.UseCaptureDefintionsRelease|x86.Build.0 = UseCaptureDefintionsRelease|x86
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -584,5 +602,6 @@ Global
 		{B282C55B-A37B-4CEC-A4FC-00791069BF00} = {DA3EE2DD-2DA4-4DC2-B02D-B4BE32985F85}
 		{70F7CE2D-B69F-43D6-AB65-A42D3983E2BA} = {DA3EE2DD-2DA4-4DC2-B02D-B4BE32985F85}
 		{AF59C1DA-B02C-4E58-B6CA-3CF0DDD75C5D} = {DA3EE2DD-2DA4-4DC2-B02D-B4BE32985F85}
+		{AA96B4C9-D471-4F47-B94F-1DF0697FBFDB} = {DA3EE2DD-2DA4-4DC2-B02D-B4BE32985F85}
 	EndGlobalSection
 EndGlobal
