@@ -340,7 +340,7 @@ namespace WindowPlugins
     {
       bool isVideoWindow = (this.GetID == (int)Window.WINDOW_VIDEOS || this.GetID == (int)Window.WINDOW_VIDEO_TITLE);
 
-        /* FIXME
+        /* FIXME Move this logic to Videos / Music for their parts, leave rest here
 
         switch (selectedViewId)
         {
@@ -430,26 +430,6 @@ namespace WindowPlugins
     protected virtual void OnShowSort() {}
 
     protected virtual void LoadDirectory(string path) {}
-
-    protected virtual bool GetKeyboard(ref string strLine)
-    {
-      /* FIXME
-      VirtualKeyboard keyboard = (VirtualKeyboard)GUIWindowManager.GetWindow((int)Window.WINDOW_VIRTUAL_KEYBOARD);
-      if (null == keyboard)
-      {
-        return false;
-      }
-      keyboard.Reset();
-      keyboard.Text = strLine;
-      keyboard.DoModal(GetID);
-      if (keyboard.IsConfirmed)
-      {
-        strLine = keyboard.Text;
-        return true;
-      }
-       */
-      return false;
-    }
 
     protected virtual Layout CurrentLayout
     {

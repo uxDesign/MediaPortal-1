@@ -4331,7 +4331,7 @@ namespace MediaPortal.GUI.Video
         movieName = fetcher.MovieName;
       }
 
-      if (GetKeyboard(ref movieName))
+      if (VirtualKeyboard.GetKeyboard(ref movieName, GetID))
       {
         if (movieName == string.Empty)
         {
@@ -4502,7 +4502,7 @@ namespace MediaPortal.GUI.Video
           {
             searchText = movieDetails.SearchString;
           }
-          if (GetKeyboard(ref searchText))
+          if (VirtualKeyboard.GetKeyboard(ref searchText, GetID))
           {
             if (searchText != string.Empty)
             {

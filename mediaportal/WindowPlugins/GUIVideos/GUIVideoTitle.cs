@@ -1980,14 +1980,14 @@ namespace MediaPortal.GUI.Video
           break;
       }
 
-      GetKeyboard(ref _searchMovieString);
+      VirtualKeyboard.GetKeyboard(ref _searchMovieString, GetID);
       _searchMovie = true;
       LoadDirectory(currentFolder);
     }
 
     private void OnSearchActor()
     {
-      GetKeyboard(ref _searchActorString);
+      VirtualKeyboard.GetKeyboard(ref _searchActorString, GetID);
       _searchActor = true;
       LoadDirectory(currentFolder);
     }
@@ -2019,7 +2019,7 @@ namespace MediaPortal.GUI.Video
       if (movie.ID >= 0)
       {
         string movieTitle = movie.Title;
-        GetKeyboard(ref movieTitle);
+        VirtualKeyboard.GetKeyboard(ref movieTitle, GetID);
 
         if (string.IsNullOrEmpty(movieTitle) || movieTitle.Trim() == movie.Title)
           return;
@@ -2172,7 +2172,7 @@ namespace MediaPortal.GUI.Video
     private void OnAddUserGroup()
     {
       string newGroup = string.Empty;
-      GetKeyboard(ref newGroup);
+      VirtualKeyboard.GetKeyboard(ref newGroup, GetID);
 
       if (string.IsNullOrEmpty(newGroup))
       {
@@ -2204,7 +2204,7 @@ namespace MediaPortal.GUI.Video
       }
 
       string movieSortTitle = movie.SortTitle;
-      GetKeyboard(ref movieSortTitle);
+      VirtualKeyboard.GetKeyboard(ref movieSortTitle, GetID);
 
       if (string.IsNullOrEmpty(movieSortTitle) || movieSortTitle.Trim() == movie.Title)
       {
@@ -3019,7 +3019,7 @@ namespace MediaPortal.GUI.Video
         return false;
       }
       movieName = fetcher.MovieName;
-      if (GetKeyboard(ref movieName))
+      if (VirtualKeyboard.GetKeyboard(ref movieName, GetID))
       {
         if (movieName == string.Empty)
         {
@@ -3155,7 +3155,7 @@ namespace MediaPortal.GUI.Video
           {
             searchText = movieDetails.SearchString;
           }
-          if (GetKeyboard(ref searchText))
+          if (VirtualKeyboard.GetKeyboard(ref searchText, GetID))
           {
             if (searchText != string.Empty)
             {

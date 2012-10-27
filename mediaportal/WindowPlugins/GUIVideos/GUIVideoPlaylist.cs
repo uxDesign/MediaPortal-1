@@ -22,6 +22,7 @@ using System;
 using System.Collections;
 using System.IO;
 using MediaPortal.Configuration;
+using MediaPortal.Dialogs;
 using MediaPortal.GUI.Library;
 using MediaPortal.Player;
 using MediaPortal.Playlists;
@@ -675,7 +676,7 @@ namespace MediaPortal.GUI.Video
     {
       currentSelectedItem = facadeLayout.SelectedListItemIndex;
       string playlistFileName = string.Empty;
-      if (GetKeyboard(ref playlistFileName))
+      if (VirtualKeyboard.GetKeyboard(ref playlistFileName, GetID))
       {
         string playListPath = string.Empty;
         using (Profile.Settings xmlreader = new Profile.MPSettings())
