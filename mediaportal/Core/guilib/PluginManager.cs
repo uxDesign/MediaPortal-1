@@ -248,7 +248,6 @@ namespace MediaPortal.GUI.Library
         Directory.CreateDirectory(Config.GetSubFolder(Config.Dir.Plugins, "windows"));
       }
       catch (Exception) { }
-      LoadWindowPlugin(Config.GetFile(Config.Dir.Plugins, @"windows\WindowPlugins.dll")); //need to load this first!!!
 
       string[] strFiles = MediaPortal.Util.Utils.GetFiles(Config.GetSubFolder(Config.Dir.Plugins, "windows"), "dll");
 
