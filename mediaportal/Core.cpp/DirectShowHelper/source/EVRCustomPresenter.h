@@ -44,7 +44,11 @@ using namespace std;
 //Thread pause timeout in ms
 #define THREAD_PAUSE_TIMEOUT 2000
 
-#define NUM_SURFACES 5
+//Set max/min/default values for sample queue size - actual size is set via 'SampleQueueSize' registry key
+#define MAX_SURFACES 16
+#define MIN_SURFACES 3
+#define DEFAULT_SURFACES 5
+
 #define NB_JITTER 125
 #define NB_RFPSIZE 64
 
@@ -318,15 +322,15 @@ protected:
   CComPtr<IMFTransform>             m_pMixer;
   CComPtr<IMFMediaType>             m_pMediaType;
   CComPtr<IMediaSeeking>            m_pMediaSeeking;
-  CComPtr<IDirect3DTexture9>        textures[NUM_SURFACES];
-  CComPtr<IDirect3DSurface9>        surfaces[NUM_SURFACES];
-  CComPtr<IMFSample>                samples[NUM_SURFACES];
+  CComPtr<IDirect3DTexture9>        textures[MAX_SURFACES];
+  CComPtr<IDirect3DSurface9>        surfaces[MAX_SURFACES];
+  CComPtr<IMFSample>                samples[MAX_SURFACES];
   CCritSec                          m_lockSamples;
   CCritSec                          m_lockRasterData;
   CCritSec                          m_lockCallback;
   int                               m_iFreeSamples;
-  IMFSample*                        m_vFreeSamples[NUM_SURFACES];
-  IMFSample*                        m_vAllSamples[NUM_SURFACES];
+  IMFSample*                        m_vFreeSamples[MAX_SURFACES];
+  IMFSample*                        m_vAllSamples[MAX_SURFACES];
   CMyQueue<IMFSample*>              m_qScheduledSamples;
   SchedulerParams                   m_schedulerParams;
   SchedulerParams                   m_workerParams;
@@ -490,6 +494,7 @@ protected:
 
   UINT          m_dwmBuffers;
   UINT          m_regNumDWMBuffers;
+  int           m_regNumSamples;
   HWND          m_hDwmWinHandle;
   bool          m_bDWMinit;
   BOOL          m_bDwmCompEnabled;

@@ -42,6 +42,14 @@ public:
 		delete[] m_elements;
 	}
 
+	void Resize(int size)
+	{
+		m_count = 0;
+		m_pos = 0;
+		m_insertPos = 0;
+		m_size = size;
+	}
+
 	void Clear()
 	{
 		m_count = 0;

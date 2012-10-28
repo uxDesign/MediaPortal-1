@@ -62,7 +62,7 @@ void LogGUID(REFGUID guid)
 MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDevice9* direct3dDevice, HMONITOR monitor, IBaseFilter** EVRFilter, BOOL pIsWin7):
   CUnknown(NAME("MPEVRCustomPresenter"), NULL),
   m_refCount(1), 
-  m_qScheduledSamples(NUM_SURFACES),
+  m_qScheduledSamples(MAX_SURFACES),
   m_bIsWin7(pIsWin7),
   m_bMsVideoCodec(true),
   m_bNewSegment(true),
@@ -91,11 +91,11 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
     LogRotate();
     if (NO_MP_AUD_REND)
     {
-      Log("--- v1.6.667 Unicode with DWM queue support --- instance 0x%x", this);
+      Log("--- v1.6.668 Unicode with DWM queue support --- instance 0x%x", this);
     }
     else
     {
-      Log("--- v1.6.667 Unicode with DWM queue support --- instance 0x%x", this);
+      Log("--- v1.6.668 Unicode with DWM queue support --- instance 0x%x", this);
       Log("---------- audio renderer enabled ------------- instance 0x%x", this);
     }
     m_hMonitor = monitor;
@@ -195,6 +195,7 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
   m_bSchedulerEnableMMCSS = SCHED_ENABLE_MMCSS;
   m_regNumDWMBuffers = NUM_DWM_BUFFERS;
   m_bEnableAudioDelayComp = ENABLE_AUDIO_DELAY_COMP;
+  m_regNumSamples = DEFAULT_SURFACES;
   if (ERROR_SUCCESS==RegCreateKeyEx(HKEY_CURRENT_USER, _T("Software\\Team MediaPortal\\EVR Presenter"), 0, NULL, 
                                     REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, NULL, &key, NULL))
   {
@@ -268,9 +269,26 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
       Log("--- Disable DWM audio delay compensation");
       m_bEnableAudioDelayComp = false;
     }
+
+    keyValue = (DWORD)m_regNumSamples;
+    LPCTSTR numVid_Samples = TEXT("SampleQueueSize");
+    ReadRegistryKeyDword(key, numVid_Samples, keyValue);
+    if ((keyValue >= MIN_SURFACES) && (keyValue <= MAX_SURFACES))
+    {
+      m_regNumSamples = (int)keyValue;
+      Log("--- Sample Queue size = %d", m_regNumSamples);
+    }
+    else
+    {
+      m_regNumSamples = DEFAULT_SURFACES;
+      Log("--- Sample Queue size = %d (default value, allowed range is %d - %d)", m_regNumSamples, MIN_SURFACES, MAX_SURFACES);
+    }
     
     RegCloseKey(key);
   }
+
+  //Resize sample queue to correct size (from registry setting)
+  m_qScheduledSamples.Resize(m_regNumSamples);
     
   for (int i = 0; i < 2; i++)
   {
@@ -363,7 +381,7 @@ MPEVRCustomPresenter::~MPEVRCustomPresenter()
   ReleaseSurfaces();
   m_pMediaType.Release();
   m_pDeviceManager =  NULL;
-  for (int i=0; i < NUM_SURFACES; i++)
+  for (int i=0; i < m_regNumSamples; i++)
   {
     m_vFreeSamples[i] = 0;
   }
@@ -944,7 +962,7 @@ void MPEVRCustomPresenter::ReAllocSurfaces()
   CHECK_HR(m_pDeviceManager->LockDevice(hDevice, &pDevice, TRUE), "Cannot lock device");
   HRESULT hr;
   Log("Textures will be %dx%d", m_iVideoWidth, m_iVideoHeight);
-  for (int i = 0; i < NUM_SURFACES; i++)
+  for (int i = 0; i < m_regNumSamples; i++)
   {
     hr = pDevice->CreateTexture(m_iVideoWidth, m_iVideoHeight, 1,
       D3DUSAGE_RENDERTARGET, D3DFMT_X8R8G8B8, D3DPOOL_DEFAULT,
@@ -965,7 +983,7 @@ void MPEVRCustomPresenter::ReAllocSurfaces()
     m_vFreeSamples[i] = samples[i];
     m_vAllSamples[i] = samples[i];
   }
-  m_iFreeSamples = NUM_SURFACES;
+  m_iFreeSamples = m_regNumSamples;
   CHECK_HR(m_pDeviceManager->UnlockDevice(hDevice, FALSE), "failed: Unlock device");
   Log("Releasing device: %d", pDevice->Release());
   CHECK_HR(m_pDeviceManager->CloseDeviceHandle(hDevice), "failed: CloseDeviceHandle");
@@ -1266,11 +1284,11 @@ void MPEVRCustomPresenter::DoFlush(BOOL forced)
     DwmFlush(); //Just in case...
     CAutoLock sLock(&m_lockSamples);
 
-    for (int i = 0; i < NUM_SURFACES; i++)
+    for (int i = 0; i < m_regNumSamples; i++)
     {
       m_vFreeSamples[i] = m_vAllSamples[i];
     }
-    m_iFreeSamples = NUM_SURFACES;
+    m_iFreeSamples = m_regNumSamples;
     m_qScheduledSamples.Clear();
   }
   else
@@ -1291,12 +1309,12 @@ void MPEVRCustomPresenter::ReturnSample(IMFSample* pSample, BOOL tryNotify)
   CAutoLock sLock(&m_lockSamples);
   //TIME_LOCK(&m_lockSamples, 50000, "ReturnSample")
   LOG_TRACE("Sample returned: now having %d samples", m_iFreeSamples+1);
-  if (m_iFreeSamples >= NUM_SURFACES)
+  if (m_iFreeSamples >= m_regNumSamples)
   {
     //Error - all samples free !!
     return;
   }
-  for (int i = 0; i < NUM_SURFACES; i++)
+  for (int i = 0; i < m_regNumSamples; i++)
   {
     if (m_vFreeSamples[i] == pSample)
     {
@@ -2040,7 +2058,7 @@ BOOL MPEVRCustomPresenter::PutSample(IMFSample* pSample)
 {
   CAutoLock sLock(&m_lockSamples);
   LOG_TRACE("Adding scheduled sample, size: %d", m_qScheduledSamples.Count());
-  if (!m_qScheduledSamples.IsFull() && (m_iFreeSamples < NUM_SURFACES))
+  if (!m_qScheduledSamples.IsFull() && (m_iFreeSamples < m_regNumSamples))
   {
     m_qScheduledSamples.Put(pSample);
     return TRUE;
@@ -2052,7 +2070,7 @@ BOOL MPEVRCustomPresenter::PopSample()
 {
   CAutoLock sLock(&m_lockSamples);
   LOG_TRACE("Removing scheduled sample, size: %d", m_qScheduledSamples.Count());
-  if (!m_qScheduledSamples.IsEmpty() && (m_iFreeSamples < NUM_SURFACES))
+  if (!m_qScheduledSamples.IsEmpty() && (m_iFreeSamples < m_regNumSamples))
   {
     m_qScheduledSamples.Get();
     m_qGoodPopCnt++;
@@ -2078,7 +2096,7 @@ bool MPEVRCustomPresenter::SampleAvailable()
 IMFSample* MPEVRCustomPresenter::PeekSample()
 {
   CAutoLock sLock(&m_lockSamples);
-  if (m_qScheduledSamples.IsEmpty() || (m_iFreeSamples >= NUM_SURFACES))
+  if (m_qScheduledSamples.IsEmpty() || (m_iFreeSamples >= m_regNumSamples))
   {
     Log("ERR: PeekSample: empty queue!");
     return NULL;
@@ -2653,7 +2671,7 @@ void MPEVRCustomPresenter::ReleaseSurfaces()
   }
   DoFlush(TRUE);
   m_iFreeSamples = 0;
-  for (int i = 0; i < NUM_SURFACES; i++)
+  for (int i = 0; i < m_regNumSamples; i++)
   {
     samples[i] = NULL;
     surfaces[i] = NULL;
@@ -4392,7 +4410,7 @@ bool MPEVRCustomPresenter::GetState(DWORD dwMilliSecsTimeout, FILTER_STATE* Stat
 bool MPEVRCustomPresenter::BufferMoreSamples()
 {
   CAutoLock sLock(&m_lockSamples);
-  return !m_qScheduledSamples.IsFull() && !m_bEndBuffering && m_state != MP_RENDER_STATE_STOPPED;
+  return ((m_qScheduledSamples.Count() < MIN_SURFACES) && !m_bEndBuffering && m_state != MP_RENDER_STATE_STOPPED);
 }
 
 //=============== Filter Graph interface functions =================
