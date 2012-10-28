@@ -45,7 +45,7 @@ using namespace std;
 #define THREAD_PAUSE_TIMEOUT 2000
 
 //Set max/min/default values for sample queue size - actual size is set via 'SampleQueueSize' registry key
-#define MAX_SURFACES 16
+#define MAX_SURFACES 9
 #define MIN_SURFACES 3
 #define DEFAULT_SURFACES 5
 

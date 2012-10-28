@@ -253,7 +253,7 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
     else
     {
       m_regNumDWMBuffers = NUM_DWM_BUFFERS;
-      Log("--- Number of DWM buffers = %d (default value, allowed range is 3 - 7)", m_regNumDWMBuffers);
+      Log("--- Number of DWM buffers = %d (default value, allowed range is 3 - 8)", m_regNumDWMBuffers);
     }
 
     keyValue = ENABLE_AUDIO_DELAY_COMP ? 1 : 0;
