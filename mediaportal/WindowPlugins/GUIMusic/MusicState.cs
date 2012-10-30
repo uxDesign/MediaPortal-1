@@ -19,20 +19,33 @@
 #endregion
 
 using MediaPortal.GUI.Library;
-using WindowPlugins;
 
 namespace MediaPortal.GUI.Music
 {
   /// <summary>
   /// 
   /// </summary>
-  public class MusicState : StateBase
+  public class MusicState
   {
+
+    protected static int m_iStartWindow = 0;
+    protected static string view;
 
     static MusicState()
     {
       m_iStartWindow = (int)GUIWindow.Window.WINDOW_MUSIC_FILES;
     }
 
+    public static int StartWindow
+    {
+        get { return m_iStartWindow; }
+        set { m_iStartWindow = value; }
+    }
+
+    public static string View
+    {
+        get { return view; }
+        set { view = value; }
+    }
   }
 }

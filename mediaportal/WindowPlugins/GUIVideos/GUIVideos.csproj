@@ -240,7 +240,6 @@
     </Compile>
     <Compile Include="SelectBDHandler.cs" />
     <Compile Include="SelectDVDHandler.cs" />
-    <Compile Include="StateBase.cs" />
     <Compile Include="VideoSort.cs" />
     <Compile Include="VideoState.cs" />
     <Compile Include="VideoViewHandler.cs" />

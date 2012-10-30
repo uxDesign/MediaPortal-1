@@ -19,15 +19,29 @@
 #endregion
 
 using MediaPortal.GUI.Library;
-using WindowPlugins;
 
 namespace MediaPortal.GUI.Video
 {
-  public class VideoState : StateBase
+  public class VideoState
   {
+    protected static int m_iStartWindow = 0;
+    protected static string view;
+
     static VideoState()
     {
       m_iStartWindow = (int)GUIWindow.Window.WINDOW_VIDEOS;
+    }
+
+    public static int StartWindow
+    {
+        get { return m_iStartWindow; }
+        set { m_iStartWindow = value; }
+    }
+
+    public static string View
+    {
+        get { return view; }
+        set { view = value; }
     }
   }
 }
