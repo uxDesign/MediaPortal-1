@@ -253,10 +253,6 @@ namespace MediaPortal.GUI.Library
 
       foreach (string strFile in strFiles)
       {
-        if (strFile.ToLower().IndexOf("windowplugins.dll") >= 0)
-        {
-          continue;
-        }
         LoadWindowPlugin(strFile);
       }
     }
@@ -698,10 +694,6 @@ namespace MediaPortal.GUI.Library
 
     public static bool IsPlugInEnabled(string strDllname)
     {
-      if (strDllname.IndexOf("WindowPlugins.dll") >= 0)
-      {
-        return true;
-      }
       if (strDllname.IndexOf("ProcessPlugins.dll") >= 0)
       {
         return true;
