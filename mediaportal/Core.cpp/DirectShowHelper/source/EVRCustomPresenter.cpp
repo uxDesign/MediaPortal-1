@@ -196,6 +196,9 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
   m_regNumDWMBuffers = NUM_DWM_BUFFERS;
   m_bEnableAudioDelayComp = ENABLE_AUDIO_DELAY_COMP;
   m_regNumSamples = DEFAULT_SURFACES;
+  m_regSchedMmcssPriority  = SCHED_MMCSS_PRIORITY;
+  m_regWorkerMmcssPriority = WORKER_MMCSS_PRIORITY;
+  m_regTimerMmcssPriority  = TIMER_MMCSS_PRIORITY;
   if (ERROR_SUCCESS==RegCreateKeyEx(HKEY_CURRENT_USER, _T("Software\\Team MediaPortal\\EVR Presenter"), 0, NULL, 
                                     REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, NULL, &key, NULL))
   {
@@ -282,6 +285,48 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
     {
       m_regNumSamples = DEFAULT_SURFACES;
       Log("--- Sample Queue size = %d (default value, allowed range is %d - %d)", m_regNumSamples, MIN_SURFACES, MAX_SURFACES);
+    }
+
+    keyValue = (DWORD)m_regSchedMmcssPriority;
+    LPCTSTR schedMmcss_Priority = TEXT("SchedulerThreadMmcssPriority");
+    ReadRegistryKeyDword(key, schedMmcss_Priority, keyValue);
+    if ((keyValue >= (AVRT_PRIORITY_LOW+1)) && (keyValue <= (AVRT_PRIORITY_CRITICAL+1)))
+    {
+      m_regSchedMmcssPriority = (int)keyValue;
+      Log("--- Scheduler Thread MMCSS priority = %d", m_regSchedMmcssPriority);
+    }
+    else
+    {
+      m_regSchedMmcssPriority = SCHED_MMCSS_PRIORITY;
+      Log("--- Scheduler Thread MMCSS priority = %d (default value, allowed range is %d to %d)", m_regSchedMmcssPriority, (AVRT_PRIORITY_LOW+1), (AVRT_PRIORITY_CRITICAL+1));
+    }
+
+    keyValue = (DWORD)m_regWorkerMmcssPriority;
+    LPCTSTR workerMmcss_Priority = TEXT("WorkerThreadMmcssPriority");
+    ReadRegistryKeyDword(key, workerMmcss_Priority, keyValue);
+    if ((keyValue >= (AVRT_PRIORITY_LOW+1)) && (keyValue <= (AVRT_PRIORITY_CRITICAL+1)))
+    {
+      m_regWorkerMmcssPriority = (int)keyValue;
+      Log("--- Worker Thread MMCSS priority = %d", m_regWorkerMmcssPriority);
+    }
+    else
+    {
+      m_regWorkerMmcssPriority = WORKER_MMCSS_PRIORITY;
+      Log("--- Worker Thread MMCSS priority = %d (default value, allowed range is %d to %d)", m_regWorkerMmcssPriority, (AVRT_PRIORITY_LOW+1), (AVRT_PRIORITY_CRITICAL+1));
+    }
+
+    keyValue = (DWORD)m_regTimerMmcssPriority;
+    LPCTSTR timerMmcss_Priority = TEXT("TimerThreadMmcssPriority");
+    ReadRegistryKeyDword(key, timerMmcss_Priority, keyValue);
+    if ((keyValue >= (AVRT_PRIORITY_LOW+1)) && (keyValue <= (AVRT_PRIORITY_CRITICAL+1)))
+    {
+      m_regTimerMmcssPriority = (int)keyValue;
+      Log("--- Timer Thread MMCSS priority = %d", m_regTimerMmcssPriority);
+    }
+    else
+    {
+      m_regTimerMmcssPriority = TIMER_MMCSS_PRIORITY;
+      Log("--- Timer Thread MMCSS priority = %d (default value, allowed range is %d to %d)", m_regTimerMmcssPriority, (AVRT_PRIORITY_LOW+1), (AVRT_PRIORITY_CRITICAL+1));
     }
     
     RegCloseKey(key);

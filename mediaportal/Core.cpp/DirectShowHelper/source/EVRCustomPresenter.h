@@ -41,6 +41,11 @@ using namespace std;
 //Enables DWM audio delay compensation if true
 #define ENABLE_AUDIO_DELAY_COMP false
 
+//Set MMCSS thread priorities - these are incremented by one to allow DWORD (unsigned) representation in Registry
+#define SCHED_MMCSS_PRIORITY  (AVRT_PRIORITY_HIGH + 1)  
+#define WORKER_MMCSS_PRIORITY (AVRT_PRIORITY_NORMAL + 1)
+#define TIMER_MMCSS_PRIORITY  (AVRT_PRIORITY_LOW + 1)   
+
 //Thread pause timeout in ms
 #define THREAD_PAUSE_TIMEOUT 2000
 
@@ -262,6 +267,10 @@ public:
   bool           m_bZeroScrub;
 
   bool           m_bSchedulerEnableMMCSS;
+
+  int            m_regSchedMmcssPriority;   
+  int            m_regWorkerMmcssPriority; 
+  int            m_regTimerMmcssPriority;   
 
 
 friend class StatsRenderer;

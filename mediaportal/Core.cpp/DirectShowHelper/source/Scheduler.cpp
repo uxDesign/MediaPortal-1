@@ -67,9 +67,9 @@ UINT CALLBACK TimerThread(void* param)
   }
   if (m_pAvSetMmThreadPriority) 
   {
-    if (m_pAvSetMmThreadPriority(hAvrt, AVRT_PRIORITY_LOW))
+    if (m_pAvSetMmThreadPriority(hAvrt, (AVRT_PRIORITY)(p->pPresenter->m_regTimerMmcssPriority - 1)))
     {
-      Log("Timer set AvSetMmThreadPriority succeeded");
+      Log("Timer AvSetMmThreadPriority = %d", (p->pPresenter->m_regTimerMmcssPriority - 1));
     }
   }
 
@@ -152,9 +152,9 @@ UINT CALLBACK WorkerThread(void* param)
   }
   if (m_pAvSetMmThreadPriority) 
   {
-    if (m_pAvSetMmThreadPriority(hAvrt, AVRT_PRIORITY_NORMAL))
+    if (m_pAvSetMmThreadPriority(hAvrt, (AVRT_PRIORITY)(p->pPresenter->m_regWorkerMmcssPriority - 1)))
     {
-      Log("Worker set AvSetMmThreadPriority succeeded");
+      Log("Worker AvSetMmThreadPriority = %d", (p->pPresenter->m_regWorkerMmcssPriority - 1));
     }
   }
 
@@ -251,9 +251,9 @@ UINT CALLBACK SchedulerThread(void* param)
     }
     if (m_pAvSetMmThreadPriority) 
     {
-      if (m_pAvSetMmThreadPriority(hAvrt, AVRT_PRIORITY_HIGH))
+      if (m_pAvSetMmThreadPriority(hAvrt, (AVRT_PRIORITY)(p->pPresenter->m_regSchedMmcssPriority - 1)))
       {
-        Log("Scheduler set AvSetMmThreadPriority succeeded");
+        Log("Scheduler AvSetMmThreadPriority = %d", (p->pPresenter->m_regSchedMmcssPriority - 1));
       }
     }
   }
