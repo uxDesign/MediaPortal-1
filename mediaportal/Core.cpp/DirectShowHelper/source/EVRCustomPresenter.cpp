@@ -91,11 +91,11 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
     LogRotate();
     if (NO_MP_AUD_REND)
     {
-      Log("--- v1.6.668 Unicode with DWM queue support --- instance 0x%x", this);
+      Log("--- v1.6.669 Unicode with DWM queue support --- instance 0x%x", this);
     }
     else
     {
-      Log("--- v1.6.668 Unicode with DWM queue support --- instance 0x%x", this);
+      Log("--- v1.6.669 Unicode with DWM queue support --- instance 0x%x", this);
       Log("---------- audio renderer enabled ------------- instance 0x%x", this);
     }
     m_hMonitor = monitor;
@@ -2716,12 +2716,13 @@ void MPEVRCustomPresenter::ReleaseSurfaces()
   }
   DoFlush(TRUE);
   m_iFreeSamples = 0;
-  for (int i = 0; i < m_regNumSamples; i++)
+  for (int i = 0; i < MAX_SURFACES; i++)
   {
     samples[i] = NULL;
     surfaces[i] = NULL;
     textures[i] = NULL;
     m_vFreeSamples[i] = NULL;
+    m_vAllSamples[i] = NULL;
   }
 
   m_pDeviceManager->UnlockDevice(hDevice, FALSE);
