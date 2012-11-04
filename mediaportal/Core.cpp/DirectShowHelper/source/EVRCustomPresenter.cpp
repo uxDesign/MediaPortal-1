@@ -91,11 +91,11 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
     LogRotate();
     if (NO_MP_AUD_REND)
     {
-      Log("--- v1.6.669 Unicode with DWM queue support --- instance 0x%x", this);
+      Log("--- v1.6.670 Unicode with DWM queue support --- instance 0x%x", this);
     }
     else
     {
-      Log("--- v1.6.669 Unicode with DWM queue support --- instance 0x%x", this);
+      Log("--- v1.6.670 Unicode with DWM queue support --- instance 0x%x", this);
       Log("---------- audio renderer enabled ------------- instance 0x%x", this);
     }
     m_hMonitor = monitor;
@@ -334,6 +334,8 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
 
   //Resize sample queue to correct size (from registry setting)
   m_qScheduledSamples.Resize(m_regNumSamples);
+
+  ResetFrameStats();
     
   for (int i = 0; i < 2; i++)
   {
@@ -397,9 +399,12 @@ void MPEVRCustomPresenter::ResetEVRStatCounters()
 
 void MPEVRCustomPresenter::ReleaseCallback()
 {
+  Log("EVRCustomPresenter::ReleaseCallback() - instance 0x%x", this);
   CAutoLock sLock(&m_lockCallback);
   m_pCallback = NULL;
 
+  m_bEnableDWMQueued = false;
+  
   if (m_pAVSyncClock)
     SAFE_RELEASE(m_pAVSyncClock);
 
@@ -422,14 +427,9 @@ MPEVRCustomPresenter::~MPEVRCustomPresenter()
   }
 
   StopWorkers();
-//  DwmEnableMMCSSOnOff(false);
   ReleaseSurfaces();
   m_pMediaType.Release();
   m_pDeviceManager =  NULL;
-  for (int i=0; i < m_regNumSamples; i++)
-  {
-    m_vFreeSamples[i] = 0;
-  }
   delete m_pStatsRenderer;
   timeEndPeriod(1);
   Log("Done");
@@ -1792,6 +1792,10 @@ void MPEVRCustomPresenter::DwmEnableMMCSSOnOff(bool enable)
 
 void MPEVRCustomPresenter::DwmFlush()
 {
+  if (m_state == MP_RENDER_STATE_SHUTDOWN)
+  {
+    return;
+  }
   if (m_pDwmFlush && m_bDwmCompEnabled)
   {
     m_pDwmFlush();
@@ -1929,6 +1933,8 @@ void MPEVRCustomPresenter::DwmInit(UINT buffers, UINT rfshPerFrame)
   {
     return;
   }
+
+  CAutoLock lock(this);
     
   Log("EVRCustomPresenter::DwmInit, frame = %d", m_iFramesDrawn);  
   //Initialise the DWM parameters
@@ -1955,6 +1961,8 @@ void MPEVRCustomPresenter::DwmReset(bool newWinHand)
   {
     return;
   }
+
+  CAutoLock lock(this);
 
   Log("EVRCustomPresenter::DwmReset");  
   //Reset the DWM parameters
@@ -2173,6 +2181,15 @@ void MPEVRCustomPresenter::ScheduleSample(IMFSample* pSample)
 
   if (onTimeSample || m_bDoPreBuffering)
   {
+    if (m_qGoodPutCnt == 0)
+    {
+      if (!SampleAvailable())
+      {
+        //Force first sample to be presented (not dropped)
+        Log("Adding first sample to empty queue");
+        pSample->SetSampleTime(0);
+      }
+    }
     PutSample(pSample);
     m_SampleAddedEvent.Set();
     m_qGoodPutCnt++;
@@ -4447,7 +4464,7 @@ bool MPEVRCustomPresenter::GetState(DWORD dwMilliSecsTimeout, FILTER_STATE* Stat
   }
   else
   {
-    LOG_TRACE("pre buffering off 3");
+    Log("pre buffering off 3");
     m_bDoPreBuffering = false;
     return false;
   }
