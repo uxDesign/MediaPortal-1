@@ -91,11 +91,11 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
     LogRotate();
     if (NO_MP_AUD_REND)
     {
-      Log("--- v1.6.670 Unicode with DWM queue support --- instance 0x%x", this);
+      Log("--- v1.6.670b Unicode with DWM queue support --- instance 0x%x", this);
     }
     else
     {
-      Log("--- v1.6.670 Unicode with DWM queue support --- instance 0x%x", this);
+      Log("--- v1.6.670b Unicode with DWM queue support --- instance 0x%x", this);
       Log("---------- audio renderer enabled ------------- instance 0x%x", this);
     }
     m_hMonitor = monitor;
@@ -401,7 +401,6 @@ void MPEVRCustomPresenter::ReleaseCallback()
 {
   Log("EVRCustomPresenter::ReleaseCallback() - instance 0x%x", this);
   CAutoLock sLock(&m_lockCallback);
-  m_pCallback = NULL;
 
   m_bEnableDWMQueued = false;
   
@@ -415,6 +414,13 @@ void MPEVRCustomPresenter::ReleaseCallback()
     m_pOuterEVR->Release();
 
   StopWorkers();
+  ReleaseSurfaces();
+  
+  if (m_pMediaType)
+    m_pMediaType.Release();
+
+  m_pCallback = NULL;
+
 }
 
 MPEVRCustomPresenter::~MPEVRCustomPresenter()
@@ -428,8 +434,11 @@ MPEVRCustomPresenter::~MPEVRCustomPresenter()
 
   StopWorkers();
   ReleaseSurfaces();
-  m_pMediaType.Release();
-  m_pDeviceManager =  NULL;
+  
+  if (m_pMediaType)
+    m_pMediaType.Release();
+    
+  m_pDeviceManager = NULL;
   delete m_pStatsRenderer;
   timeEndPeriod(1);
   Log("Done");
@@ -1201,10 +1210,12 @@ HRESULT MPEVRCustomPresenter::LogOutputTypes()
 HRESULT MPEVRCustomPresenter::RenegotiateMediaOutputType()
 {
   //This can be called via the Worker thread, so don't lock that thread here...
+  Log("RenegotiateMediaOutputType 1");
   CAutoLock sLock(&m_schedulerParams.csLock);
+  Log("RenegotiateMediaOutputType 2");
   CAutoLock tLock(&m_timerParams.csLock);
   m_bFirstInputNotify = FALSE;
-  Log("RenegotiateMediaOutputType");
+  Log("RenegotiateMediaOutputType 3");
   HRESULT hr = S_OK;
   BOOL fFoundMediaType = FALSE;
 
@@ -1290,6 +1301,8 @@ HRESULT MPEVRCustomPresenter::RenegotiateMediaOutputType()
       fFoundMediaType = TRUE;
     }
   }
+
+  Log("RenegotiateMediaOutputType - done");
 
   return hr;
 }
@@ -1641,7 +1654,17 @@ HRESULT MPEVRCustomPresenter::CheckForScheduledSample(LONGLONG *pTargetTime, LON
       }
       
       m_lastPresentTime = systemTime;
-      CHECK_HR(PresentSample(pSample), "PresentSample failed");
+      if (m_iFramesDrawn == 0)
+      {
+        Log("Present first sample - start");
+        CHECK_HR(PresentSample(pSample), "PresentSample failed");
+        Log("Present first sample - end");
+      }
+      else
+      {
+        CHECK_HR(PresentSample(pSample), "PresentSample failed");
+      }
+      
       if ((m_iFramesDrawn < (int)m_regNumDWMBuffers) && m_bDwmCompEnabled) //Push extra samples into the pipeline at start of play
       {
         CHECK_HR(PresentSample(pSample), "PresentSample failed");
@@ -2184,10 +2207,9 @@ void MPEVRCustomPresenter::ScheduleSample(IMFSample* pSample)
     if (m_qGoodPutCnt == 0)
     {
       if (!SampleAvailable())
-      {
-        //Force first sample to be presented (not dropped)
+      {       
         Log("Adding first sample to empty queue");
-        pSample->SetSampleTime(0);
+        // pSample->SetSampleTime(0); //Force first sample to be presented (not dropped)
       }
     }
     PutSample(pSample);
