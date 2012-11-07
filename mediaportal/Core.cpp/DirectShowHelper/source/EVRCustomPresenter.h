@@ -271,6 +271,8 @@ public:
   int            m_regSchedMmcssPriority;   
   int            m_regWorkerMmcssPriority; 
   int            m_regTimerMmcssPriority;   
+  
+  int            m_evrPresVer;
 
 
 friend class StatsRenderer;

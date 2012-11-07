@@ -80,7 +80,8 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
   m_pOuterEVR(NULL),
   m_bEndBuffering(false),
   m_state(MP_RENDER_STATE_SHUTDOWN),
-  m_streamDuration(0)
+  m_streamDuration(0),
+  m_evrPresVer(671)
 {
   ZeroMemory((void*)&m_dPhaseDeviations, sizeof(double) * NUM_PHASE_DEVIATIONS);
 
@@ -91,11 +92,11 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
     LogRotate();
     if (NO_MP_AUD_REND)
     {
-      Log("--- v1.6.670b Unicode with DWM queue support --- instance 0x%x", this);
+      Log("--- v1.6.%d Unicode with DWM queue support --- instance 0x%x", m_evrPresVer, this);
     }
     else
     {
-      Log("--- v1.6.670b Unicode with DWM queue support --- instance 0x%x", this);
+      Log("--- v1.6.%d Unicode with DWM queue support --- instance 0x%x", m_evrPresVer, this);
       Log("---------- audio renderer enabled ------------- instance 0x%x", this);
     }
     m_hMonitor = monitor;
@@ -427,16 +428,11 @@ MPEVRCustomPresenter::~MPEVRCustomPresenter()
 {
   Log("EVRCustomPresenter::dtor - instance 0x%x", this);
   
-  if (m_pCallback)
+  if (m_pCallback != NULL)
   {
-    m_pCallback->PresentImage(0, 0, 0, 0, 0, 0);
+    //Close/release everything
+    ReleaseCallback();
   }
-
-  StopWorkers();
-  ReleaseSurfaces();
-  
-  if (m_pMediaType)
-    m_pMediaType.Release();
     
   m_pDeviceManager = NULL;
   delete m_pStatsRenderer;
@@ -1210,9 +1206,9 @@ HRESULT MPEVRCustomPresenter::LogOutputTypes()
 HRESULT MPEVRCustomPresenter::RenegotiateMediaOutputType()
 {
   //This can be called via the Worker thread, so don't lock that thread here...
-  Log("RenegotiateMediaOutputType 1");
+  //Log("RenegotiateMediaOutputType 1");
   CAutoLock sLock(&m_schedulerParams.csLock);
-  Log("RenegotiateMediaOutputType 2");
+  //Log("RenegotiateMediaOutputType 2");
   CAutoLock tLock(&m_timerParams.csLock);
   m_bFirstInputNotify = FALSE;
   Log("RenegotiateMediaOutputType 3");
@@ -2209,7 +2205,7 @@ void MPEVRCustomPresenter::ScheduleSample(IMFSample* pSample)
       if (!SampleAvailable())
       {       
         Log("Adding first sample to empty queue");
-        // pSample->SetSampleTime(0); //Force first sample to be presented (not dropped)
+        pSample->SetSampleTime(0); //Force first sample to be presented (not dropped)
       }
     }
     PutSample(pSample);
