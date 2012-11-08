@@ -200,11 +200,13 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
   m_regSchedMmcssPriority  = SCHED_MMCSS_PRIORITY;
   m_regWorkerMmcssPriority = WORKER_MMCSS_PRIORITY;
   m_regTimerMmcssPriority  = TIMER_MMCSS_PRIORITY;
+  m_bForceFirstFrame = FORCE_FIRST_FRAME;
+  
   if (ERROR_SUCCESS==RegCreateKeyEx(HKEY_CURRENT_USER, _T("Software\\Team MediaPortal\\EVR Presenter"), 0, NULL, 
                                     REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, NULL, &key, NULL))
   {
     DWORD keyValue;
-    keyValue = ENABLE_DWM_QUEUED ? 1 : 0;
+    keyValue = m_bEnableDWMQueued ? 1 : 0;
     LPCTSTR enableDWMQueued = TEXT("EnableDWMQueuedMode");
     ReadRegistryKeyDword(key, enableDWMQueued, keyValue);
     if (keyValue)
@@ -218,7 +220,7 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
       m_bEnableDWMQueued = false;
     }
 
-    keyValue = DWM_ENABLE_MMCSS ? 1 : 0;
+    keyValue = m_bDWMEnableMMCSS ? 1 : 0;
     LPCTSTR enableDWM_MMCS = TEXT("EnableMMCSSforDWM");
     ReadRegistryKeyDword(key, enableDWM_MMCS, keyValue);
     if (keyValue)
@@ -232,7 +234,7 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
       m_bDWMEnableMMCSS = false;
     }
     
-    keyValue = SCHED_ENABLE_MMCSS ? 1 : 0;
+    keyValue = m_bSchedulerEnableMMCSS ? 1 : 0;
     LPCTSTR enableScheduler_MMCS = TEXT("EnableMMCSSforSchedulerThread");
     ReadRegistryKeyDword(key, enableScheduler_MMCS, keyValue);
     if (keyValue)
@@ -260,7 +262,7 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
       Log("--- Number of DWM buffers = %d (default value, allowed range is 3 - 8)", m_regNumDWMBuffers);
     }
 
-    keyValue = ENABLE_AUDIO_DELAY_COMP ? 1 : 0;
+    keyValue = m_bEnableAudioDelayComp ? 1 : 0;
     LPCTSTR enableAudioDelayComp_DWM = TEXT("EnableDWMAudioDelayComp");
     ReadRegistryKeyDword(key, enableAudioDelayComp_DWM, keyValue);
     if (keyValue)
@@ -328,6 +330,20 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
     {
       m_regTimerMmcssPriority = TIMER_MMCSS_PRIORITY;
       Log("--- Timer Thread MMCSS priority = %d (default value, allowed range is %d to %d)", m_regTimerMmcssPriority, (AVRT_PRIORITY_LOW+1), (AVRT_PRIORITY_CRITICAL+1));
+    }
+
+    keyValue = m_bForceFirstFrame ? 1 : 0;
+    LPCTSTR forceFirstFrame_RRK = TEXT("ForceFirstFrame");
+    ReadRegistryKeyDword(key, forceFirstFrame_RRK, keyValue);
+    if (keyValue)
+    {
+      Log("--- Enable ForceFirstFrame");
+      m_bForceFirstFrame = true;
+    }
+    else
+    {
+      Log("--- Disable ForceFirstFrame");
+      m_bForceFirstFrame = false;
     }
     
     RegCloseKey(key);
@@ -437,7 +453,7 @@ MPEVRCustomPresenter::~MPEVRCustomPresenter()
   m_pDeviceManager = NULL;
   delete m_pStatsRenderer;
   timeEndPeriod(1);
-  Log("Done");
+  Log("dtor - Done");
 }  
 
 
@@ -2145,10 +2161,10 @@ BOOL MPEVRCustomPresenter::PopSample()
   if (!m_qScheduledSamples.IsEmpty() && (m_iFreeSamples < m_regNumSamples))
   {
     m_qScheduledSamples.Get();
-    m_qGoodPopCnt++;
+    // m_qGoodPopCnt++;
     return TRUE;
   }
-  m_qBadPopCnt++;
+  // m_qBadPopCnt++;
   return FALSE;
 }
 
@@ -2205,7 +2221,11 @@ void MPEVRCustomPresenter::ScheduleSample(IMFSample* pSample)
       if (!SampleAvailable())
       {       
         Log("Adding first sample to empty queue");
-        pSample->SetSampleTime(0); //Force first sample to be presented (not dropped)
+        if (m_bForceFirstFrame)
+        {
+          //Force first sample to be presented (not dropped)
+          pSample->SetSampleTime(0);
+        }
       }
     }
     PutSample(pSample);
@@ -2219,7 +2239,7 @@ void MPEVRCustomPresenter::ScheduleSample(IMFSample* pSample)
   else
   {
     ReturnSample(pSample, FALSE);
-    m_qBadPutCnt++;
+    // m_qBadPutCnt++;
     // Notify EVR of sample latency
     if( m_pEventSink )
     {
@@ -2353,7 +2373,7 @@ HRESULT MPEVRCustomPresenter::ProcessInputNotify(int* samplesProcessed, bool set
     else 
     {
       ReturnSample(sample, FALSE);
-      m_qBadPutCnt++;
+      // m_qBadPutCnt++;
       switch (hr)
       {
       case MF_E_TRANSFORM_NEED_MORE_INPUT:
@@ -3573,12 +3593,12 @@ void MPEVRCustomPresenter::ResetFrameStats()
     
   m_PaintTime = 0;
 
-  m_qGoodPopCnt     = 0;
-  m_qBadPopCnt      = 0; 
-  m_qGoodPutCnt     = 0;
-  m_qBadPutCnt      = 0; 
-  m_qBadSampTimCnt  = 0; 
-  m_qCorrSampTimCnt = 0; 
+  m_qGoodPutCnt = 0;
+
+  //  m_qGoodPopCnt     = 0;
+  //  m_qBadPopCnt      = 0; 
+  //  m_qBadPutCnt      = 0; 
+  //  m_qBadSampTimCnt  = 0; 
 
   m_iClockAdjustmentsDone = 0;
 }
@@ -3889,10 +3909,10 @@ void MPEVRCustomPresenter::VideoFpsFromSample(IMFSample* pSample)
     
   m_SampDuration = SetDuration;
   
-  if ( ((SetDuration - Diff) > 50000)  || (-(SetDuration - Diff) > 50000) ) //more than 5ms difference
-  {
-    m_qBadSampTimCnt++;
-  }
+  //  if ( ((SetDuration - Diff) > 50000)  || (-(SetDuration - Diff) > 50000) ) //more than 5ms difference
+  //  {
+  //    m_qBadSampTimCnt++;
+  //  }
 
   if ((Diff < m_rtTimePerFrame*8 && m_rtTimePerFrame && 
       m_fRate == 1.0f && !m_bDVDMenu) || m_bScrubbing)

@@ -40,6 +40,8 @@ using namespace std;
 #define SCHED_ENABLE_MMCSS true
 //Enables DWM audio delay compensation if true
 #define ENABLE_AUDIO_DELAY_COMP false
+//Enables early/forced display of first frame at start of play if true
+#define FORCE_FIRST_FRAME false
 
 //Set MMCSS thread priorities - these are incremented by one to allow DWORD (unsigned) representation in Registry
 #define SCHED_MMCSS_PRIORITY  (AVRT_PRIORITY_HIGH + 1)  
@@ -491,12 +493,12 @@ protected:
   int           m_frameRateRatX2;
   int           m_rawFRRatio;
   
-  int           m_qGoodPopCnt;
-  int           m_qBadPopCnt;
   int           m_qGoodPutCnt;
-  int           m_qBadPutCnt;
-  int           m_qBadSampTimCnt;
-  int           m_qCorrSampTimCnt;
+
+  //  int           m_qGoodPopCnt;
+  //  int           m_qBadPopCnt;
+  //  int           m_qBadPutCnt;
+  //  int           m_qBadSampTimCnt;
   
   LONGLONG      m_stallTime;
   LONGLONG      m_earliestPresentTime;
@@ -512,6 +514,7 @@ protected:
   bool          m_bEnableDWMQueued;
   bool          m_bDWMEnableMMCSS;
   bool          m_bEnableAudioDelayComp;
+  bool          m_bForceFirstFrame;
   
   char          m_filterNames[FILTER_LIST_SIZE][MAX_FILTER_NAME];
   int           m_numFilters;
