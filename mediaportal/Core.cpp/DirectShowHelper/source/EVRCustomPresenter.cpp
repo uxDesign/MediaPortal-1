@@ -81,7 +81,7 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
   m_bEndBuffering(false),
   m_state(MP_RENDER_STATE_SHUTDOWN),
   m_streamDuration(0),
-  m_evrPresVer(672)
+  m_evrPresVer(673)
 {
   ZeroMemory((void*)&m_dPhaseDeviations, sizeof(double) * NUM_PHASE_DEVIATIONS);
 
@@ -2474,14 +2474,13 @@ HRESULT STDMETHODCALLTYPE MPEVRCustomPresenter::ProcessMessage(MFVP_MESSAGE_TYPE
       m_bInputAvailable = FALSE;
       m_bFirstInputNotify = FALSE;
       m_state = MP_RENDER_STATE_PAUSED;
+      ResetTraceStats();
+      ResetFrameStats();
 //      //Setup the Desktop Window Manager (DWM)
 //      DwmInit(m_regNumDWMBuffers, NUM_DWM_FRAMES);
       StartWorkers();
       //DwmEnableMMCSSOnOff(false);
-
       // TODO add 2nd monitor support
-      ResetTraceStats();
-      ResetFrameStats();
     break;
 
     case MFVP_MESSAGE_ENDSTREAMING:
@@ -2538,6 +2537,9 @@ HRESULT STDMETHODCALLTYPE MPEVRCustomPresenter::OnClockStart(MFTIME hnsSystemTim
     return hr;
   }
 
+  ResetTraceStats();
+  ResetFrameStats();
+
   LOG_TRACE("pre buffering on 2");
   m_bDoPreBuffering = true;
 
@@ -2559,12 +2561,12 @@ HRESULT STDMETHODCALLTYPE MPEVRCustomPresenter::OnClockStart(MFTIME hnsSystemTim
 
   m_state = MP_RENDER_STATE_STARTED;
   
-  { //Context for CAutoLock
-    CAutoLock wLock(&m_workerParams.csLock);
-    CAutoLock sLock(&m_schedulerParams.csLock);
-    ResetTraceStats();
-    ResetFrameStats();
-  }
+  //  { //Context for CAutoLock
+  //    CAutoLock wLock(&m_workerParams.csLock);
+  //    CAutoLock sLock(&m_schedulerParams.csLock);
+  //    ResetTraceStats();
+  //    ResetFrameStats();
+  //  }
 
   NotifyWorker(true);
   NotifyScheduler(true);
@@ -2633,13 +2635,14 @@ HRESULT STDMETHODCALLTYPE MPEVRCustomPresenter::OnClockRestart(MFTIME hnsSystemT
     return hr;
   }
 
+  ResetFrameStats();
+
   LOG_TRACE("pre buffering on 3");
   m_bDoPreBuffering = true;
   Log("OnClockRestart: %6.3f", hnsSystemTime / 10000000.0);
   ASSERT(m_state == MP_RENDER_STATE_PAUSED);
   m_state = MP_RENDER_STATE_STARTED;
   
-  ResetFrameStats();
   NotifyWorker(true);
   NotifyScheduler(true);
   
@@ -3558,6 +3561,8 @@ void MPEVRCustomPresenter::ResetTraceStats()
 
 void MPEVRCustomPresenter::ResetFrameStats()
 {
+  CAutoLock sLock(&m_lockRenderStats);
+
   m_iFramesDrawn    = 0;
   m_iFramesDropped  = 0;
   m_iFramesProcessed = 0;
@@ -3896,6 +3901,8 @@ void MPEVRCustomPresenter::UpdateDisplayFPS()
 
 void MPEVRCustomPresenter::VideoFpsFromSample(IMFSample* pSample)
 {
+  CAutoLock sLock(&m_lockRenderStats);
+
   LONGLONG PrevTime = m_LastScheduledUncorrectedSampleTime;
   LONGLONG Time;
   LONGLONG SetDuration;

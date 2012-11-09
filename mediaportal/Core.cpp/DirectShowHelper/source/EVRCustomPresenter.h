@@ -338,9 +338,12 @@ protected:
   CComPtr<IDirect3DTexture9>        textures[MAX_SURFACES];
   CComPtr<IDirect3DSurface9>        surfaces[MAX_SURFACES];
   CComPtr<IMFSample>                samples[MAX_SURFACES];
+
   CCritSec                          m_lockSamples;
   CCritSec                          m_lockRasterData;
   CCritSec                          m_lockCallback;
+  CCritSec                          m_lockRenderStats;
+
   int                               m_iFreeSamples;
   IMFSample*                        m_vFreeSamples[MAX_SURFACES];
   IMFSample*                        m_vAllSamples[MAX_SURFACES];
