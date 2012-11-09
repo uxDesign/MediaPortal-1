@@ -81,7 +81,7 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
   m_bEndBuffering(false),
   m_state(MP_RENDER_STATE_SHUTDOWN),
   m_streamDuration(0),
-  m_evrPresVer(671)
+  m_evrPresVer(672)
 {
   ZeroMemory((void*)&m_dPhaseDeviations, sizeof(double) * NUM_PHASE_DEVIATIONS);
 
@@ -416,8 +416,10 @@ void MPEVRCustomPresenter::ResetEVRStatCounters()
 
 void MPEVRCustomPresenter::ReleaseCallback()
 {
-  Log("EVRCustomPresenter::ReleaseCallback() - instance 0x%x", this);
+  Log("EVRCustomPresenter::ReleaseCallback() - Start - instance 0x%x", this);
   CAutoLock sLock(&m_lockCallback);
+
+  DwmReset(false);
 
   m_bEnableDWMQueued = false;
   
@@ -438,11 +440,12 @@ void MPEVRCustomPresenter::ReleaseCallback()
 
   m_pCallback = NULL;
 
+  Log("EVRCustomPresenter::ReleaseCallback() - Done - instance 0x%x", this);
 }
 
 MPEVRCustomPresenter::~MPEVRCustomPresenter()
 {
-  Log("EVRCustomPresenter::dtor - instance 0x%x", this);
+  Log("EVRCustomPresenter::dtor - Start - instance 0x%x", this);
   
   if (m_pCallback != NULL)
   {
@@ -453,7 +456,7 @@ MPEVRCustomPresenter::~MPEVRCustomPresenter()
   m_pDeviceManager = NULL;
   delete m_pStatsRenderer;
   timeEndPeriod(1);
-  Log("dtor - Done");
+  Log("EVRCustomPresenter::dtor - Done - instance 0x%x", this);
 }  
 
 
@@ -1977,14 +1980,14 @@ void MPEVRCustomPresenter::DwmInit(UINT buffers, UINT rfshPerFrame)
   
   DwmFlush();
   DwmSetParameters(TRUE, buffers, rfshPerFrame); //'Source rate' mode
-  WaitForSingleObject(m_dummyEvent, 50); //Wait for 50ms
+  Sleep(50);
   
   DwmFlush();
   DwmSetParameters(FALSE, buffers, rfshPerFrame); //'Display rate' mode
-  WaitForSingleObject(m_dummyEvent, 50); //Wait for 50ms
+  Sleep(50);
 
   DwmEnableMMCSSOnOff(m_bDWMEnableMMCSS);
-  WaitForSingleObject(m_dummyEvent, 50); //Wait for 50ms
+  Sleep(50);
   
   m_bDWMinit = true;
 }  
@@ -2009,11 +2012,11 @@ void MPEVRCustomPresenter::DwmReset(bool newWinHand)
   
   DwmFlush();
   DwmSetParameters(TRUE, 2, 1); //'Source rate' mode
-  WaitForSingleObject(m_dummyEvent, 50); //Wait for 50ms
+  Sleep(50);
   
   DwmFlush();
   DwmSetParameters(FALSE, 2, 1); //'Display rate' mode
-  WaitForSingleObject(m_dummyEvent, 150); //Wait for 150ms
+  Sleep(150);
   
   m_bDWMinit = false;
 }  

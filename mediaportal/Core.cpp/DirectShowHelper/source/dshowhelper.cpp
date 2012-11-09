@@ -684,7 +684,6 @@ void EvrDeinit()
   {
     if (m_evrPresenter)
     {
-      m_evrPresenter->DwmReset(false);
       m_evrPresenter->ReleaseCallback();
     }
     m_evrPresenter = NULL;

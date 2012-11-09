@@ -518,9 +518,7 @@ protected:
   
   char          m_filterNames[FILTER_LIST_SIZE][MAX_FILTER_NAME];
   int           m_numFilters;
-  
-  HANDLE        m_dummyEvent;
-  
+    
   BOOL          m_bIsWin7;
   bool          m_bMsVideoCodec;
   
