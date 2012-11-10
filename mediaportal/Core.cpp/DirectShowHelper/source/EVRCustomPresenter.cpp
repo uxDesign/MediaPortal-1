@@ -81,7 +81,7 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
   m_bEndBuffering(false),
   m_state(MP_RENDER_STATE_SHUTDOWN),
   m_streamDuration(0),
-  m_evrPresVer(673)
+  m_evrPresVer(674)
 {
   ZeroMemory((void*)&m_dPhaseDeviations, sizeof(double) * NUM_PHASE_DEVIATIONS);
 
@@ -1976,18 +1976,13 @@ void MPEVRCustomPresenter::DwmInit(UINT buffers, UINT rfshPerFrame)
     
   Log("EVRCustomPresenter::DwmInit, frame = %d", m_iFramesDrawn);  
   //Initialise the DWM parameters
-  DwmGetState();
-  
+  DwmGetState();  
   DwmFlush();
-  DwmSetParameters(TRUE, buffers, rfshPerFrame); //'Source rate' mode
-  Sleep(50);
-  
+  DwmSetParameters(TRUE, buffers, rfshPerFrame); //'Source rate' mode  
   DwmFlush();
   DwmSetParameters(FALSE, buffers, rfshPerFrame); //'Display rate' mode
-  Sleep(50);
-
+  DwmFlush();
   DwmEnableMMCSSOnOff(m_bDWMEnableMMCSS);
-  Sleep(50);
   
   m_bDWMinit = true;
 }  
@@ -2012,11 +2007,9 @@ void MPEVRCustomPresenter::DwmReset(bool newWinHand)
   
   DwmFlush();
   DwmSetParameters(TRUE, 2, 1); //'Source rate' mode
-  Sleep(50);
-  
   DwmFlush();
   DwmSetParameters(FALSE, 2, 1); //'Display rate' mode
-  Sleep(150);
+  DwmFlush();
   
   m_bDWMinit = false;
 }  
@@ -2458,10 +2451,12 @@ HRESULT STDMETHODCALLTYPE MPEVRCustomPresenter::ProcessMessage(MFVP_MESSAGE_TYPE
       
         int samplesProcessed = 0;
 
-        if (m_state == MP_RENDER_STATE_STARTED)
-          NotifyWorker(true);
-        else
-          ProcessInputNotify(&samplesProcessed, false);
+        NotifyWorker(true);
+
+        //        if (m_state == MP_RENDER_STATE_STARTED)
+        //          NotifyWorker(true);
+        //        else
+        //          ProcessInputNotify(&samplesProcessed, false);
 
         break;
       }
