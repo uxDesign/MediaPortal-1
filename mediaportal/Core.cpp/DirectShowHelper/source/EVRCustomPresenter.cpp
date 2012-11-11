@@ -81,7 +81,7 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
   m_bEndBuffering(false),
   m_state(MP_RENDER_STATE_SHUTDOWN),
   m_streamDuration(0),
-  m_evrPresVer(674)
+  m_evrPresVer(675)
 {
   ZeroMemory((void*)&m_dPhaseDeviations, sizeof(double) * NUM_PHASE_DEVIATIONS);
 
@@ -380,6 +380,7 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
   
   //Setup the Desktop Window Manager (DWM)
   DwmInit(m_regNumDWMBuffers, NUM_DWM_FRAMES);
+  StartWorkers();
 }
 
 void MPEVRCustomPresenter::SetFrameSkipping(bool onOff)
@@ -737,7 +738,7 @@ HRESULT MPEVRCustomPresenter::InitServicePointers(IMFTopologyServiceLookup *pLoo
     ASSERT(cCount == 0 || cCount == 1);
   }
 
-  m_state = MP_RENDER_STATE_STOPPED;
+  SetRenderState(MP_RENDER_STATE_STOPPED);
 
   return S_OK;
 }
@@ -747,10 +748,12 @@ HRESULT MPEVRCustomPresenter::ReleaseServicePointers()
 {
   Log("ReleaseServicePointers");
 
-  {
-    CAutoLock lock(this);
-    m_state = MP_RENDER_STATE_SHUTDOWN;
-  }
+  //  {
+  //    CAutoLock lock(this);
+  //    m_state = MP_RENDER_STATE_SHUTDOWN;
+  //  }
+
+  SetRenderState(MP_RENDER_STATE_SHUTDOWN);
 
   DoFlush(TRUE);
 
@@ -1000,13 +1003,12 @@ HRESULT MPEVRCustomPresenter::SetMediaType(CComPtr<IMFMediaType> pType, BOOL* pb
 }
 
 
+//This method is only called from RenegotiateMediaOutputType()
+//and all necessary thread locking is performed there.
+//Only call this when threads are locked/not running/inactive.
 void MPEVRCustomPresenter::ReAllocSurfaces()
 {
   Log("ReallocSurfaces");
-  //make sure all threads are paused
-  CAutoLock wLock(&m_workerParams.csLock);
-  CAutoLock sLock(&m_schedulerParams.csLock);
-  CAutoLock tLock(&m_timerParams.csLock);
   
   ReleaseSurfaces();
 
@@ -2437,29 +2439,18 @@ HRESULT STDMETHODCALLTYPE MPEVRCustomPresenter::ProcessMessage(MFVP_MESSAGE_TYPE
       // The mixer's output format has changed. The EVR will initiate format negotiation.
       Log("ProcessMessage MFVP_MESSAGE_INVALIDATEMEDIATYPE");
       //LogOutputTypes();
-      { //Context for CAutoLock
+      { //Context for CAutoLock - just for Worker thread (others locked in RenegotiateMediaOutputType())
         CAutoLock wLock(&m_workerParams.csLock);
         hr = RenegotiateMediaOutputType();
       }
     break;
 
     case MFVP_MESSAGE_PROCESSINPUTNOTIFY:
-      {
-        // One input stream on the mixer has received a new sample.
-        LOG_TRACE("ProcessMessage MFVP_MESSAGE_PROCESSINPUTNOTIFY");
-        m_bFirstInputNotify = TRUE;
-      
-        int samplesProcessed = 0;
-
-        NotifyWorker(true);
-
-        //        if (m_state == MP_RENDER_STATE_STARTED)
-        //          NotifyWorker(true);
-        //        else
-        //          ProcessInputNotify(&samplesProcessed, false);
-
-        break;
-      }
+      // One input stream on the mixer has received a new sample.
+      LOG_TRACE("ProcessMessage MFVP_MESSAGE_PROCESSINPUTNOTIFY");
+      m_bFirstInputNotify = TRUE;      
+      NotifyWorker(true);
+    break;
 
     case MFVP_MESSAGE_BEGINSTREAMING:
       // The EVR switched from stopped to paused. The presenter should allocate resources.
@@ -2468,20 +2459,19 @@ HRESULT STDMETHODCALLTYPE MPEVRCustomPresenter::ProcessMessage(MFVP_MESSAGE_TYPE
       m_bEndStreaming = FALSE;
       m_bInputAvailable = FALSE;
       m_bFirstInputNotify = FALSE;
-      m_state = MP_RENDER_STATE_PAUSED;
+      SetRenderState(MP_RENDER_STATE_PAUSED);
       ResetTraceStats();
       ResetFrameStats();
-//      //Setup the Desktop Window Manager (DWM)
-//      DwmInit(m_regNumDWMBuffers, NUM_DWM_FRAMES);
+      //      //Setup the Desktop Window Manager (DWM)
+      //      DwmInit(m_regNumDWMBuffers, NUM_DWM_FRAMES);
       StartWorkers();
-      //DwmEnableMMCSSOnOff(false);
       // TODO add 2nd monitor support
     break;
 
     case MFVP_MESSAGE_ENDSTREAMING:
       // The EVR switched from running or paused to stopped. The presenter should free resources.
       Log("ProcessMessage MFVP_MESSAGE_ENDSTREAMING");
-      m_state = MP_RENDER_STATE_STOPPED;
+      SetRenderState(MP_RENDER_STATE_STOPPED);
       m_EndOfStreamingEvent.Set();
     break;
 
@@ -2553,16 +2543,9 @@ HRESULT STDMETHODCALLTYPE MPEVRCustomPresenter::OnClockStart(MFTIME hnsSystemTim
       //DoFlush(TRUE);
     }
   }
-
-  m_state = MP_RENDER_STATE_STARTED;
   
-  //  { //Context for CAutoLock
-  //    CAutoLock wLock(&m_workerParams.csLock);
-  //    CAutoLock sLock(&m_schedulerParams.csLock);
-  //    ResetTraceStats();
-  //    ResetFrameStats();
-  //  }
-
+  SetRenderState(MP_RENDER_STATE_STARTED);
+  
   NotifyWorker(true);
   NotifyScheduler(true);
   GetAVSyncClockInterface();
@@ -2591,7 +2574,7 @@ HRESULT STDMETHODCALLTYPE MPEVRCustomPresenter::OnClockStop(MFTIME hnsSystemTime
   Log("OnClockStop: %6.3f", hnsSystemTime / 10000000.0);
   if (m_state != MP_RENDER_STATE_STOPPED)
   {
-    m_state = MP_RENDER_STATE_STOPPED;
+    SetRenderState(MP_RENDER_STATE_STOPPED);
     CAutoLock sLock(&m_schedulerParams.csLock);
     DoFlush(FALSE);
   }
@@ -2612,7 +2595,7 @@ HRESULT STDMETHODCALLTYPE MPEVRCustomPresenter::OnClockPause(MFTIME hnsSystemTim
   }
 
   Log("OnClockPause: %6.3f", hnsSystemTime / 10000000.0);
-  m_state = MP_RENDER_STATE_PAUSED;
+  SetRenderState(MP_RENDER_STATE_PAUSED);
   m_bEndBuffering = false;
 
   return S_OK;
@@ -2636,7 +2619,7 @@ HRESULT STDMETHODCALLTYPE MPEVRCustomPresenter::OnClockRestart(MFTIME hnsSystemT
   m_bDoPreBuffering = true;
   Log("OnClockRestart: %6.3f", hnsSystemTime / 10000000.0);
   ASSERT(m_state == MP_RENDER_STATE_PAUSED);
-  m_state = MP_RENDER_STATE_STARTED;
+  SetRenderState(MP_RENDER_STATE_STARTED);
   
   NotifyWorker(true);
   NotifyScheduler(true);

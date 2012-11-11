@@ -174,6 +174,7 @@ UINT CALLBACK WorkerThread(void* param)
     else
       dwObject = WaitForMultipleObjects (2, hEvts, FALSE, 50);
 
+    if (p->pPresenter->IsRunning())
     {	//Context for CAutoLock			
       CAutoLock sLock(&p->csLock);
       
@@ -333,6 +334,7 @@ UINT CALLBACK SchedulerThread(void* param)
         break;
     }
 
+    if (p->pPresenter->IsRunning())
     { //Context for CAutoLock	
   	  CAutoLock sLock(&p->csLock);	  
 
@@ -352,6 +354,12 @@ UINT CALLBACK SchedulerThread(void* param)
       
       if (LOG_DELAYS && (diff > (500000 + delay)))
         Log("High CheckForScheduledSample() latency in SchedulerThread: %.2f ms", ((double)diff)/10000.0);
+    }
+    else
+    {
+      idleWait = true;
+      delay = 0;
+      hnsTargetTime = 0;
     }
   }
   

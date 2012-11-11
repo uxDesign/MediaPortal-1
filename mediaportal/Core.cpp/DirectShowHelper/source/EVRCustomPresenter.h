@@ -276,6 +276,11 @@ public:
   
   int            m_evrPresVer;
 
+  // IsRunning: The "running" state is not shutdown.
+  inline BOOL IsRunning() const
+  {
+    return (m_state != MP_RENDER_STATE_SHUTDOWN);
+  }
 
 friend class StatsRenderer;
 
@@ -343,6 +348,7 @@ protected:
   CCritSec                          m_lockRasterData;
   CCritSec                          m_lockCallback;
   CCritSec                          m_lockRenderStats;
+  CCritSec                          m_lockMState;
 
   int                               m_iFreeSamples;
   IMFSample*                        m_vFreeSamples[MAX_SURFACES];
@@ -563,4 +569,11 @@ protected:
   {
     return ((m_state == MP_RENDER_STATE_STARTED) || (m_state == MP_RENDER_STATE_PAUSED));
   }
+  
+  inline void SetRenderState(MP_RENDER_STATE renderState)
+  {
+    CAutoLock msLock(&m_lockMState);
+    m_state = renderState;
+  }
+  
 };
