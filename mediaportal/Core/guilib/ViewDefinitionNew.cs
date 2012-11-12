@@ -32,7 +32,7 @@ namespace MediaPortal.GUI.View
   [Serializable]
   public class ViewDefinitionNew
   {
-    protected List<FilterLevels> _listFilterLevels = new List<FilterLevels>();
+    protected List<FilterLevel> _listFilterLevels = new List<FilterLevel>();
     protected List<ViewDefinitionNew> _listSubViews = new List<ViewDefinitionNew>();
     private string _name;
 
@@ -46,7 +46,7 @@ namespace MediaPortal.GUI.View
     }
 
     [XmlElement("FilterLevels")]
-    public List<FilterLevels> Levels
+    public List<FilterLevel> Levels
     {
       get { return _listFilterLevels; }
       set { _listFilterLevels = value; }
