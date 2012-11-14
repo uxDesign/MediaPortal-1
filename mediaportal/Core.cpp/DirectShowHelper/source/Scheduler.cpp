@@ -239,8 +239,9 @@ UINT CALLBACK SchedulerThread(void* param)
   LONGLONG delErr = 0;
   DWORD timDel = 0;
   DWORD dwObject;
-  HANDLE hEvts2[] = {p->eHasWork, p->eTimerEnd};
-  HANDLE hEvts3[] = {p->eHasWork, p->eTimerEnd, p->eHasWorkLP};
+
+  HANDLE hEvts3[] = {p->eFlush, p->eHasWork, p->eTimerEnd};
+  HANDLE hEvts4[] = {p->eFlush, p->eHasWork, p->eTimerEnd, p->eHasWorkLP};
 
   
   if (p->pPresenter->m_bSchedulerEnableMMCSS)
@@ -291,7 +292,7 @@ UINT CALLBACK SchedulerThread(void* param)
       delay = 100000;
       timDel = (DWORD)(delay/10000);
       LOG_TRACE("Setting Scheduler Timer to %d ms idle time", timDel);
-      dwObject = WaitForMultipleObjects (3, hEvts3, FALSE, timDel );
+      dwObject = WaitForMultipleObjects (4, hEvts4, FALSE, timDel );
     }
     else if (delay >= 10000) // set timer if hnsTargetTime is at least 1 ms in the future
     {     
@@ -300,15 +301,22 @@ UINT CALLBACK SchedulerThread(void* param)
 
       p->pPresenter->NotifyTimer(hnsTargetTime); //Wake up Timer thread
 
-      dwObject = WaitForMultipleObjects (2, hEvts2, FALSE, timDel + 1);
+      dwObject = WaitForMultipleObjects (3, hEvts3, FALSE, timDel + 1);
     }
           
     switch (dwObject)
     {
-      case WAIT_OBJECT_0 :     //eHasWork
+      case WAIT_OBJECT_0 :     //eFlush
+        // Log("Sch - FlushEvent");
+        p->eFlush.Reset();
+        p->pPresenter->DelegatedFlush();
+        delay = 0;
+        hnsTargetTime = 0;
+        break;
+      case WAIT_OBJECT_0 + 1 :     //eHasWork
         p->eHasWork.Reset();
         break;
-      case WAIT_OBJECT_0 + 1 : //eTimerEnd
+      case WAIT_OBJECT_0 + 2 : //eTimerEnd
         p->eTimerEnd.Reset();
         if (LOG_DELAYS)
         {
@@ -319,7 +327,7 @@ UINT CALLBACK SchedulerThread(void* param)
             Log("High timer latency in SchedulerThread: %.2f ms, target: %.2f ms", ((double)delErr)/10000.0, ((double)delay)/10000.0);
         }
         break;
-      case WAIT_OBJECT_0 + 2 : //eHasWorkLP
+      case WAIT_OBJECT_0 + 3 : //eHasWorkLP
         p->eHasWorkLP.Reset();
         break;
       case WAIT_TIMEOUT :
@@ -334,6 +342,7 @@ UINT CALLBACK SchedulerThread(void* param)
         break;
     }
 
+    
     if (p->pPresenter->IsRunning())
     { //Context for CAutoLock	
   	  CAutoLock sLock(&p->csLock);	  
@@ -361,6 +370,7 @@ UINT CALLBACK SchedulerThread(void* param)
       delay = 0;
       hnsTargetTime = 0;
     }
+    
   }
   
   // quit

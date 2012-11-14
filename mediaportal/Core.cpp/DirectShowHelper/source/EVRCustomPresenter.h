@@ -42,6 +42,10 @@ using namespace std;
 #define ENABLE_AUDIO_DELAY_COMP false
 //Enables early/forced display of first frame at start of play if true
 #define FORCE_FIRST_FRAME false
+//Enables lower resolution/lower CPU usage Vsync correction timing if true
+#define LOW_RES_TIMING false
+//Minimum usable vsync correction delay in 100 ns units (used when LOW_RES_TIMING is true)
+#define MIN_VSC_DELAY 12000
 
 //Set MMCSS thread priorities - these are incremented by one to allow DWORD (unsigned) representation in Registry
 #define SCHED_MMCSS_PRIORITY  (AVRT_PRIORITY_HIGH + 1)  
@@ -91,6 +95,9 @@ using namespace std;
 // uncomment the //Log to enable extra logging
 #define LOG_LATEFR //Log
 
+// Disable some logging in skip-step FFWD/RWD
+#define LOG_NOSCRUB if (!m_bZeroScrub) Log 
+
 // Macro for locking 
 #define TIME_LOCK(obj, crit, name)  \
   LONGLONG then = GetCurrentTimestamp(); \
@@ -137,6 +144,7 @@ typedef struct _SchedulerParams
   CAMEvent eHasWork;   //Urgent event
   CAMEvent eHasWorkLP; //Low-priority event
   CAMEvent eTimerEnd;  //Timer thread event
+  CAMEvent eFlush;  //Delegated flush event
   BOOL bDone;
   LONGLONG llTime;     //Timer target time
 } SchedulerParams;
@@ -248,6 +256,7 @@ public:
 
   void           NotifyTimer(LONGLONG targetTime);
   void           NotifySchedulerTimer();
+  void           DelegatedFlush();
 
   // Release EVR callback (C# side)
   void           ReleaseCallback();
@@ -377,7 +386,6 @@ protected:
   BOOL                              m_bEndStreaming;
   bool                              m_bEndBuffering;
   bool                              m_bNewSegment;
-  bool                              m_bFlush;
   bool                              m_bDoPreBuffering;
   int                               m_iFramesDrawn;
   int                               m_iFramesDropped;
@@ -524,6 +532,7 @@ protected:
   bool          m_bDWMEnableMMCSS;
   bool          m_bEnableAudioDelayComp;
   bool          m_bForceFirstFrame;
+  bool          m_bLowResTiming;
   
   char          m_filterNames[FILTER_LIST_SIZE][MAX_FILTER_NAME];
   int           m_numFilters;

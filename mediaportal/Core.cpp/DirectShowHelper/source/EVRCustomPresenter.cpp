@@ -81,7 +81,7 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
   m_bEndBuffering(false),
   m_state(MP_RENDER_STATE_SHUTDOWN),
   m_streamDuration(0),
-  m_evrPresVer(675)
+  m_evrPresVer(676)
 {
   ZeroMemory((void*)&m_dPhaseDeviations, sizeof(double) * NUM_PHASE_DEVIATIONS);
 
@@ -201,6 +201,7 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
   m_regWorkerMmcssPriority = WORKER_MMCSS_PRIORITY;
   m_regTimerMmcssPriority  = TIMER_MMCSS_PRIORITY;
   m_bForceFirstFrame = FORCE_FIRST_FRAME;
+  m_bLowResTiming = LOW_RES_TIMING;
   
   if (ERROR_SUCCESS==RegCreateKeyEx(HKEY_CURRENT_USER, _T("Software\\Team MediaPortal\\EVR Presenter"), 0, NULL, 
                                     REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, NULL, &key, NULL))
@@ -344,6 +345,20 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
     {
       Log("--- Disable ForceFirstFrame");
       m_bForceFirstFrame = false;
+    }
+
+    keyValue = m_bLowResTiming ? 1 : 0;
+    LPCTSTR lowResTiming_RRK = TEXT("LowResVSyncCorrectionTiming");
+    ReadRegistryKeyDword(key, lowResTiming_RRK, keyValue);
+    if (keyValue)
+    {
+      Log("--- Enable Low Resolution Timing");
+      m_bLowResTiming = true;
+    }
+    else
+    {
+      Log("--- Disable Low Resolution Timing");
+      m_bLowResTiming = false;
     }
     
     RegCloseKey(key);
@@ -748,11 +763,6 @@ HRESULT MPEVRCustomPresenter::ReleaseServicePointers()
 {
   Log("ReleaseServicePointers");
 
-  //  {
-  //    CAutoLock lock(this);
-  //    m_state = MP_RENDER_STATE_SHUTDOWN;
-  //  }
-
   SetRenderState(MP_RENDER_STATE_SHUTDOWN);
 
   DoFlush(TRUE);
@@ -1033,28 +1043,33 @@ void MPEVRCustomPresenter::ReAllocSurfaces()
   CHECK_HR(m_pDeviceManager->LockDevice(hDevice, &pDevice, TRUE), "Cannot lock device");
   HRESULT hr;
   Log("Textures will be %dx%d", m_iVideoWidth, m_iVideoHeight);
-  for (int i = 0; i < m_regNumSamples; i++)
-  {
-    hr = pDevice->CreateTexture(m_iVideoWidth, m_iVideoHeight, 1,
-      D3DUSAGE_RENDERTARGET, D3DFMT_X8R8G8B8, D3DPOOL_DEFAULT,
-      &textures[i], NULL);
-    if (FAILED(hr))
+  
+  { //Context for CAutoLock
+    CAutoLock sLock(&m_lockSamples);
+    for (int i = 0; i < m_regNumSamples; i++)
     {
-      Log("Could not create offscreen surface. Error 0x%x", hr);
+      hr = pDevice->CreateTexture(m_iVideoWidth, m_iVideoHeight, 1,
+        D3DUSAGE_RENDERTARGET, D3DFMT_X8R8G8B8, D3DPOOL_DEFAULT,
+        &textures[i], NULL);
+      if (FAILED(hr))
+      {
+        Log("Could not create offscreen surface. Error 0x%x", hr);
+      }
+      CHECK_HR(textures[i]->GetSurfaceLevel(0, &surfaces[i]), "Could not get surface from texture");
+  
+      hr = m_pMFCreateVideoSampleFromSurface(surfaces[i], &samples[i]);
+      if (FAILED(hr))
+      {
+        Log("CreateVideoSampleFromSurface failed: 0x%x", hr);
+        return;
+      }
+      Log("Adding sample: 0x%x", samples[i]);
+      m_vFreeSamples[i] = samples[i];
+      m_vAllSamples[i] = samples[i];
     }
-    CHECK_HR(textures[i]->GetSurfaceLevel(0, &surfaces[i]), "Could not get surface from texture");
-
-    hr = m_pMFCreateVideoSampleFromSurface(surfaces[i], &samples[i]);
-    if (FAILED(hr))
-    {
-      Log("CreateVideoSampleFromSurface failed: 0x%x", hr);
-      return;
-    }
-    Log("Adding sample: 0x%x", samples[i]);
-    m_vFreeSamples[i] = samples[i];
-    m_vAllSamples[i] = samples[i];
+    m_iFreeSamples = m_regNumSamples;
   }
-  m_iFreeSamples = m_regNumSamples;
+  
   CHECK_HR(m_pDeviceManager->UnlockDevice(hDevice, FALSE), "failed: Unlock device");
   Log("Releasing device: %d", pDevice->Release());
   CHECK_HR(m_pDeviceManager->CloseDeviceHandle(hDevice), "failed: CloseDeviceHandle");
@@ -1226,12 +1241,13 @@ HRESULT MPEVRCustomPresenter::LogOutputTypes()
 
 HRESULT MPEVRCustomPresenter::RenegotiateMediaOutputType()
 {
+  m_bFirstInputNotify = FALSE;
   //This can be called via the Worker thread, so don't lock that thread here...
   //Log("RenegotiateMediaOutputType 1");
   CAutoLock sLock(&m_schedulerParams.csLock);
   //Log("RenegotiateMediaOutputType 2");
   CAutoLock tLock(&m_timerParams.csLock);
-  m_bFirstInputNotify = FALSE;
+  DoFlush(TRUE);
   Log("RenegotiateMediaOutputType 3");
   HRESULT hr = S_OK;
   BOOL fFoundMediaType = FALSE;
@@ -1341,11 +1357,37 @@ HRESULT MPEVRCustomPresenter::GetFreeSample(IMFSample** ppSample)
   return S_OK;
 }
 
+void MPEVRCustomPresenter::DelegatedFlush()
+{
+  // only flush if not in DVD menu
+  if (!m_bDVDMenu)
+  {
+    //Log("DelegatedFlush() 1");
+    DoFlush(FALSE);
+    m_earliestPresentTime = 0;
+  }
+  else
+  {
+    //Log("DelegatedFlush() 2");
+    m_bFlushDone.Set();
+  }
+}
 
 void MPEVRCustomPresenter::Flush(BOOL forced)
 {
+  CAutoLock lock(this);
   m_bFlushDone.Reset();
-  m_bFlush = true;
+  
+  if (m_bSchedulerRunning)
+  {
+    //This flush is delegated to the Scheduler thread, so wake it up....
+    m_schedulerParams.eFlush.Set();
+  }
+  else 
+  {
+    DoFlush(TRUE);
+    Log("Flush() - Scheduler thread is shut down");
+  }
   m_bFlushDone.Wait();
 }
 
@@ -1373,7 +1415,6 @@ void MPEVRCustomPresenter::DoFlush(BOOL forced)
 
   CheckForEndOfStream();  
   m_bFlushDone.Set();
-  m_bFlush = FALSE;
   LOG_TRACE("pre buffering on 1");
   m_bDoPreBuffering = true;
 }
@@ -1510,23 +1551,6 @@ HRESULT MPEVRCustomPresenter::CheckForScheduledSample(LONGLONG *pTargetTime, LON
   }
 
   // Allow 'hystersisTime' late or early frames to avoid synchronised judder problems. 
-
-  // only flush queues while not in DVD menus
-  if (m_bFlush)
-  {
-    if (!m_bDVDMenu)
-    {
-      DoFlush(FALSE);
-      *pTargetTime = 0;
-      m_earliestPresentTime = 0;
-      return S_OK;
-    }
-    else
-    {
-      m_bFlushDone.Set();
-      m_bFlush = false;
-    }
-  }
 
   //Bail out after presenting first frame in skip-step FFWD/RWD mode
   if (m_bZeroScrub && (m_iFramesProcessed > 0))
@@ -1673,9 +1697,9 @@ HRESULT MPEVRCustomPresenter::CheckForScheduledSample(LONGLONG *pTargetTime, LON
       m_lastPresentTime = systemTime;
       if (m_iFramesDrawn == 0)
       {
-        Log("Present first sample - start");
+        LOG_NOSCRUB("Present first sample - start");
         CHECK_HR(PresentSample(pSample), "PresentSample failed");
-        Log("Present first sample - end");
+        LOG_NOSCRUB("Present first sample - end");
       }
       else
       {
@@ -2168,7 +2192,6 @@ BOOL MPEVRCustomPresenter::PopSample()
 
 int MPEVRCustomPresenter::CheckQueueCount()
 {
-  CAutoLock sLock(&m_lockSamples);
   return m_qScheduledSamples.Count();
 }
 
@@ -2218,7 +2241,7 @@ void MPEVRCustomPresenter::ScheduleSample(IMFSample* pSample)
     {
       if (!SampleAvailable())
       {       
-        Log("Adding first sample to empty queue");
+        LOG_NOSCRUB("Adding first sample to empty queue");
         if (m_bForceFirstFrame)
         {
           //Force first sample to be presented (not dropped)
@@ -2439,15 +2462,20 @@ HRESULT STDMETHODCALLTYPE MPEVRCustomPresenter::ProcessMessage(MFVP_MESSAGE_TYPE
       // The mixer's output format has changed. The EVR will initiate format negotiation.
       Log("ProcessMessage MFVP_MESSAGE_INVALIDATEMEDIATYPE");
       //LogOutputTypes();
-      { //Context for CAutoLock - just for Worker thread (others locked in RenegotiateMediaOutputType())
-        CAutoLock wLock(&m_workerParams.csLock);
-        hr = RenegotiateMediaOutputType();
-      }
+      //      { //Context for CAutoLock - just for Worker thread (others locked in RenegotiateMediaOutputType())
+      //        CAutoLock wLock(&m_workerParams.csLock);
+      //        Log("RenegotiateMediaOutputType 0");
+      //        hr = RenegotiateMediaOutputType();
+      //      }
+      Log("RenegotiateMediaOutputType 0");
+      hr = RenegotiateMediaOutputType();
     break;
 
     case MFVP_MESSAGE_PROCESSINPUTNOTIFY:
       // One input stream on the mixer has received a new sample.
-      LOG_TRACE("ProcessMessage MFVP_MESSAGE_PROCESSINPUTNOTIFY");
+      if (!m_bFirstInputNotify)
+        Log("ProcessMessage MFVP_MESSAGE_PROCESSINPUTNOTIFY");
+        
       m_bFirstInputNotify = TRUE;      
       NotifyWorker(true);
     break;
@@ -2754,14 +2782,18 @@ void MPEVRCustomPresenter::ReleaseSurfaces()
     m_pCallback->PresentImage(0, 0, 0, 0, 0, 0);
   }
   DoFlush(TRUE);
-  m_iFreeSamples = 0;
-  for (int i = 0; i < MAX_SURFACES; i++)
-  {
-    samples[i] = NULL;
-    surfaces[i] = NULL;
-    textures[i] = NULL;
-    m_vFreeSamples[i] = NULL;
-    m_vAllSamples[i] = NULL;
+
+  { //Context for CAutoLock
+    CAutoLock sLock(&m_lockSamples);
+    m_iFreeSamples = 0;
+    for (int i = 0; i < MAX_SURFACES; i++)
+    {
+      samples[i] = NULL;
+      surfaces[i] = NULL;
+      textures[i] = NULL;
+      m_vFreeSamples[i] = NULL;
+      m_vAllSamples[i] = NULL;
+    }
   }
 
   m_pDeviceManager->UnlockDevice(hDevice, FALSE);
@@ -2786,20 +2818,7 @@ HRESULT MPEVRCustomPresenter::Paint(CComPtr<IDirect3DSurface9> pSurface)
     {
       return E_FAIL;
     }
-
-    // Presenter is flushing samples, do not render unless in DVD menus
-    if (m_bFlush)
-    {
-      if (!m_bDVDMenu)
-      {
-        return S_OK;
-      }
-      else
-      {
-        m_bFlush = false;
-      }
-    }
-
+    
     HRESULT hr;
 
     if (FAILED(hr = m_pD3DDev->GetRenderTarget(0, &pOldSurface)))
@@ -4101,8 +4120,17 @@ LONGLONG MPEVRCustomPresenter::GetDelayToRasterTarget(LONGLONG *targetTime, LONG
     else
     {
       targetDelay = targetDelay / 2; //delay in chunks
-    }
-      
+    }   
+
+    if (m_bLowResTiming)
+    {
+      if ((targetDelay > 0) && (targetDelay < MIN_VSC_DELAY))
+      {
+        //Force a minimum delay period to reduce CPU usage
+        targetDelay = MIN_VSC_DELAY;
+      }
+    }      
+    
     *targetTime = now + targetDelay;
   }
     
@@ -4282,7 +4310,7 @@ void MPEVRCustomPresenter::GetAVSyncClockInterface()
   filterInfo.pGraph->Release();
   if (hr != S_OK)
   {
-    Log("failed to find MediaPortal - Audio Renderer filter!");
+    LOG_NOSCRUB("failed to find MediaPortal - Audio Renderer filter!");
     return;
   }
 
@@ -4294,24 +4322,24 @@ void MPEVRCustomPresenter::GetAVSyncClockInterface()
     return;
   }
 
-  Log("Found MediaPortal - Audio Renderer filter");
+  LOG_NOSCRUB("Found MediaPortal - Audio Renderer filter");
 
   if (m_pAVSyncClock)
   {
     m_pAVSyncClock->GetMaxBias(&m_dMaxBias);
     m_pAVSyncClock->GetMinBias(&m_dMinBias);
     
-    Log("   Allowed bias values between %1.10f and %1.10f", m_dMinBias, m_dMaxBias);
+    LOG_NOSCRUB("   Allowed bias values between %1.10f and %1.10f", m_dMinBias, m_dMaxBias);
 
     if (S_OK == m_pAVSyncClock->SetBias(m_dBias))
     {
       m_bBiasAdjustmentDone = true;
-      Log("  Adjusting bias to: %1.10f", m_dBias);
+      LOG_NOSCRUB("  Adjusting bias to: %1.10f", m_dBias);
     }
     else
     {
       m_bBiasAdjustmentDone = false;
-      Log("  Failed to adjust bias to : %1.10f", m_dBias);
+      LOG_NOSCRUB("  Failed to adjust bias to : %1.10f", m_dBias);
     }
     
     if (m_bEnableAudioDelayComp)
@@ -4319,11 +4347,11 @@ void MPEVRCustomPresenter::GetAVSyncClockInterface()
       double audioDelayRequired = (double) m_dwmBuffers * GetDisplayCycle();
       if (S_OK == m_pAVSyncClock->SetEVRPresentationDelay(audioDelayRequired))
       {
-        Log("SetupAudioRenderer: Delayed Audio by : %1.10f", audioDelayRequired);
+        LOG_NOSCRUB("SetupAudioRenderer: Delayed Audio by : %1.10f", audioDelayRequired);
       }
       else
       {
-        Log("SetupAudioRenderer: failed to set audio delay of: %1.10f", audioDelayRequired);
+        LOG_NOSCRUB("SetupAudioRenderer: failed to set audio delay of: %1.10f", audioDelayRequired);
       }
     }
   }
@@ -4353,19 +4381,19 @@ void MPEVRCustomPresenter::SetupAudioRenderer()
 
   m_dBias = calculatedBias;
 
-  Log("SetupAudioRenderer: cycleDiff: %1.10f", cycleDiff);
+  LOG_NOSCRUB("SetupAudioRenderer: cycleDiff: %1.10f", cycleDiff);
 
   if (m_pAVSyncClock)
   {
     if (S_OK == m_pAVSyncClock->SetBias(m_dBias))
     {
       m_bBiasAdjustmentDone = true;
-      Log("SetupAudioRenderer: adjust bias to : %1.10f", m_dBias);
+      LOG_NOSCRUB("SetupAudioRenderer: adjust bias to : %1.10f", m_dBias);
     }
     else
     {
       m_bBiasAdjustmentDone = false;
-      Log("SetupAudioRenderer: failed to adjust bias to : %1.10f", m_dBias);
+      LOG_NOSCRUB("SetupAudioRenderer: failed to adjust bias to : %1.10f", m_dBias);
     }
     
     if (m_bEnableAudioDelayComp)
@@ -4373,17 +4401,17 @@ void MPEVRCustomPresenter::SetupAudioRenderer()
       double audioDelayRequired = (double) m_dwmBuffers * GetDisplayCycle();
       if (S_OK == m_pAVSyncClock->SetEVRPresentationDelay(audioDelayRequired))
       {
-        Log("SetupAudioRenderer: Delayed Audio by : %1.10f", audioDelayRequired);
+        LOG_NOSCRUB("SetupAudioRenderer: Delayed Audio by : %1.10f", audioDelayRequired);
       }
       else
       {
-        Log("SetupAudioRenderer: failed to set audio delay of: %1.10f", audioDelayRequired);
+        LOG_NOSCRUB("SetupAudioRenderer: failed to set audio delay of: %1.10f", audioDelayRequired);
       }
     }
   }
   else
   {
-    Log("SetupAudioRenderer: adjust bias to : %1.10f - wait audio renderer to be available", m_dBias);
+    LOG_NOSCRUB("SetupAudioRenderer: adjust bias to : %1.10f - wait audio renderer to be available", m_dBias);
   }
 }
 
