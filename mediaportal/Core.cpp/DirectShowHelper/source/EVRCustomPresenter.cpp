@@ -1243,7 +1243,7 @@ HRESULT MPEVRCustomPresenter::RenegotiateMediaOutputType()
 {
   m_bFirstInputNotify = FALSE;
   //This can be called via the Worker thread, so don't lock that thread here...
-  //Log("RenegotiateMediaOutputType 1");
+  Log("RenegotiateMediaOutputType 1");
   CAutoLock sLock(&m_schedulerParams.csLock);
   //Log("RenegotiateMediaOutputType 2");
   CAutoLock tLock(&m_timerParams.csLock);
@@ -1375,7 +1375,6 @@ void MPEVRCustomPresenter::DelegatedFlush()
 
 void MPEVRCustomPresenter::Flush(BOOL forced)
 {
-  CAutoLock lock(this);
   m_bFlushDone.Reset();
   
   if (m_bSchedulerRunning)
@@ -2462,12 +2461,6 @@ HRESULT STDMETHODCALLTYPE MPEVRCustomPresenter::ProcessMessage(MFVP_MESSAGE_TYPE
       // The mixer's output format has changed. The EVR will initiate format negotiation.
       Log("ProcessMessage MFVP_MESSAGE_INVALIDATEMEDIATYPE");
       //LogOutputTypes();
-      //      { //Context for CAutoLock - just for Worker thread (others locked in RenegotiateMediaOutputType())
-      //        CAutoLock wLock(&m_workerParams.csLock);
-      //        Log("RenegotiateMediaOutputType 0");
-      //        hr = RenegotiateMediaOutputType();
-      //      }
-      Log("RenegotiateMediaOutputType 0");
       hr = RenegotiateMediaOutputType();
     break;
 

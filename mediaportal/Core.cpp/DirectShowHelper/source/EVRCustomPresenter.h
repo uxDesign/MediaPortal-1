@@ -112,11 +112,10 @@ class MPEVRCustomPresenter;
 
 enum MP_RENDER_STATE
 {
-  MP_RENDER_STATE_STARTED = 1,
-  MP_RENDER_STATE_STOPPED,
+	MP_RENDER_STATE_SHUTDOWN = 0,
   MP_RENDER_STATE_PAUSED,
-	MP_RENDER_STATE_SHUTDOWN,
-	MP_RENDER_STATE_ENDSTREAM
+  MP_RENDER_STATE_STARTED,
+  MP_RENDER_STATE_STOPPED
 };
 
 enum FPS_SOURCE_METHOD
@@ -285,10 +284,10 @@ public:
   
   int            m_evrPresVer;
 
-  // IsRunning: The "running" state is not shutdown.
+  // IsRunning: The "running" state is not shutdown or stopped (used in Scheduler.cpp)
   inline BOOL IsRunning() const
   {
-    return (m_state != MP_RENDER_STATE_SHUTDOWN);
+    return ((m_state == MP_RENDER_STATE_STARTED) || (m_state == MP_RENDER_STATE_PAUSED));   
   }
 
 friend class StatsRenderer;

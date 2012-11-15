@@ -205,6 +205,20 @@ UINT CALLBACK WorkerThread(void* param)
       
       LOG_TRACE("Worker woken up");
     }
+    else
+    {
+      switch (dwObject)
+      {
+        case WAIT_OBJECT_0 :     //eHasWork
+          p->eHasWork.Reset();
+          break;
+        case WAIT_OBJECT_0 + 1 : //eHasWorkLP
+          p->eHasWorkLP.Reset();
+          break;
+        case WAIT_TIMEOUT :
+          break;
+      }      
+    }
 
   }
   
