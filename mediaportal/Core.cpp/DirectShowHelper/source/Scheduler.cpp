@@ -33,18 +33,6 @@
 // For more details for memory leak detection see the alloctracing.h header
 #include "..\..\alloctracing.h"
 
-void CALLBACK TimerCallback(UINT uTimerID, UINT uMsg, DWORD_PTR dwUser, DWORD_PTR dw1, DWORD_PTR dw2)
-{
-  SchedulerParams *p = (SchedulerParams*)dwUser;
-  Log("Callback %d", uTimerID);
-  TIME_LOCK(&p->csLock, 30000, "TimeCallback");
-  if (p->bDone)
-  {
-    Log("The end is near");
-  }
-  p->eTimerEnd.Set();
-}
-
 
 UINT CALLBACK TimerThread(void* param)
 {  
@@ -96,7 +84,7 @@ UINT CALLBACK TimerThread(void* param)
         while ( (now < p->llTime) && (now < timeout) && !p->bDone && (p->llTime > 0))
         {    
           now = GetCurrentTimestamp(); //poll until we reach the target time
-          Sleep(2); //CPU load is too high without a Sleep()
+          Sleep(1); //CPU load is too high without a Sleep()
         }
         if ((p->llTime > 0) && !p->bDone)
         {
@@ -120,6 +108,7 @@ UINT CALLBACK TimerThread(void* param)
   p->eHasWork.Reset();
   p->eHasWorkLP.Reset();
   p->eTimerEnd.Reset();
+  p->eFlushOrStall.Reset();
   timeEndPeriod(dwResolution);
   if (m_pAvRevertMmThreadCharacteristics) 
   {
@@ -142,7 +131,7 @@ UINT CALLBACK WorkerThread(void* param)
   DWORD dwResolution;
   LONGLONG now = 0;
   LONGLONG diff = 0;
-  HANDLE hEvts[] = {p->eHasWork, p->eHasWorkLP};
+  HANDLE hEvts[] = {p->eFlushOrStall, p->eHasWork, p->eHasWorkLP};
   DWORD dwObject;
 
     // Tell Vista Multimedia Class Scheduler (MMCS) we are doing threaded playback
@@ -168,11 +157,11 @@ UINT CALLBACK WorkerThread(void* param)
     LOG_TRACE("Worker sleeping.");
 
     if(p->pPresenter->m_bScrubbing)
-      dwObject = WaitForMultipleObjects (2, hEvts, FALSE, 5);
+      dwObject = WaitForMultipleObjects (3, hEvts, FALSE, 5);
     else if(p->pPresenter->CheckQueueCount() <= 1)
-      dwObject = WaitForMultipleObjects (2, hEvts, FALSE, 10);
+      dwObject = WaitForMultipleObjects (3, hEvts, FALSE, 10);
     else
-      dwObject = WaitForMultipleObjects (2, hEvts, FALSE, 50);
+      dwObject = WaitForMultipleObjects (3, hEvts, FALSE, 50);
 
     if (p->pPresenter->IsRunning())
     {	//Context for CAutoLock			
@@ -183,11 +172,19 @@ UINT CALLBACK WorkerThread(void* param)
     
       switch (dwObject)
       {
-        case WAIT_OBJECT_0 :     //eHasWork
+        case WAIT_OBJECT_0 :     //eFlushOrStall
+          //Log("Worker - StallEvent 1a");
+          p->eFlushOrStall.Reset();
+          p->pPresenter->m_WorkerStalledEvent.Set();
+          p->eTimerEnd.Wait(200);
+          p->eTimerEnd.Reset();
+          //Log("Worker - StallEvent 1b");
+          break;
+        case WAIT_OBJECT_0 + 1:     //eHasWork
           p->eHasWork.Reset();
           p->pPresenter->CheckForInput(true);
           break;
-        case WAIT_OBJECT_0 + 1 : //eHasWorkLP
+        case WAIT_OBJECT_0 + 2 : //eHasWorkLP
           p->eHasWorkLP.Reset();
           p->pPresenter->CheckForInput(false);
           break;
@@ -209,10 +206,18 @@ UINT CALLBACK WorkerThread(void* param)
     {
       switch (dwObject)
       {
-        case WAIT_OBJECT_0 :     //eHasWork
+        case WAIT_OBJECT_0 :     //eFlushOrStall
+          //Log("Worker - StallEvent 2a");
+          p->eFlushOrStall.Reset();
+          p->pPresenter->m_WorkerStalledEvent.Set();
+          p->eTimerEnd.Wait(200);
+          p->eTimerEnd.Reset();
+          //Log("Worker - StallEvent 2b");
+          break;
+        case WAIT_OBJECT_0 + 1 :     //eHasWork
           p->eHasWork.Reset();
           break;
-        case WAIT_OBJECT_0 + 1 : //eHasWorkLP
+        case WAIT_OBJECT_0 + 2 : //eHasWorkLP
           p->eHasWorkLP.Reset();
           break;
         case WAIT_TIMEOUT :
@@ -226,6 +231,7 @@ UINT CALLBACK WorkerThread(void* param)
   p->eHasWork.Reset();
   p->eHasWorkLP.Reset();
   p->eTimerEnd.Reset();
+  p->eFlushOrStall.Reset();
   timeEndPeriod(dwResolution);
   if (m_pAvRevertMmThreadCharacteristics) 
   {
@@ -242,7 +248,6 @@ UINT CALLBACK SchedulerThread(void* param)
   HANDLE hAvrt;
   DWORD dwTaskIndex = 0;
   LONGLONG hnsTargetTime = 0;
-  MMRESULT lastTimerId = 0;
   BOOL idleWait = false;
   LONGLONG delay = 0;
   DWORD dwUser = 0;
@@ -254,8 +259,8 @@ UINT CALLBACK SchedulerThread(void* param)
   DWORD timDel = 0;
   DWORD dwObject;
 
-  HANDLE hEvts3[] = {p->eFlush, p->eHasWork, p->eTimerEnd};
-  HANDLE hEvts4[] = {p->eFlush, p->eHasWork, p->eTimerEnd, p->eHasWorkLP};
+  HANDLE hEvts3[] = {p->eFlushOrStall, p->eHasWork, p->eTimerEnd};
+  HANDLE hEvts4[] = {p->eFlushOrStall, p->eHasWork, p->eTimerEnd, p->eHasWorkLP};
 
   
   if (p->pPresenter->m_bSchedulerEnableMMCSS)
@@ -291,13 +296,19 @@ UINT CALLBACK SchedulerThread(void* param)
       delay = 0;
       hnsTargetTime = 0;
     }
+    
+    if (p->pPresenter->m_bLowResTiming)
+    {
+      if ((delay > 0) && (delay < MIN_VSC_DELAY))
+      {
+        //Force a minimum delay period to reduce CPU usage
+        delay = MIN_VSC_DELAY;
+        hnsTargetTime = delay + now;
+      }
+    }
+         
     delay = min(1000000, delay); //limit max sleep time to 100ms
 
-    if ( lastTimerId > 0 ) 
-    {
-      timeKillEvent(lastTimerId);
-      lastTimerId = 0;
-    }
     p->eTimerEnd.Reset();
     p->pPresenter->NotifyTimer(0); //Disable Timer thread
 
@@ -306,7 +317,7 @@ UINT CALLBACK SchedulerThread(void* param)
       delay = 100000;
       timDel = (DWORD)(delay/10000);
       LOG_TRACE("Setting Scheduler Timer to %d ms idle time", timDel);
-      dwObject = WaitForMultipleObjects (4, hEvts4, FALSE, timDel );
+      dwObject = WaitForMultipleObjects (4, hEvts4, FALSE, timDel);
     }
     else if (delay >= 10000) // set timer if hnsTargetTime is at least 1 ms in the future
     {     
@@ -315,14 +326,14 @@ UINT CALLBACK SchedulerThread(void* param)
 
       p->pPresenter->NotifyTimer(hnsTargetTime); //Wake up Timer thread
 
-      dwObject = WaitForMultipleObjects (3, hEvts3, FALSE, timDel + 1);
+      dwObject = WaitForMultipleObjects (3, hEvts3, FALSE, timDel);
     }
           
     switch (dwObject)
     {
-      case WAIT_OBJECT_0 :     //eFlush
+      case WAIT_OBJECT_0 :     //eFlushOrStall
         // Log("Sch - FlushEvent");
-        p->eFlush.Reset();
+        p->eFlushOrStall.Reset();
         p->pPresenter->DelegatedFlush();
         delay = 0;
         hnsTargetTime = 0;
@@ -388,15 +399,10 @@ UINT CALLBACK SchedulerThread(void* param)
   }
   
   // quit
-  if ( lastTimerId > 0 ) 
-  {
-    timeKillEvent(lastTimerId);
-    lastTimerId = 0;
-  }
   p->eHasWork.Reset();
   p->eHasWorkLP.Reset();
   p->eTimerEnd.Reset();
-  
+  p->eFlushOrStall.Reset();  
   timeEndPeriod(dwResolution);
   if (p->pPresenter->m_bSchedulerEnableMMCSS)
   {

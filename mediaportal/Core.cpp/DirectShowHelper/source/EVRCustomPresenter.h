@@ -45,7 +45,7 @@ using namespace std;
 //Enables lower resolution/lower CPU usage Vsync correction timing if true
 #define LOW_RES_TIMING false
 //Minimum usable vsync correction delay in 100 ns units (used when LOW_RES_TIMING is true)
-#define MIN_VSC_DELAY 12000
+#define MIN_VSC_DELAY 11000
 
 //Set MMCSS thread priorities - these are incremented by one to allow DWORD (unsigned) representation in Registry
 #define SCHED_MMCSS_PRIORITY  (AVRT_PRIORITY_HIGH + 1)  
@@ -143,7 +143,7 @@ typedef struct _SchedulerParams
   CAMEvent eHasWork;   //Urgent event
   CAMEvent eHasWorkLP; //Low-priority event
   CAMEvent eTimerEnd;  //Timer thread event
-  CAMEvent eFlush;  //Delegated flush event
+  CAMEvent eFlushOrStall;  //Delegated flush or stall event
   BOOL bDone;
   LONGLONG llTime;     //Timer target time
 } SchedulerParams;
@@ -283,6 +283,9 @@ public:
   int            m_regTimerMmcssPriority;   
   
   int            m_evrPresVer;
+  bool           m_bLowResTiming;
+
+  CAMEvent      m_WorkerStalledEvent;
 
   // IsRunning: The "running" state is not shutdown or stopped (used in Scheduler.cpp)
   inline BOOL IsRunning() const
@@ -336,6 +339,9 @@ protected:
   void           DwmFlush();
   void           ReadRegistryKeyDword(HKEY hKey, LPCTSTR& lpSubKey, DWORD& data);
   void           WriteRegistryKeyDword(HKEY hKey, LPCTSTR& lpSubKey, DWORD& data);
+
+  void           StallWorker();
+  void           ReleaseWorker();
   
   HRESULT EnumFilters(IFilterGraph *pGraph);
   bool GetFilterNames();
@@ -531,7 +537,6 @@ protected:
   bool          m_bDWMEnableMMCSS;
   bool          m_bEnableAudioDelayComp;
   bool          m_bForceFirstFrame;
-  bool          m_bLowResTiming;
   
   char          m_filterNames[FILTER_LIST_SIZE][MAX_FILTER_NAME];
   int           m_numFilters;

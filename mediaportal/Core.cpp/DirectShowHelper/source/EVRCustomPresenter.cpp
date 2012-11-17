@@ -1363,8 +1363,10 @@ void MPEVRCustomPresenter::DelegatedFlush()
   if (!m_bDVDMenu)
   {
     //Log("DelegatedFlush() 1");
+    StallWorker();
     DoFlush(FALSE);
     m_earliestPresentTime = 0;
+    ReleaseWorker();
   }
   else
   {
@@ -1380,7 +1382,7 @@ void MPEVRCustomPresenter::Flush(BOOL forced)
   if (m_bSchedulerRunning)
   {
     //This flush is delegated to the Scheduler thread, so wake it up....
-    m_schedulerParams.eFlush.Set();
+    m_schedulerParams.eFlushOrStall.Set();
   }
   else 
   {
@@ -1805,6 +1807,18 @@ HRESULT MPEVRCustomPresenter::CheckForScheduledSample(LONGLONG *pTargetTime, LON
   return hr;
 }
 
+void MPEVRCustomPresenter::StallWorker()
+{
+  m_workerParams.eTimerEnd.Reset();
+  m_WorkerStalledEvent.Reset();
+  m_workerParams.eFlushOrStall.Set(); //Request a stall of Worker Thread
+  m_WorkerStalledEvent.Wait(20); //Wait for stall to happen, but allow timeout to avoid deadlocks
+}
+
+void MPEVRCustomPresenter::ReleaseWorker()
+{
+  m_workerParams.eTimerEnd.Set(); //Release stall of Worker Thread
+}
 
 void MPEVRCustomPresenter::StartWorkers()
 {
@@ -2454,14 +2468,16 @@ HRESULT STDMETHODCALLTYPE MPEVRCustomPresenter::ProcessMessage(MFVP_MESSAGE_TYPE
     case MFVP_MESSAGE_FLUSH:
       // The presenter should discard any pending samples.
       Log("ProcessMessage MFVP_MESSAGE_FLUSH");
-      Flush(FALSE);
+      Flush(FALSE); //Flush delegated to Scheduler Thread to avoid deadlocks
     break;
 
     case MFVP_MESSAGE_INVALIDATEMEDIATYPE:
       // The mixer's output format has changed. The EVR will initiate format negotiation.
       Log("ProcessMessage MFVP_MESSAGE_INVALIDATEMEDIATYPE");
       //LogOutputTypes();
+      StallWorker();
       hr = RenegotiateMediaOutputType();
+      ReleaseWorker();
     break;
 
     case MFVP_MESSAGE_PROCESSINPUTNOTIFY:
@@ -4114,15 +4130,6 @@ LONGLONG MPEVRCustomPresenter::GetDelayToRasterTarget(LONGLONG *targetTime, LONG
     {
       targetDelay = targetDelay / 2; //delay in chunks
     }   
-
-    if (m_bLowResTiming)
-    {
-      if ((targetDelay > 0) && (targetDelay < MIN_VSC_DELAY))
-      {
-        //Force a minimum delay period to reduce CPU usage
-        targetDelay = MIN_VSC_DELAY;
-      }
-    }      
     
     *targetTime = now + targetDelay;
   }
