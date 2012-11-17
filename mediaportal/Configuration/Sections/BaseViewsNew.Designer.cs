@@ -81,6 +81,7 @@
       this.dataGrid.RowHeadersVisible = false;
       this.dataGrid.Size = new System.Drawing.Size(433, 129);
       this.dataGrid.TabIndex = 13;
+      this.dataGrid.CellClick += new System.Windows.Forms.DataGridViewCellEventHandler(this.dataGrid_CellClick);
       this.dataGrid.CellPainting += new System.Windows.Forms.DataGridViewCellPaintingEventHandler(this.dataGrid_OnCellPainting);
       this.dataGrid.CurrentCellDirtyStateChanged += new System.EventHandler(this.dataGrid_CurrentCellDirtyStateChanged);
       this.dataGrid.DataError += new System.Windows.Forms.DataGridViewDataErrorEventHandler(this.dataGrid_DataError);

@@ -29,92 +29,54 @@
     private void InitializeComponent()
     {
       this.mpGroupBox1 = new MediaPortal.UserInterface.Controls.MPGroupBox();
-      this.dataGridView1 = new System.Windows.Forms.DataGridView();
-      this.cbDatabaseTable = new MediaPortal.UserInterface.Controls.MPComboBox();
-      this.mpLabel1 = new MediaPortal.UserInterface.Controls.MPLabel();
-      this.btSave = new MediaPortal.UserInterface.Controls.MPButton();
-      this.btCancel = new MediaPortal.UserInterface.Controls.MPButton();
+      this.dataGrid = new System.Windows.Forms.DataGridView();
       this.dgColField = new System.Windows.Forms.DataGridViewComboBoxColumn();
       this.dgColOperator = new System.Windows.Forms.DataGridViewComboBoxColumn();
       this.dgColSelectionValue = new System.Windows.Forms.DataGridViewTextBoxColumn();
       this.dgColAndOr = new System.Windows.Forms.DataGridViewComboBoxColumn();
+      this.btSave = new MediaPortal.UserInterface.Controls.MPButton();
+      this.btCancel = new MediaPortal.UserInterface.Controls.MPButton();
+      this.lblActionCodes = new MediaPortal.UserInterface.Controls.MPLabel();
       this.mpGroupBox1.SuspendLayout();
-      ((System.ComponentModel.ISupportInitialize)(this.dataGridView1)).BeginInit();
+      ((System.ComponentModel.ISupportInitialize)(this.dataGrid)).BeginInit();
       this.SuspendLayout();
       // 
       // mpGroupBox1
       // 
-      this.mpGroupBox1.Controls.Add(this.dataGridView1);
-      this.mpGroupBox1.Controls.Add(this.cbDatabaseTable);
-      this.mpGroupBox1.Controls.Add(this.mpLabel1);
+      this.mpGroupBox1.Controls.Add(this.lblActionCodes);
+      this.mpGroupBox1.Controls.Add(this.dataGrid);
       this.mpGroupBox1.FlatStyle = System.Windows.Forms.FlatStyle.Popup;
-      this.mpGroupBox1.Location = new System.Drawing.Point(20, 26);
+      this.mpGroupBox1.Location = new System.Drawing.Point(17, 22);
       this.mpGroupBox1.Name = "mpGroupBox1";
-      this.mpGroupBox1.Size = new System.Drawing.Size(743, 245);
+      this.mpGroupBox1.Size = new System.Drawing.Size(743, 263);
       this.mpGroupBox1.TabIndex = 0;
       this.mpGroupBox1.TabStop = false;
       this.mpGroupBox1.Text = "Filter Definition";
       // 
-      // dataGridView1
+      // dataGrid
       // 
-      this.dataGridView1.AllowUserToAddRows = false;
-      this.dataGridView1.AllowUserToDeleteRows = false;
-      this.dataGridView1.AllowUserToResizeColumns = false;
-      this.dataGridView1.AllowUserToResizeRows = false;
-      this.dataGridView1.ColumnHeadersHeightSizeMode = System.Windows.Forms.DataGridViewColumnHeadersHeightSizeMode.AutoSize;
-      this.dataGridView1.Columns.AddRange(new System.Windows.Forms.DataGridViewColumn[] {
+      this.dataGrid.AllowUserToAddRows = false;
+      this.dataGrid.AllowUserToDeleteRows = false;
+      this.dataGrid.AllowUserToResizeColumns = false;
+      this.dataGrid.AllowUserToResizeRows = false;
+      this.dataGrid.BackgroundColor = System.Drawing.SystemColors.Control;
+      this.dataGrid.ColumnHeadersHeightSizeMode = System.Windows.Forms.DataGridViewColumnHeadersHeightSizeMode.AutoSize;
+      this.dataGrid.Columns.AddRange(new System.Windows.Forms.DataGridViewColumn[] {
             this.dgColField,
             this.dgColOperator,
             this.dgColSelectionValue,
             this.dgColAndOr});
-      this.dataGridView1.Location = new System.Drawing.Point(22, 69);
-      this.dataGridView1.Name = "dataGridView1";
-      this.dataGridView1.RowHeadersVisible = false;
-      this.dataGridView1.Size = new System.Drawing.Size(692, 154);
-      this.dataGridView1.TabIndex = 2;
-      // 
-      // cbDatabaseTable
-      // 
-      this.cbDatabaseTable.BorderColor = System.Drawing.Color.Empty;
-      this.cbDatabaseTable.FormattingEnabled = true;
-      this.cbDatabaseTable.Location = new System.Drawing.Point(62, 29);
-      this.cbDatabaseTable.Name = "cbDatabaseTable";
-      this.cbDatabaseTable.Size = new System.Drawing.Size(160, 21);
-      this.cbDatabaseTable.TabIndex = 1;
-      // 
-      // mpLabel1
-      // 
-      this.mpLabel1.AutoSize = true;
-      this.mpLabel1.Location = new System.Drawing.Point(19, 32);
-      this.mpLabel1.Name = "mpLabel1";
-      this.mpLabel1.Size = new System.Drawing.Size(37, 13);
-      this.mpLabel1.TabIndex = 0;
-      this.mpLabel1.Text = "Table:";
-      // 
-      // btSave
-      // 
-      this.btSave.Location = new System.Drawing.Point(42, 514);
-      this.btSave.Name = "btSave";
-      this.btSave.Size = new System.Drawing.Size(75, 23);
-      this.btSave.TabIndex = 1;
-      this.btSave.Text = "Save";
-      this.btSave.UseVisualStyleBackColor = true;
-      // 
-      // btCancel
-      // 
-      this.btCancel.DialogResult = System.Windows.Forms.DialogResult.Cancel;
-      this.btCancel.Location = new System.Drawing.Point(150, 513);
-      this.btCancel.Name = "btCancel";
-      this.btCancel.Size = new System.Drawing.Size(75, 23);
-      this.btCancel.TabIndex = 2;
-      this.btCancel.Text = "Cancel";
-      this.btCancel.UseVisualStyleBackColor = true;
+      this.dataGrid.Location = new System.Drawing.Point(22, 30);
+      this.dataGrid.Name = "dataGrid";
+      this.dataGrid.RowHeadersVisible = false;
+      this.dataGrid.Size = new System.Drawing.Size(685, 188);
+      this.dataGrid.TabIndex = 2;
+      this.dataGrid.KeyDown += new System.Windows.Forms.KeyEventHandler(this.dataGrid_KeyDown);
       // 
       // dgColField
       // 
       this.dgColField.HeaderText = "Field";
       this.dgColField.Name = "dgColField";
-      this.dgColField.ReadOnly = true;
       this.dgColField.Width = 150;
       // 
       // dgColOperator
@@ -131,12 +93,11 @@
             "Less Equals",
             "In",
             "Not In",
-            "Starts With",
-            "Not Starts With",
-            "Ends With",
-            "Not Ends With"});
+            "Starts",
+            "Not Starts",
+            "Ends",
+            "Not Ends"});
       this.dgColOperator.Name = "dgColOperator";
-      this.dgColOperator.ReadOnly = true;
       this.dgColOperator.Width = 80;
       // 
       // dgColSelectionValue
@@ -149,30 +110,61 @@
       // 
       this.dgColAndOr.HeaderText = "A/O";
       this.dgColAndOr.Items.AddRange(new object[] {
-            "",
+            " ",
             "AND",
             "OR"});
       this.dgColAndOr.Name = "dgColAndOr";
-      this.dgColAndOr.ReadOnly = true;
       this.dgColAndOr.Width = 50;
+      // 
+      // btSave
+      // 
+      this.btSave.Location = new System.Drawing.Point(42, 325);
+      this.btSave.Name = "btSave";
+      this.btSave.Size = new System.Drawing.Size(75, 23);
+      this.btSave.TabIndex = 1;
+      this.btSave.Text = "Save";
+      this.btSave.UseVisualStyleBackColor = true;
+      this.btSave.Click += new System.EventHandler(this.btSave_Click);
+      // 
+      // btCancel
+      // 
+      this.btCancel.DialogResult = System.Windows.Forms.DialogResult.Cancel;
+      this.btCancel.Location = new System.Drawing.Point(150, 324);
+      this.btCancel.Name = "btCancel";
+      this.btCancel.Size = new System.Drawing.Size(75, 23);
+      this.btCancel.TabIndex = 2;
+      this.btCancel.Text = "Cancel";
+      this.btCancel.UseVisualStyleBackColor = true;
+      this.btCancel.Click += new System.EventHandler(this.btCancel_Click);
+      // 
+      // lblActionCodes
+      // 
+      this.lblActionCodes.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left) 
+            | System.Windows.Forms.AnchorStyles.Right)));
+      this.lblActionCodes.Location = new System.Drawing.Point(19, 221);
+      this.lblActionCodes.Name = "lblActionCodes";
+      this.lblActionCodes.Size = new System.Drawing.Size(430, 29);
+      this.lblActionCodes.TabIndex = 13;
+      this.lblActionCodes.Text = "Use the \"Ins\" and \"Del\" key to insert and delete lines.";
+      this.lblActionCodes.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
       // 
       // BaseViewsFilter
       // 
-      this.AcceptButton = this.btSave;
       this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
       this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
       this.CancelButton = this.btCancel;
-      this.ClientSize = new System.Drawing.Size(784, 562);
+      this.ClientSize = new System.Drawing.Size(784, 379);
       this.ControlBox = false;
       this.Controls.Add(this.btCancel);
       this.Controls.Add(this.btSave);
       this.Controls.Add(this.mpGroupBox1);
-      this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedDialog;
+      this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedToolWindow;
       this.Name = "BaseViewsFilter";
       this.ShowInTaskbar = false;
+      this.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
+      this.Shown += new System.EventHandler(this.BaseViewsFilter_Shown);
       this.mpGroupBox1.ResumeLayout(false);
-      this.mpGroupBox1.PerformLayout();
-      ((System.ComponentModel.ISupportInitialize)(this.dataGridView1)).EndInit();
+      ((System.ComponentModel.ISupportInitialize)(this.dataGrid)).EndInit();
       this.ResumeLayout(false);
 
     }
@@ -180,14 +172,13 @@
     #endregion
 
     private UserInterface.Controls.MPGroupBox mpGroupBox1;
-    private UserInterface.Controls.MPComboBox cbDatabaseTable;
-    private UserInterface.Controls.MPLabel mpLabel1;
-    private System.Windows.Forms.DataGridView dataGridView1;
+    private System.Windows.Forms.DataGridView dataGrid;
     private UserInterface.Controls.MPButton btSave;
     private UserInterface.Controls.MPButton btCancel;
     private System.Windows.Forms.DataGridViewComboBoxColumn dgColField;
     private System.Windows.Forms.DataGridViewComboBoxColumn dgColOperator;
     private System.Windows.Forms.DataGridViewTextBoxColumn dgColSelectionValue;
     private System.Windows.Forms.DataGridViewComboBoxColumn dgColAndOr;
+    private UserInterface.Controls.MPLabel lblActionCodes;
   }
 }
