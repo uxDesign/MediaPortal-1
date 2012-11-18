@@ -167,7 +167,7 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
     m_LastStartOfPaintScanline    = 0;
     m_frameRateRatio              = 0;
     m_rawFRRatio                  = 0;
-        
+    
     m_numFilters = 0;
     
     m_pD3DDev->GetDisplayMode(0, &m_displayMode);
@@ -1809,7 +1809,7 @@ HRESULT MPEVRCustomPresenter::CheckForScheduledSample(LONGLONG *pTargetTime, LON
 
 void MPEVRCustomPresenter::StallWorker()
 {
-  m_workerParams.eTimerEnd.Reset();
+	CAutoLock sLock(&m_lockWorkerStall);
   m_WorkerStalledEvent.Reset();
   m_workerParams.eFlushOrStall.Set(); //Request a stall of Worker Thread
   m_WorkerStalledEvent.Wait(20); //Wait for stall to happen, but allow timeout to avoid deadlocks
@@ -1817,7 +1817,8 @@ void MPEVRCustomPresenter::StallWorker()
 
 void MPEVRCustomPresenter::ReleaseWorker()
 {
-  m_workerParams.eTimerEnd.Set(); //Release stall of Worker Thread
+	CAutoLock sLock(&m_lockWorkerStall);
+  m_workerParams.eTimerEndOrUnstall.Set(); //Release stall of Worker Thread
 }
 
 void MPEVRCustomPresenter::StartWorkers()
@@ -2140,7 +2141,7 @@ void MPEVRCustomPresenter::NotifySchedulerTimer()
 {
   if (m_bSchedulerRunning)
   {
-    m_schedulerParams.eTimerEnd.Set();
+    m_schedulerParams.eTimerEndOrUnstall.Set();
   }
   else 
   {

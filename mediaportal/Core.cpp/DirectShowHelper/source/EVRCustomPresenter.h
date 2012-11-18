@@ -142,7 +142,7 @@ typedef struct _SchedulerParams
   CCritSec csLock;
   CAMEvent eHasWork;   //Urgent event
   CAMEvent eHasWorkLP; //Low-priority event
-  CAMEvent eTimerEnd;  //Timer thread event
+  CAMEvent eTimerEndOrUnstall;  //Timer thread or un-stall event
   CAMEvent eFlushOrStall;  //Delegated flush or stall event
   BOOL bDone;
   LONGLONG llTime;     //Timer target time
@@ -363,7 +363,8 @@ protected:
   CCritSec                          m_lockCallback;
   CCritSec                          m_lockRenderStats;
   CCritSec                          m_lockMState;
-
+  CCritSec                          m_lockWorkerStall;
+  
   int                               m_iFreeSamples;
   IMFSample*                        m_vFreeSamples[MAX_SURFACES];
   IMFSample*                        m_vAllSamples[MAX_SURFACES];

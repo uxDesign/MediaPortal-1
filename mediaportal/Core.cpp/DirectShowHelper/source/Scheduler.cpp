@@ -107,7 +107,7 @@ UINT CALLBACK TimerThread(void* param)
   // quit
   p->eHasWork.Reset();
   p->eHasWorkLP.Reset();
-  p->eTimerEnd.Reset();
+  p->eTimerEndOrUnstall.Reset();
   p->eFlushOrStall.Reset();
   timeEndPeriod(dwResolution);
   if (m_pAvRevertMmThreadCharacteristics) 
@@ -176,8 +176,8 @@ UINT CALLBACK WorkerThread(void* param)
           //Log("Worker - StallEvent 1a");
           p->eFlushOrStall.Reset();
           p->pPresenter->m_WorkerStalledEvent.Set();
-          p->eTimerEnd.Wait(200);
-          p->eTimerEnd.Reset();
+          p->eTimerEndOrUnstall.Wait(200);
+          p->eTimerEndOrUnstall.Reset();
           //Log("Worker - StallEvent 1b");
           break;
         case WAIT_OBJECT_0 + 1:     //eHasWork
@@ -210,8 +210,8 @@ UINT CALLBACK WorkerThread(void* param)
           //Log("Worker - StallEvent 2a");
           p->eFlushOrStall.Reset();
           p->pPresenter->m_WorkerStalledEvent.Set();
-          p->eTimerEnd.Wait(200);
-          p->eTimerEnd.Reset();
+          p->eTimerEndOrUnstall.Wait(200);
+          p->eTimerEndOrUnstall.Reset();
           //Log("Worker - StallEvent 2b");
           break;
         case WAIT_OBJECT_0 + 1 :     //eHasWork
@@ -230,7 +230,7 @@ UINT CALLBACK WorkerThread(void* param)
   // quit
   p->eHasWork.Reset();
   p->eHasWorkLP.Reset();
-  p->eTimerEnd.Reset();
+  p->eTimerEndOrUnstall.Reset();
   p->eFlushOrStall.Reset();
   timeEndPeriod(dwResolution);
   if (m_pAvRevertMmThreadCharacteristics) 
@@ -259,8 +259,8 @@ UINT CALLBACK SchedulerThread(void* param)
   DWORD timDel = 0;
   DWORD dwObject;
 
-  HANDLE hEvts3[] = {p->eFlushOrStall, p->eHasWork, p->eTimerEnd};
-  HANDLE hEvts4[] = {p->eFlushOrStall, p->eHasWork, p->eTimerEnd, p->eHasWorkLP};
+  HANDLE hEvts3[] = {p->eFlushOrStall, p->eHasWork, p->eTimerEndOrUnstall};
+  HANDLE hEvts4[] = {p->eFlushOrStall, p->eHasWork, p->eTimerEndOrUnstall, p->eHasWorkLP};
 
   
   if (p->pPresenter->m_bSchedulerEnableMMCSS)
@@ -309,7 +309,7 @@ UINT CALLBACK SchedulerThread(void* param)
          
     delay = min(1000000, delay); //limit max sleep time to 100ms
 
-    p->eTimerEnd.Reset();
+    p->eTimerEndOrUnstall.Reset();
     p->pPresenter->NotifyTimer(0); //Disable Timer thread
 
     if (idleWait)
@@ -342,7 +342,7 @@ UINT CALLBACK SchedulerThread(void* param)
         p->eHasWork.Reset();
         break;
       case WAIT_OBJECT_0 + 2 : //eTimerEnd
-        p->eTimerEnd.Reset();
+        p->eTimerEndOrUnstall.Reset();
         if (LOG_DELAYS)
         {
           delErr = GetCurrentTimestamp() - hnsTargetTime;
@@ -401,7 +401,7 @@ UINT CALLBACK SchedulerThread(void* param)
   // quit
   p->eHasWork.Reset();
   p->eHasWorkLP.Reset();
-  p->eTimerEnd.Reset();
+  p->eTimerEndOrUnstall.Reset();
   p->eFlushOrStall.Reset();  
   timeEndPeriod(dwResolution);
   if (p->pPresenter->m_bSchedulerEnableMMCSS)
