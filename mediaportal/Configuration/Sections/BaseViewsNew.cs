@@ -206,10 +206,12 @@ namespace MediaPortal.Configuration.Sections
         TreeNode node = new TreeNode();
         node.Text = view.LocalizedName;
         node.Tag = view;
+        SetNodeColor(node);
         foreach (ViewDefinitionNew subView in view.SubViews)
         {
           TreeNode subNode = new TreeNode(subView.LocalizedName);
           subNode.Tag = subView;
+          SetNodeColor(subNode);
           node.Nodes.Add(subNode);
         }
         treeViewMenu.Nodes.Add(node);
@@ -252,6 +254,7 @@ namespace MediaPortal.Configuration.Sections
         _filters.Add(level.Filters);
       }
       dataGrid.DataSource = _datasetLevels;
+      UpdateGridColors();
     }
 
     /// <summary>
@@ -292,6 +295,49 @@ namespace MediaPortal.Configuration.Sections
       }
 
       _filters.Clear();
+    }
+
+    /// <summary>
+    /// Set the Treenode color, to indicate, if a node has filters
+    /// </summary>
+    /// <param name="node"></param>
+    private void SetNodeColor(TreeNode node)
+    {
+      ViewDefinitionNew view = (ViewDefinitionNew)node.Tag;
+      if (view == null)
+      {
+        return;
+      }
+
+      if (view.Filters.Count > 0 )
+      {
+        node.BackColor = Color.Aquamarine;
+      }
+      else
+      {
+        node.BackColor = SystemColors.Control;
+      }
+    }
+
+    /// <summary>
+    /// Change the Color of the Edit Filter Button, if a filter exists
+    /// </summary>
+    private void UpdateGridColors()
+    {
+      for (int i = 0; i < _filters.Count; i++)
+      {
+        DataGridViewButtonCell c = (DataGridViewButtonCell)dataGrid.Rows[i].Cells[5];
+        if (_filters[i].Count > 0)
+        {
+          c.FlatStyle = FlatStyle.Popup;
+          c.Style.BackColor = Color.Aquamarine;
+        }
+        else
+        {
+          c.Style.BackColor = SystemColors.Control;
+          c.FlatStyle = FlatStyle.Standard;         
+        }
+      }
     }
 
     #endregion
@@ -386,6 +432,7 @@ namespace MediaPortal.Configuration.Sections
       {
         _currentView.Filters = filterForm.Filter;
         treeViewMenu.SelectedNode.Tag = _currentView;
+        SetNodeColor(treeViewMenu.SelectedNode);
         filterForm.Dispose();
         _settingsChanged = true;
       }
@@ -516,6 +563,7 @@ namespace MediaPortal.Configuration.Sections
       {
         _filters[e.RowIndex] = filterForm.Filter;
         treeViewMenu.SelectedNode.Tag = _currentView;
+        UpdateGridColors();
         filterForm.Dispose();
         _settingsChanged = true;
       }

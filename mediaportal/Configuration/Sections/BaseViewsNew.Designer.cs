@@ -174,7 +174,7 @@
       this.btnEditFilter.Size = new System.Drawing.Size(83, 23);
       this.btnEditFilter.TabIndex = 10;
       this.btnEditFilter.Text = "Edit Filter";
-      this.btnEditFilter.UseVisualStyleBackColor = true;
+      this.btnEditFilter.UseVisualStyleBackColor = false;
       this.btnEditFilter.Click += new System.EventHandler(this.btEditFilter_Click);
       // 
       // btnSetDefaults
