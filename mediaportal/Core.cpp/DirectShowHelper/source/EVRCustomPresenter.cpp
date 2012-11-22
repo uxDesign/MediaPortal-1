@@ -332,7 +332,6 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
       m_regTimerMmcssPriority = TIMER_MMCSS_PRIORITY;
       Log("--- Timer Thread MMCSS priority = %d (default value, allowed range is %d to %d)", m_regTimerMmcssPriority, (AVRT_PRIORITY_LOW+1), (AVRT_PRIORITY_CRITICAL+1));
     }
-
     keyValue = m_bForceFirstFrame ? 1 : 0;
     LPCTSTR forceFirstFrame_RRK = TEXT("ForceFirstFrame");
     ReadRegistryKeyDword(key, forceFirstFrame_RRK, keyValue);
@@ -1904,7 +1903,7 @@ void MPEVRCustomPresenter::DwmGetState()
   if (m_pDwmIsCompositionEnabled)
   { 
     HRESULT hr = m_pDwmIsCompositionEnabled(&m_bDwmCompEnabled);
-    if (SUCCEEDED(hr)) 
+    if ((SUCCEEDED(hr)) && m_bDwmCompEnabled) 
     {
       m_dwmBuffers = 2;
       Log("DWM composition is enabled");
@@ -1912,6 +1911,7 @@ void MPEVRCustomPresenter::DwmGetState()
     else
     {
       m_dwmBuffers = 0;
+      m_bDwmCompEnabled = false;
       Log("DWM composition is disabled");
     }
   }
@@ -1926,33 +1926,38 @@ void MPEVRCustomPresenter::DwmGetState()
 
 void MPEVRCustomPresenter::DwmSetParameters(BOOL useSourceRate, UINT buffers, UINT rfshPerFrame)
 {  
-  HRESULT hr = E_FAIL;
-
-  DWM_FRAME_COUNT cRefresh = 0;
-  if (false && m_pDwmGetCompositionTimingInfo && m_bDwmCompEnabled)
+  if (!m_bDwmCompEnabled)
   {
-    hr = E_FAIL;
-    
-    DWM_TIMING_INFO presentationStatus;
-    presentationStatus.cbSize = sizeof(presentationStatus);
-    if (m_hDwmWinHandle)
-    {
-      hr = m_pDwmGetCompositionTimingInfo(m_hDwmWinHandle, &presentationStatus);
-    }
-
-    //if (SUCCEEDED(hr)) 
-    if (hr==E_PENDING || hr==S_OK) 
-    {
-      cRefresh = presentationStatus.cRefresh;
-      Log("DwmGetCompositionTimingInfo succeeded, hr = 0x%x, cRefresh = %d", hr, cRefresh);
-    }
-    else
-    {
-      Log("DwmGetCompositionTimingInfo failed, hr = 0x%x", hr);
-    }
+    return;
   }
   
-  if (m_pDwmSetPresentParameters && m_bDwmCompEnabled)
+  HRESULT hr = E_FAIL;
+
+  //  DWM_FRAME_COUNT cRefresh = 0;
+  //  if (false && m_pDwmGetCompositionTimingInfo)
+  //  {
+  //    hr = E_FAIL;
+  //    
+  //    DWM_TIMING_INFO presentationStatus;
+  //    presentationStatus.cbSize = sizeof(presentationStatus);
+  //    if (m_hDwmWinHandle)
+  //    {
+  //      hr = m_pDwmGetCompositionTimingInfo(m_hDwmWinHandle, &presentationStatus);
+  //    }
+  //
+  //    //if (SUCCEEDED(hr)) 
+  //    if (hr==E_PENDING || hr==S_OK) 
+  //    {
+  //      cRefresh = presentationStatus.cRefresh;
+  //      Log("DwmGetCompositionTimingInfo succeeded, hr = 0x%x, cRefresh = %d", hr, cRefresh);
+  //    }
+  //    else
+  //    {
+  //      Log("DwmGetCompositionTimingInfo failed, hr = 0x%x", hr);
+  //    }
+  //  }
+  
+  if (m_pDwmSetPresentParameters)
   {
     hr = E_FAIL;
 
@@ -1986,7 +1991,7 @@ void MPEVRCustomPresenter::DwmSetParameters(BOOL useSourceRate, UINT buffers, UI
     
   }  
   
-  if (m_pDwmSetPresentParameters && m_bDwmCompEnabled)
+  if (m_pDwmSetPresentParameters)
   {
     hr = E_FAIL;
     if (m_hDwmWinHandle)
@@ -2007,12 +2012,14 @@ void MPEVRCustomPresenter::DwmSetParameters(BOOL useSourceRate, UINT buffers, UI
 
 void MPEVRCustomPresenter::DwmInit(UINT buffers, UINT rfshPerFrame)
 {
+  CAutoLock sLock(&m_lockDWM);
+  
+  DwmEnableMMCSSOnOff(m_bDWMEnableMMCSS && (GetDisplayCycle() <= DWM_REFRESH_THRESH));
+
   if (!m_bEnableDWMQueued || m_bDWMinit || (GetDisplayCycle() > DWM_REFRESH_THRESH))
   {
     return;
   }
-
-  CAutoLock lock(this);
     
   Log("EVRCustomPresenter::DwmInit, frame = %d", m_iFramesDrawn);  
   //Initialise the DWM parameters
@@ -2022,7 +2029,6 @@ void MPEVRCustomPresenter::DwmInit(UINT buffers, UINT rfshPerFrame)
   DwmFlush();
   DwmSetParameters(FALSE, buffers, rfshPerFrame); //'Display rate' mode
   DwmFlush();
-  DwmEnableMMCSSOnOff(m_bDWMEnableMMCSS);
   
   m_bDWMinit = true;
 }  
@@ -2030,12 +2036,13 @@ void MPEVRCustomPresenter::DwmInit(UINT buffers, UINT rfshPerFrame)
 
 void MPEVRCustomPresenter::DwmReset(bool newWinHand)
 {
+  CAutoLock sLock(&m_lockDWM);
+  DwmEnableMMCSSOnOff(false);
+
   if (!m_bEnableDWMQueued || !ENABLE_DWM_RESET || !m_bDWMinit) 
   {
     return;
   }
-
-  CAutoLock lock(this);
 
   Log("EVRCustomPresenter::DwmReset");  
   //Reset the DWM parameters
@@ -2043,7 +2050,6 @@ void MPEVRCustomPresenter::DwmReset(bool newWinHand)
   {
     DwmGetState();
   }
-  DwmEnableMMCSSOnOff(false);
   
   DwmFlush();
   DwmSetParameters(TRUE, 2, 1); //'Source rate' mode
@@ -2136,7 +2142,6 @@ void MPEVRCustomPresenter::NotifyScheduler(bool forceWake)
 }
 
 
-
 void MPEVRCustomPresenter::NotifySchedulerTimer()
 {
   if (m_bSchedulerRunning)
@@ -2148,9 +2153,6 @@ void MPEVRCustomPresenter::NotifySchedulerTimer()
     Log("Scheduler is already shut down");
   }
 }
-
-
-
 void MPEVRCustomPresenter::NotifyWorker(bool setInAvail)
 {
   LOG_TRACE("NotifyWorker()");
@@ -3277,20 +3279,20 @@ BOOL MPEVRCustomPresenter::EstimateRefreshTimings(int numFrames, int threadPrior
         dParams.minVisScanLine = startLine;
 
       // make a few measurements
-      Log("Starting Frame: %d, start scanline: %d", i, startLine);
+      //Log("Starting Frame: %d, start scanline: %d", i, startLine);
       sampleCount = MeasureScanLines(startTimeLR, times, scanLines, maxScanLineSamples, &dParams.maxScanLine);
       // Now we're at the next vsync
       m_pD3DDev->GetRasterStatus(0, &rasterStatus);
       endLine = rasterStatus.ScanLine;
       endTime = GetCurrentTimestamp();
 
-      Log("Ending Frame: %d, start scanline: %d, end scanline: %d, maxScanline: %d", i, startLine, endLine, dParams.maxScanLine);
+      //Log("Ending Frame: %d, start scanline: %d, end scanline: %d, maxScanline: %d", i, startLine, endLine, dParams.maxScanLine);
 
       estRefreshCyc[i] = (double)(endTime - startTime); // in hns units
       sumRefCyc += estRefreshCyc[i];
       
       coeff[i].fit = LinearRegression(scanLines, times, sampleCount, &coeff[i].slope, &coeff[i].intercept);
-      Log("  samples = %d, slope = %.6f, intercept = %.6f, fit = %.6f", sampleCount, coeff[i].slope, coeff[i].intercept, coeff[i].fit);
+      //Log("  samples = %d, slope = %.6f, intercept = %.6f, fit = %.6f", sampleCount, coeff[i].slope, coeff[i].intercept, coeff[i].fit);
     }    
 
     dParams.maxVisScanLine = dParams.maxScanLine;

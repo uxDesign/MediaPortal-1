@@ -44,9 +44,12 @@ UINT CALLBACK TimerThread(void* param)
   DWORD dwTaskIndex = 0;
   LONGLONG now = 0;
   LONGLONG diff = 0;
-  LONGLONG timeout = 0;
-  HANDLE hEvts[] = {p->eHasWork, p->eHasWorkLP};
   DWORD dwObject;
+  HANDLE hWTEvent = NULL;
+  LONGLONG delay = 0;
+  
+  LARGE_INTEGER liDueTime; 
+  liDueTime.QuadPart = -1LL;
 
     // Tell Vista Multimedia Class Scheduler (MMCS) we are doing threaded playback
   if (m_pAvSetMmThreadCharacteristicsW) 
@@ -66,11 +69,25 @@ UINT CALLBACK TimerThread(void* param)
   dwResolution = min(max(tc.wPeriodMin, 1), tc.wPeriodMax);
   dwUser = timeBeginPeriod(dwResolution);
 
+  hWTEvent = CreateWaitableTimer(NULL, FALSE, NULL); //Synchronisation timer mode
+
+  HANDLE hEvts[] = {p->eHasWork, p->eHasWorkLP, hWTEvent};
+
+  if (hWTEvent == NULL)
+  {
+    Log("Timer thread - Error!! Timer handle is NULL");
+    //We can't run correctly, so go to sleep until we get closed down
+    while (!p->bDone)
+    {
+      WaitForSingleObject(p->eHasWork, 100);     
+    }
+  }
+
   while (!p->bDone)
   {    
     LOG_TRACE("Timer sleeping.");
 
-    dwObject = WaitForMultipleObjects (2, hEvts, FALSE, INFINITE);
+    dwObject = WaitForMultipleObjects (3, hEvts, FALSE, 150);
 
     switch (dwObject)
     {
@@ -79,25 +96,41 @@ UINT CALLBACK TimerThread(void* param)
         break;
       case WAIT_OBJECT_0 + 1 : //eHasWorkLP
         p->eHasWorkLP.Reset();
-        now = GetCurrentTimestamp();
-        timeout = now + 1000000;
-        while ( (now < p->llTime) && (now < timeout) && !p->bDone && (p->llTime > 0))
-        {    
-          now = GetCurrentTimestamp(); //poll until we reach the target time
-          Sleep(1); //CPU load is too high without a Sleep()
+        if (p->llTime > 0)
+        {
+          now = GetCurrentTimestamp();
+          delay = p->llTime - now; 
+          if (delay >= 1000) // >= 100us
+          {        
+            liDueTime.QuadPart = -delay;
+      		  SetWaitableTimer(hWTEvent, &liDueTime, 0, NULL, NULL, 0);
+            WaitForSingleObject(hWTEvent, 150);        
+            
+            if (!p->bDone)
+            {
+              CAutoLock sLock(&p->csLock);
+              p->pPresenter->NotifySchedulerTimer(); //wake up scheduler thread
+            }
+                         
+            if (LOG_DELAYS)
+            {
+              diff = GetCurrentTimestamp() - p->llTime;
+              if ((diff > 100000) && (p->llTime > 0))
+                Log("High latency in TimerThread: %.2f ms", (double)diff/10000);
+            }                 
+          }
+          else if (!p->bDone)
+          {
+            CAutoLock sLock(&p->csLock);
+            p->pPresenter->NotifySchedulerTimer(); //wake up scheduler thread
+          }
         }
-        if ((p->llTime > 0) && !p->bDone)
-        {
-          CAutoLock sLock(&p->csLock);
-          p->pPresenter->NotifySchedulerTimer(); //wake up scheduler thread
-        }   
-        
-        if (LOG_DELAYS)
-        {
-          diff = GetCurrentTimestamp() - p->llTime;
-          if ((diff > 100000) && (p->llTime > 0))
-            Log("High latency in TimerThread: %.2f ms", (double)diff/10000);
-        }       
+        CancelWaitableTimer(hWTEvent);
+        break;
+      case WAIT_OBJECT_0 + 2 :  //hWTEvent - do nothing (just to discard spurious events)
+        CancelWaitableTimer(hWTEvent);
+        break;
+      case WAIT_TIMEOUT :
         break;
     }
       
@@ -105,6 +138,11 @@ UINT CALLBACK TimerThread(void* param)
   }
   
   // quit
+  if (hWTEvent)
+  {
+    CancelWaitableTimer(hWTEvent);
+    CloseHandle(hWTEvent);
+  }
   p->eHasWork.Reset();
   p->eHasWorkLP.Reset();
   p->eTimerEndOrUnstall.Reset();
@@ -117,7 +155,6 @@ UINT CALLBACK TimerThread(void* param)
   Log("Timer done.");
   return 0;
 }
-
 
 
 
@@ -134,7 +171,7 @@ UINT CALLBACK WorkerThread(void* param)
   HANDLE hEvts[] = {p->eFlushOrStall, p->eHasWork, p->eHasWorkLP};
   DWORD dwObject;
 
-    // Tell Vista Multimedia Class Scheduler (MMCS) we are doing threaded playback
+    // Tell Multimedia Class Scheduler (MMCS) we are doing threaded playback
   if (m_pAvSetMmThreadCharacteristicsW) 
   {
     hAvrt = m_pAvSetMmThreadCharacteristicsW(L"Playback", &dwTaskIndex);
@@ -259,13 +296,10 @@ UINT CALLBACK SchedulerThread(void* param)
   DWORD timDel = 0;
   DWORD dwObject;
 
-  HANDLE hEvts3[] = {p->eFlushOrStall, p->eHasWork, p->eTimerEndOrUnstall};
-  HANDLE hEvts4[] = {p->eFlushOrStall, p->eHasWork, p->eTimerEndOrUnstall, p->eHasWorkLP};
-
   
   if (p->pPresenter->m_bSchedulerEnableMMCSS)
   {
-    // Tell Vista Multimedia Class Scheduler (MMCS) we are doing threaded playback (increase priority)
+    // Tell Multimedia Class Scheduler (MMCS) we are doing threaded playback (increase priority)
     if (m_pAvSetMmThreadCharacteristicsW) 
     {
       hAvrt = m_pAvSetMmThreadCharacteristicsW(L"Playback", &dwTaskIndex);
@@ -284,6 +318,9 @@ UINT CALLBACK SchedulerThread(void* param)
   dwResolution = min(max(tc.wPeriodMin, 1), tc.wPeriodMax);
   dwUser = timeBeginPeriod(dwResolution);
 
+  HANDLE hEvts3[] = {p->eFlushOrStall, p->eHasWork, p->eTimerEndOrUnstall};
+  HANDLE hEvts4[] = {p->eFlushOrStall, p->eHasWork, p->eTimerEndOrUnstall, p->eHasWorkLP};
+  
   while (!p->bDone)
   {   
     delay  = 0;   
@@ -317,18 +354,17 @@ UINT CALLBACK SchedulerThread(void* param)
       delay = 100000;
       timDel = (DWORD)(delay/10000);
       LOG_TRACE("Setting Scheduler Timer to %d ms idle time", timDel);
+      p->pPresenter->NotifyTimer(now + delay); //Wake up Timer thread
       dwObject = WaitForMultipleObjects (4, hEvts4, FALSE, timDel);
     }
     else if (delay >= 10000) // set timer if hnsTargetTime is at least 1 ms in the future
     {     
       timDel = (DWORD)(delay/10000);
       LOG_TRACE("Setting Scheduler Timer to %d ms video delay", timDel);
-
       p->pPresenter->NotifyTimer(hnsTargetTime); //Wake up Timer thread
-
       dwObject = WaitForMultipleObjects (3, hEvts3, FALSE, timDel);
     }
-          
+              
     switch (dwObject)
     {
       case WAIT_OBJECT_0 :     //eFlushOrStall

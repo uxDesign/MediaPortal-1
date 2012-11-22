@@ -140,10 +140,10 @@ typedef struct _SchedulerParams
 {
   MPEVRCustomPresenter* pPresenter;
   CCritSec csLock;
+  CAMEvent eFlushOrStall;  //Delegated flush or stall event
   CAMEvent eHasWork;   //Urgent event
   CAMEvent eHasWorkLP; //Low-priority event
-  CAMEvent eTimerEndOrUnstall;  //Timer thread or un-stall event
-  CAMEvent eFlushOrStall;  //Delegated flush or stall event
+  CAMEvent eTimerEndOrUnstall;  //Release stall event
   BOOL bDone;
   LONGLONG llTime;     //Timer target time
 } SchedulerParams;
@@ -252,7 +252,6 @@ public:
   double         GetVideoFramePeriod(FPS_SOURCE_METHOD fpsSource);
   void           GetFrameRateRatio();
   int            CheckQueueCount();
-
   void           NotifyTimer(LONGLONG targetTime);
   void           NotifySchedulerTimer();
   void           DelegatedFlush();
@@ -364,6 +363,7 @@ protected:
   CCritSec                          m_lockRenderStats;
   CCritSec                          m_lockMState;
   CCritSec                          m_lockWorkerStall;
+  CCritSec                          m_lockDWM;
   
   int                               m_iFreeSamples;
   IMFSample*                        m_vFreeSamples[MAX_SURFACES];
@@ -398,8 +398,6 @@ protected:
   int                               m_iEarlyFrCnt;
   bool                              m_bFrameSkipping;
   double                            m_fSeekRate;
-//  bool                              m_bScrubbing;
-//  bool                              m_bZeroScrub;
   bool                              m_bFirstFrame;
   bool                              m_bDVDMenu;
   MP_RENDER_STATE                   m_state;
