@@ -218,6 +218,9 @@ namespace MediaPortal.Configuration.Sections
       }
 
       treeViewMenu.ExpandAll();
+
+      dataGrid.Hide();
+      lblActionCodes.Hide();
       _updating = false;
 
     }
@@ -315,7 +318,7 @@ namespace MediaPortal.Configuration.Sections
       }
       else
       {
-        node.BackColor = SystemColors.Control;
+        node.BackColor = Color.White;
       }
     }
 
