@@ -456,6 +456,7 @@ namespace MediaPortal.Configuration.Sections
       {
         File.Copy(defaultViews, customViews, true);
 
+        treeViewMenu.Nodes.Clear();
         _views.Clear();
 
         try
