@@ -144,8 +144,11 @@ namespace MediaPortal.GUI.Library
           {
             if (definition.ToString() == currentView.ToString())
             {
-              searchViews = currentView.SubViews;
-              done = true;
+              if (currentView.SubViews.Count > 0)
+              {
+                searchViews = currentView.SubViews;
+                done = true;
+              }
               break;
             }
           }
@@ -158,7 +161,7 @@ namespace MediaPortal.GUI.Library
         done = false;
         foreach (ViewDefinitionNew definition in searchViews)
         {
-          if (definition.ToString() == value)
+          if (definition.Name == value)
           {
             currentView = definition;
             CurrentLevel = 0;
