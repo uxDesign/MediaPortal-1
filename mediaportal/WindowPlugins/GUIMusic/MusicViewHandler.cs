@@ -45,8 +45,6 @@ namespace MediaPortal.GUI.Music
     private int _previousLevel = 0;
 
     private readonly MusicDatabase _database;
-    private int _restrictionLength = 0; // used to sum up the length of all restrictions
-
     private Song _currentSong = null; // holds the current Song selected in the list
 
     public int PreviousLevel
@@ -147,12 +145,11 @@ namespace MediaPortal.GUI.Music
       string orderClause = string.Empty;
       FilterLevel level = (FilterLevel)currentView.Levels[CurrentLevel];
 
-      _restrictionLength = 0;
       for (int i = 0; i < CurrentLevel; ++i)
       {
         BuildSelect((FilterLevel)currentView.Levels[i], ref whereClause, i);
       }
-      BuildWhere((FilterLevel)currentView.Levels[CurrentLevel], ref whereClause);
+      //BuildWhere((FilterLevel)currentView.Levels[CurrentLevel], ref whereClause);
       BuildOrder((FilterLevel)currentView.Levels[CurrentLevel], ref orderClause);
 
       if (CurrentLevel > 0)
@@ -466,30 +463,121 @@ namespace MediaPortal.GUI.Music
       return true;
     }
 
-    private void BuildSelect(FilterLevel filter, ref string whereClause, int filterLevel)
+    private void BuildSelect(FilterLevel level, ref string whereClause, int currentLevel)
     {
-      if (whereClause != "")
+      if (level.Selection.ToLower().EndsWith("index"))
       {
-        whereClause += " and ";
-      }
-      string selectedValue = filter.SelectedValue;
-      DatabaseUtility.RemoveInvalidChars(ref selectedValue);
+        // Don't need to include the grouping value, when it was on the first level
+        if (CurrentLevel > 1 && currentLevel == 0)
+        {
+          return;
+        }
 
-      // we don't store "unknown" into the datbase, so let's correct empty values
-      if (selectedValue == "unknown")
-      {
-        selectedValue = "";
-      }
+        if (whereClause != "")
+        {
+          whereClause += " and ";
+        }
 
-      // If we have a multiple values field then we need to compare with like
-      if (IsMultipleValueField(GetField(filter.Selection)))
-      {
-        whereClause += String.Format("{0} like '%| {1} |%'", GetField(filter.Selection), selectedValue);
+        // muliple value fields are stored in one database field in tracks
+        // table but on different rows in other tables
+        if (IsMultipleValueField(GetField(level.Selection)))
+        {
+          bool usingTracksTable = true;
+          if (GetTable(CurrentLevelWhere) != "tracks")
+          {
+            usingTracksTable = false;
+          }
+          if (!usingTracksTable)
+          {
+            // current level is not using tracks table so check whether
+            // any filters above this one are using a different table
+            // and if so data will be taken from tracks table
+            FilterLevel defRoot = (FilterLevel)currentView.Levels[0];
+            string table = GetTable(defRoot.Selection);
+            for (int i = CurrentLevel; i > -1; i--)
+            {
+              FilterLevel prevFilter = (FilterLevel)currentView.Levels[i];
+              if (GetTable(prevFilter.Selection) != table)
+              {
+                usingTracksTable = true;
+                break;
+              }
+            }
+          }
+
+          // now we know if we are using the tracks table or not we can
+          // figure out how to format multiple value fields
+          if (usingTracksTable)
+          {
+            if (level.SelectedValue == "#")
+            {
+              // need a special case here were user selects # from grouped menu
+              // as multiple values can be stored in the same field
+              whereClause += String.Format(" exists ( " +
+                                           "   select 0 from {0} " +
+                                           "   where  {1} < 'A' " +
+                                           "   and    tracks.{1} like '%| '||{0}.{1}||' |%' " +
+                                           " ) ", GetTable(level.Selection), GetField(level.Selection));
+            }
+            else
+            {
+              whereClause += String.Format(" ({0} like '| {1}%')", GetField(level.Selection),
+                                           level.SelectedValue);
+            }
+          }
+          else
+          {
+            if (level.SelectedValue == "#")
+            {
+              whereClause += String.Format(" {0} < 'A'", GetField(level.Selection));
+            }
+            else
+            {
+              whereClause += String.Format(" ({0} like '{1}%')", GetField(level.Selection),
+                                           level.SelectedValue);
+            }
+          }
+        }
+        else
+        {
+          // we are looking for fields which do not contain multiple values
+          if (level.SelectedValue == "#")
+          {
+            // deal with non standard characters
+            whereClause += String.Format(" {0} < 'A'", GetField(level.Selection));
+          }
+          else
+          {
+            whereClause += String.Format(" ({0} like '{1}%')", GetField(level.Selection),
+                                         level.SelectedValue);
+          }
+        }
       }
       else
       {
-        // use like for case insensitivity
-        whereClause += String.Format("{0} like '{1}'", GetField(filter.Selection), selectedValue);
+        if (whereClause != "")
+        {
+          whereClause += " and ";
+        }
+        string selectedValue = level.SelectedValue;
+        DatabaseUtility.RemoveInvalidChars(ref selectedValue);
+
+        // we don't store "unknown" into the datbase, so let's correct empty values
+        if (selectedValue == "unknown")
+        {
+          selectedValue = "";
+        }
+
+        // If we have a multiple values field then we need to compare with like
+        if (IsMultipleValueField(GetField(level.Selection)))
+        {
+          whereClause += String.Format("{0} like '%| {1} |%'", GetField(level.Selection), selectedValue);
+        }
+        else
+        {
+          // use like for case insensitivity
+          whereClause += String.Format("{0} like '{1}'", GetField(level.Selection), selectedValue);
+        }
       }
     }
 

@@ -1618,7 +1618,7 @@ namespace MediaPortal.GUI.Music
 
     protected virtual bool IsSortableView(ViewDefinitionNew view, int viewLevel)
     {
-      if (view == null || viewLevel < 0 || viewLevel >= view.Filters.Count)
+      if (view == null || viewLevel < 0 || viewLevel >= view.Levels.Count)
       {
         return false;
       }
