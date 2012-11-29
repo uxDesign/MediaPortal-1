@@ -149,7 +149,6 @@ namespace MediaPortal.GUI.Music
       {
         BuildSelect((FilterLevel)currentView.Levels[i], ref whereClause, i);
       }
-      //BuildWhere((FilterLevel)currentView.Levels[CurrentLevel], ref whereClause);
       BuildOrder((FilterLevel)currentView.Levels[CurrentLevel], ref orderClause);
 
       if (CurrentLevel > 0)
@@ -166,21 +165,32 @@ namespace MediaPortal.GUI.Music
       if (CurrentLevel == 0)
       {
         FilterLevel levelRoot = currentView.Levels[0];
-        string table = GetTable(levelRoot.Selection);
-        string searchField = GetField(levelRoot.Selection);
-
-        string countField = searchField; // when grouping on Albums, we need to count the artists
-        // We don't have an album table anymore, so change the table to search for to tracks here.
-        if (table == "album")
+        string selection = levelRoot.Selection.ToLower();
+        string table = GetTable(selection);
+        string searchField = GetField(selection);
+        
+        if (selection.EndsWith("index"))
         {
-          table = "tracks";
-          countField = "strAlbumArtist";
-        }
+          string countField = searchField; // when grouping on Albums, we need to count the artists
+          // We don't have an album table anymore, so change the table to search for to tracks here.
+          if (table == "album")
+          {
+            table = "tracks";
+            countField = "strAlbumArtist";
+          }
 
-        if (levelRoot.Selection.ToLower().EndsWith("index"))
-        {
           sql = string.Format("SELECT UPPER(SUBSTR({0},1,1)) AS IX, COUNT (distinct {1}) FROM {2} GROUP BY IX ", searchField, countField, table);
-          _database.GetSongsByIndex(sql, out songs, CurrentLevel, table);
+          
+          // only group special characters into a "#" entry is field is text based
+          if (selection == "rating" || selection == "year" || selection == "track#" || selection == "disc#" ||
+              selection == "timesplayed" || selection == "favourites" || selection == "dateadded")
+          {
+            _database.GetSongsByFilter(sql, out songs, table);
+          }
+          else
+          {
+            _database.GetSongsByIndex(sql, out songs, CurrentLevel, table);
+          }
           
           _previousLevel = currentLevel;
           return true;  
