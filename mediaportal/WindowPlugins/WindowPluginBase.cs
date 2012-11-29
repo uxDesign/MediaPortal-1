@@ -379,8 +379,8 @@ namespace WindowPlugins
 
             if (guiPlayingNow != null)
             {
-              guiPlayingNow.MusicWindow = (MediaPortal.GUI.Music.GUIMusicBaseWindow)this;
-              GUIWindowManager.ActivateWindow(nPlayingNowWindow);
+              //guiPlayingNow.MusicWindow = (MediaPortal.GUI.Music.GUIMusicBaseWindow)this;
+              //GUIWindowManager.ActivateWindow(nPlayingNowWindow);
             }
           }
           break;

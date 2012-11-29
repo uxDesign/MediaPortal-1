@@ -43,7 +43,7 @@ namespace MediaPortal.GUI.Music
   /// <summary>
   /// Summary description for GUIMusicBaseWindow.
   /// </summary>
-  public class GUIMusicBaseWindow : WindowPluginBase
+  public class GUIMusicBaseWindow : WindowPluginBaseNew
   {
     #region enums
 
@@ -1616,21 +1616,21 @@ namespace MediaPortal.GUI.Music
       UpdateButtonStates();
     }
 
-    protected virtual bool IsSortableView(ViewDefinition view, int viewLevel)
+    protected virtual bool IsSortableView(ViewDefinitionNew view, int viewLevel)
     {
       if (view == null || viewLevel < 0 || viewLevel >= view.Filters.Count)
       {
         return false;
       }
 
-      string sWhere = ((FilterDefinition)view.Filters[viewLevel]).Where;
+      string selection = ((FilterLevel)view.Levels[viewLevel]).Selection;
 
-      if (sWhere.Length == 0)
+      if (selection.Length == 0)
       {
         return true;
       }
 
-      switch (sWhere.ToLower())
+      switch (selection.ToLower())
       {
         case "timesplayed":
           return false;

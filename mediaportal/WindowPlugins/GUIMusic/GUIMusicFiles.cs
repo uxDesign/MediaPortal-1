@@ -826,7 +826,7 @@ namespace MediaPortal.GUI.Music
             int viewNr = -1;
             for (int x = 0; x < handler.Views.Count; ++x)
             {
-              ViewDefinition view = (ViewDefinition)handler.Views[x];
+              ViewDefinitionNew view = (ViewDefinitionNew)handler.Views[x];
               if (view.Name.ToLower().IndexOf("artist") >= 0)
               {
                 viewNr = x;
@@ -836,7 +836,7 @@ namespace MediaPortal.GUI.Music
             {
               return;
             }
-            ViewDefinition selectedView = (ViewDefinition)handler.Views[viewNr];
+            ViewDefinitionNew selectedView = (ViewDefinitionNew)handler.Views[viewNr];
             handler.CurrentView = selectedView.Name;
             MusicState.View = selectedView.Name;
             GUIMusicGenres.SelectArtist(artist);

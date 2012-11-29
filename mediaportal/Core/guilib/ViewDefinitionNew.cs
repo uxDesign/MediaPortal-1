@@ -36,6 +36,7 @@ namespace MediaPortal.GUI.View
     protected List<ViewDefinitionNew> _listSubViews = new List<ViewDefinitionNew>();
     protected List<FilterDefinitionNew> _listFilters = new List<FilterDefinitionNew>();
     private string _name;
+    private string _parent;
 
     public ViewDefinitionNew() {}
 
@@ -44,6 +45,13 @@ namespace MediaPortal.GUI.View
     {
       get { return _name; }
       set { _name = value; }
+    }
+
+    [XmlElement("Parent")]
+    public string Parent
+    {
+      get { return _parent; }
+      set { _parent = value; }
     }
 
     [XmlElement("Filter")]
