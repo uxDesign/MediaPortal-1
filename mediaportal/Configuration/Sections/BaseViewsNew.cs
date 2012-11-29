@@ -210,6 +210,7 @@ namespace MediaPortal.Configuration.Sections
         foreach (ViewDefinitionNew subView in view.SubViews)
         {
           TreeNode subNode = new TreeNode(subView.LocalizedName);
+          subView.Parent = view.LocalizedName;
           subNode.Tag = subView;
           SetNodeColor(subNode);
           node.Nodes.Add(subNode);
@@ -696,12 +697,18 @@ namespace MediaPortal.Configuration.Sections
         // Add new Node
         targetNode.Nodes.Add(newNode);
         ViewDefinitionNew view = (ViewDefinitionNew)targetNode.Tag;
-        view.SubViews.Add((ViewDefinitionNew)sourceNode.Tag);
+        ViewDefinitionNew subview = (ViewDefinitionNew)sourceNode.Tag;
+        subview.Parent = view.LocalizedName;
+        sourceNode.Tag = subview;
+        view.SubViews.Add(subview);
         targetNode.Tag = view;
       }
       else
       {
         // Add new Node to Root of Treeview
+        ViewDefinitionNew view = (ViewDefinitionNew)newNode.Tag;
+        view.Parent = "";
+        newNode.Tag = view;
         treeViewMenu.Nodes.Add(newNode);
       }
 
