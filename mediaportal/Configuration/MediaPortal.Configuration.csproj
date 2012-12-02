@@ -1004,9 +1004,16 @@
     <None Include="Resources\remote.FireDtv.png" />
     <None Include="Resources\remote.Centarea.png" />
     <None Include="Resources\codec_screwdriver.png" />
+    <None Include="Resources\icon_add_view.png" />
+    <None Include="Resources\icon_delete_view.png" />
+    <None Include="Resources\icon_edit_view.png" />
+    <None Include="Resources\icon_down_view.png" />
+    <None Include="Resources\icon_copy_view.png" />
+    <None Include="Resources\icon_default_view.png" />
     <Content Include="Resources\icon_folder.png" />
     <Content Include="Resources\icon_help.png" />
     <Content Include="Resources\icon_refresh.png" />
+    <None Include="Resources\icon_up_view.png" />
     <Content Include="Resources\logo_PayPal.png" />
     <None Include="Resources\mplogo.png" />
     <None Include="Resources\remote.MceVista.png" />

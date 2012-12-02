@@ -236,6 +236,7 @@ namespace MediaPortal.Configuration.Sections
     private void FillViewGrid()
     {
       _datasetLevels.Clear();
+      _filters.Clear();
       if (_currentView == null)
       {
         return;
@@ -379,6 +380,9 @@ namespace MediaPortal.Configuration.Sections
 
       btnDeleteView.Enabled = false;
       btnEditFilter.Enabled = false;
+      btnCopyView.Enabled = false;
+      btnUpView.Enabled = false;
+      btnDownView.Enabled = false;
     }
 
     /// <summary>
@@ -399,7 +403,7 @@ namespace MediaPortal.Configuration.Sections
       bool removeNode = true;
       if (selectedNode.Nodes.Count > 0)
       {
-        if (MessageBox.Show("The selected View has SubViews.\r\nDo you really want to delete", "Delete View", MessageBoxButtons.YesNo,MessageBoxIcon.Warning) == DialogResult.No)
+        if (MessageBox.Show("The selected View has SubViews.\r\nDo you really want to delete?", "Delete View", MessageBoxButtons.YesNo,MessageBoxIcon.Warning) == DialogResult.No)
         {
           removeNode = false;
         }
@@ -413,6 +417,9 @@ namespace MediaPortal.Configuration.Sections
 
         btnDeleteView.Enabled = false;
         btnEditFilter.Enabled = false;
+        btnCopyView.Enabled = false;
+        btnUpView.Enabled = false;
+        btnDownView.Enabled = false;
       }
 
       _updating = false;
@@ -442,6 +449,26 @@ namespace MediaPortal.Configuration.Sections
       }
     }
 
+
+    private void btnUpView_Click(object sender, EventArgs e)
+    {
+
+    }
+
+    private void btnDownView_Click(object sender, EventArgs e)
+    {
+
+    }
+
+    private void btnCopyView_Click(object sender, EventArgs e)
+    {
+      TreeNode clonedNode = (TreeNode)treeViewMenu.SelectedNode.Clone();
+      ViewDefinitionNew view = (ViewDefinitionNew)clonedNode.Tag;
+      clonedNode.Tag = view.Clone();
+      treeViewMenu.Nodes.Add(clonedNode);
+      treeViewMenu.SelectedNode = clonedNode;
+    }
+
     /// <summary>
     /// Set defaults views (will copy view files from MPProgram\defaults directory)
     /// </summary>
@@ -451,6 +478,11 @@ namespace MediaPortal.Configuration.Sections
     {
       string defaultViews = Path.Combine(ViewHandler.DefaultsDirectory, _section + "Views.xml");
       string customViews = Config.GetFile(Config.Dir.Config, _section + "Views.xml");
+
+      if (MessageBox.Show("This will clear your existing View settings.\r\nDo you really want to revert to default views?", "Revert to Default Views", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.No)
+      {
+        return;
+      }
 
       if (File.Exists(defaultViews))
       {
@@ -516,6 +548,9 @@ namespace MediaPortal.Configuration.Sections
 
       btnDeleteView.Enabled = true;
       btnEditFilter.Enabled = true;
+      btnCopyView.Enabled = true;
+      btnUpView.Enabled = true;
+      btnDownView.Enabled = true;
     }
 
     /// <summary>

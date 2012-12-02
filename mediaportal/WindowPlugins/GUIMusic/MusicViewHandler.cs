@@ -719,7 +719,7 @@ namespace MediaPortal.GUI.Music
           return "strConductor";
 
         case "year":
-          return "strYear";
+          return "iYear";
 
         case "track#":
           return "iTrack";

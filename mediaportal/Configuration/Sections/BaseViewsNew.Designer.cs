@@ -10,8 +10,13 @@
     /// </summary>
     private void InitializeComponent()
     {
-      System.Windows.Forms.DataGridViewCellStyle dataGridViewCellStyle1 = new System.Windows.Forms.DataGridViewCellStyle();
+      this.components = new System.ComponentModel.Container();
+      System.Windows.Forms.DataGridViewCellStyle dataGridViewCellStyle3 = new System.Windows.Forms.DataGridViewCellStyle();
+      System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(BaseViewsNew));
       this.groupBox = new MediaPortal.UserInterface.Controls.MPGroupBox();
+      this.btnCopyView = new MediaPortal.UserInterface.Controls.MPButton();
+      this.btnDownView = new MediaPortal.UserInterface.Controls.MPButton();
+      this.btnUpView = new MediaPortal.UserInterface.Controls.MPButton();
       this.dataGrid = new System.Windows.Forms.DataGridView();
       this.dgSelection = new System.Windows.Forms.DataGridViewComboBoxColumn();
       this.dgViewAs = new System.Windows.Forms.DataGridViewComboBoxColumn();
@@ -25,6 +30,7 @@
       this.btnSetDefaults = new MediaPortal.UserInterface.Controls.MPButton();
       this.btnAddView = new MediaPortal.UserInterface.Controls.MPButton();
       this.btnDeleteView = new MediaPortal.UserInterface.Controls.MPButton();
+      this.toolTipViewButtons = new System.Windows.Forms.ToolTip(this.components);
       this.groupBox.SuspendLayout();
       ((System.ComponentModel.ISupportInitialize)(this.dataGrid)).BeginInit();
       this.SuspendLayout();
@@ -34,6 +40,9 @@
       this.groupBox.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
             | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
+      this.groupBox.Controls.Add(this.btnCopyView);
+      this.groupBox.Controls.Add(this.btnDownView);
+      this.groupBox.Controls.Add(this.btnUpView);
       this.groupBox.Controls.Add(this.dataGrid);
       this.groupBox.Controls.Add(this.lblActionCodes);
       this.groupBox.Controls.Add(this.treeViewMenu);
@@ -48,6 +57,45 @@
       this.groupBox.TabIndex = 0;
       this.groupBox.TabStop = false;
       // 
+      // btnCopyView
+      // 
+      this.btnCopyView.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
+      this.btnCopyView.Enabled = false;
+      this.btnCopyView.Image = global::MediaPortal.Configuration.Properties.Resources.icon_copy_view;
+      this.btnCopyView.Location = new System.Drawing.Point(419, 175);
+      this.btnCopyView.Name = "btnCopyView";
+      this.btnCopyView.Size = new System.Drawing.Size(25, 25);
+      this.btnCopyView.TabIndex = 16;
+      this.toolTipViewButtons.SetToolTip(this.btnCopyView, "Copy View");
+      this.btnCopyView.UseVisualStyleBackColor = false;
+      this.btnCopyView.Click += new System.EventHandler(this.btnCopyView_Click);
+      // 
+      // btnDownView
+      // 
+      this.btnDownView.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
+      this.btnDownView.Enabled = false;
+      this.btnDownView.Image = global::MediaPortal.Configuration.Properties.Resources.icon_down_view;
+      this.btnDownView.Location = new System.Drawing.Point(419, 144);
+      this.btnDownView.Name = "btnDownView";
+      this.btnDownView.Size = new System.Drawing.Size(25, 25);
+      this.btnDownView.TabIndex = 15;
+      this.toolTipViewButtons.SetToolTip(this.btnDownView, "Move Down");
+      this.btnDownView.UseVisualStyleBackColor = false;
+      this.btnDownView.Click += new System.EventHandler(this.btnDownView_Click);
+      // 
+      // btnUpView
+      // 
+      this.btnUpView.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
+      this.btnUpView.Enabled = false;
+      this.btnUpView.Image = global::MediaPortal.Configuration.Properties.Resources.icon_up_view;
+      this.btnUpView.Location = new System.Drawing.Point(419, 113);
+      this.btnUpView.Name = "btnUpView";
+      this.btnUpView.Size = new System.Drawing.Size(25, 25);
+      this.btnUpView.TabIndex = 14;
+      this.toolTipViewButtons.SetToolTip(this.btnUpView, "Move Up");
+      this.btnUpView.UseVisualStyleBackColor = false;
+      this.btnUpView.Click += new System.EventHandler(this.btnUpView_Click);
+      // 
       // dataGrid
       // 
       this.dataGrid.AllowDrop = true;
@@ -59,14 +107,14 @@
             | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
       this.dataGrid.BackgroundColor = System.Drawing.SystemColors.Control;
-      dataGridViewCellStyle1.Alignment = System.Windows.Forms.DataGridViewContentAlignment.MiddleLeft;
-      dataGridViewCellStyle1.BackColor = System.Drawing.Color.LightSteelBlue;
-      dataGridViewCellStyle1.Font = new System.Drawing.Font("Microsoft Sans Serif", 8.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-      dataGridViewCellStyle1.ForeColor = System.Drawing.SystemColors.WindowText;
-      dataGridViewCellStyle1.SelectionBackColor = System.Drawing.SystemColors.Highlight;
-      dataGridViewCellStyle1.SelectionForeColor = System.Drawing.SystemColors.HighlightText;
-      dataGridViewCellStyle1.WrapMode = System.Windows.Forms.DataGridViewTriState.True;
-      this.dataGrid.ColumnHeadersDefaultCellStyle = dataGridViewCellStyle1;
+      dataGridViewCellStyle3.Alignment = System.Windows.Forms.DataGridViewContentAlignment.MiddleLeft;
+      dataGridViewCellStyle3.BackColor = System.Drawing.Color.LightSteelBlue;
+      dataGridViewCellStyle3.Font = new System.Drawing.Font("Microsoft Sans Serif", 8.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+      dataGridViewCellStyle3.ForeColor = System.Drawing.SystemColors.WindowText;
+      dataGridViewCellStyle3.SelectionBackColor = System.Drawing.SystemColors.Highlight;
+      dataGridViewCellStyle3.SelectionForeColor = System.Drawing.SystemColors.HighlightText;
+      dataGridViewCellStyle3.WrapMode = System.Windows.Forms.DataGridViewTriState.True;
+      this.dataGrid.ColumnHeadersDefaultCellStyle = dataGridViewCellStyle3;
       this.dataGrid.ColumnHeadersHeightSizeMode = System.Windows.Forms.DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
       this.dataGrid.Columns.AddRange(new System.Windows.Forms.DataGridViewColumn[] {
             this.dgSelection,
@@ -75,11 +123,11 @@
             this.dgSortAsc,
             this.dgSkip,
             this.dgEditFilter});
-      this.dataGrid.Location = new System.Drawing.Point(16, 238);
+      this.dataGrid.Location = new System.Drawing.Point(16, 247);
       this.dataGrid.MultiSelect = false;
       this.dataGrid.Name = "dataGrid";
       this.dataGrid.RowHeadersVisible = false;
-      this.dataGrid.Size = new System.Drawing.Size(433, 129);
+      this.dataGrid.Size = new System.Drawing.Size(433, 120);
       this.dataGrid.TabIndex = 13;
       this.dataGrid.CellClick += new System.Windows.Forms.DataGridViewCellEventHandler(this.dataGrid_CellClick);
       this.dataGrid.CellPainting += new System.Windows.Forms.DataGridViewCellPaintingEventHandler(this.dataGrid_OnCellPainting);
@@ -156,7 +204,7 @@
       this.treeViewMenu.LabelEdit = true;
       this.treeViewMenu.Location = new System.Drawing.Point(16, 20);
       this.treeViewMenu.Name = "treeViewMenu";
-      this.treeViewMenu.Size = new System.Drawing.Size(344, 200);
+      this.treeViewMenu.Size = new System.Drawing.Size(397, 211);
       this.treeViewMenu.TabIndex = 11;
       this.treeViewMenu.AfterLabelEdit += new System.Windows.Forms.NodeLabelEditEventHandler(this.treeViewMenu_AfterLabelEdit);
       this.treeViewMenu.ItemDrag += new System.Windows.Forms.ItemDragEventHandler(this.treeViewMenu_ItemDrag);
@@ -169,33 +217,36 @@
       // 
       this.btnEditFilter.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
       this.btnEditFilter.Enabled = false;
-      this.btnEditFilter.Location = new System.Drawing.Point(366, 102);
+      this.btnEditFilter.Image = global::MediaPortal.Configuration.Properties.Resources.icon_edit_view;
+      this.btnEditFilter.Location = new System.Drawing.Point(419, 82);
       this.btnEditFilter.Name = "btnEditFilter";
-      this.btnEditFilter.Size = new System.Drawing.Size(83, 23);
+      this.btnEditFilter.Size = new System.Drawing.Size(25, 25);
       this.btnEditFilter.TabIndex = 10;
-      this.btnEditFilter.Text = "Edit Filter";
+      this.toolTipViewButtons.SetToolTip(this.btnEditFilter, "Edit Filter");
       this.btnEditFilter.UseVisualStyleBackColor = false;
       this.btnEditFilter.Click += new System.EventHandler(this.btEditFilter_Click);
       // 
       // btnSetDefaults
       // 
       this.btnSetDefaults.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
-      this.btnSetDefaults.Location = new System.Drawing.Point(366, 198);
+      this.btnSetDefaults.Image = global::MediaPortal.Configuration.Properties.Resources.icon_default_view;
+      this.btnSetDefaults.Location = new System.Drawing.Point(419, 206);
       this.btnSetDefaults.Name = "btnSetDefaults";
-      this.btnSetDefaults.Size = new System.Drawing.Size(83, 22);
+      this.btnSetDefaults.Size = new System.Drawing.Size(25, 22);
       this.btnSetDefaults.TabIndex = 9;
-      this.btnSetDefaults.Text = "Set defaults";
+      this.toolTipViewButtons.SetToolTip(this.btnSetDefaults, "Set default View");
       this.btnSetDefaults.UseVisualStyleBackColor = true;
       this.btnSetDefaults.Click += new System.EventHandler(this.btnSetDefaults_Click);
       // 
       // btnAddView
       // 
       this.btnAddView.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
-      this.btnAddView.Location = new System.Drawing.Point(366, 20);
+      this.btnAddView.Image = ((System.Drawing.Image)(resources.GetObject("btnAddView.Image")));
+      this.btnAddView.Location = new System.Drawing.Point(419, 20);
       this.btnAddView.Name = "btnAddView";
-      this.btnAddView.Size = new System.Drawing.Size(83, 22);
+      this.btnAddView.Size = new System.Drawing.Size(25, 25);
       this.btnAddView.TabIndex = 5;
-      this.btnAddView.Text = "Add View";
+      this.toolTipViewButtons.SetToolTip(this.btnAddView, "Add View");
       this.btnAddView.UseVisualStyleBackColor = true;
       this.btnAddView.Click += new System.EventHandler(this.btnAdd_Click);
       // 
@@ -203,11 +254,12 @@
       // 
       this.btnDeleteView.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
       this.btnDeleteView.Enabled = false;
-      this.btnDeleteView.Location = new System.Drawing.Point(366, 59);
+      this.btnDeleteView.Image = global::MediaPortal.Configuration.Properties.Resources.icon_delete_view;
+      this.btnDeleteView.Location = new System.Drawing.Point(419, 51);
       this.btnDeleteView.Name = "btnDeleteView";
-      this.btnDeleteView.Size = new System.Drawing.Size(83, 22);
+      this.btnDeleteView.Size = new System.Drawing.Size(25, 25);
       this.btnDeleteView.TabIndex = 6;
-      this.btnDeleteView.Text = "Delete View";
+      this.toolTipViewButtons.SetToolTip(this.btnDeleteView, "Delete View");
       this.btnDeleteView.UseVisualStyleBackColor = true;
       this.btnDeleteView.Click += new System.EventHandler(this.btnDelete_Click);
       // 
@@ -237,5 +289,10 @@
     private System.Windows.Forms.DataGridViewCheckBoxColumn dgSortAsc;
     private System.Windows.Forms.DataGridViewCheckBoxColumn dgSkip;
     private System.Windows.Forms.DataGridViewButtonColumn dgEditFilter;
+    private System.Windows.Forms.ToolTip toolTipViewButtons;
+    private System.ComponentModel.IContainer components;
+    private UserInterface.Controls.MPButton btnUpView;
+    private UserInterface.Controls.MPButton btnCopyView;
+    private UserInterface.Controls.MPButton btnDownView;
   }
 }
