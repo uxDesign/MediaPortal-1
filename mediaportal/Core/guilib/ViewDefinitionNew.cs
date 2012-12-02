@@ -19,7 +19,6 @@
 #endregion
 
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Xml.Serialization;
 using MediaPortal.GUI.Library;
@@ -30,7 +29,7 @@ namespace MediaPortal.GUI.View
   /// Summary description for ViewDefinition.
   /// </summary>
   [Serializable]
-  public class ViewDefinitionNew
+  public class ViewDefinitionNew : ICloneable
   {
     protected List<FilterLevel> _listFilterLevels = new List<FilterLevel>();
     protected List<ViewDefinitionNew> _listSubViews = new List<ViewDefinitionNew>();
@@ -89,5 +88,20 @@ namespace MediaPortal.GUI.View
     {
       return LocalizedName;
     }
+
+    #region ICloneable Members
+
+    public object Clone()
+    {
+      ViewDefinitionNew clonedView = new ViewDefinitionNew();
+      clonedView.Name = Name;
+      clonedView.Parent = null;
+      clonedView.Filters = Filters.GetRange(0, Filters.Count);
+      clonedView.Levels = Levels.GetRange(0, Levels.Count);
+      clonedView.SubViews = SubViews.GetRange(0, SubViews.Count);
+      return clonedView;
+    }
+
+    #endregion
   }
 }
