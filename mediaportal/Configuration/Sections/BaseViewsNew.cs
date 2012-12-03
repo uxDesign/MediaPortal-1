@@ -452,12 +452,58 @@ namespace MediaPortal.Configuration.Sections
 
     private void btnUpView_Click(object sender, EventArgs e)
     {
-
+      TreeNode node = treeViewMenu.SelectedNode;
+      TreeNode parent = node.Parent;
+      treeViewMenu.BeginUpdate();
+      if (parent != null)
+      {
+        int index = parent.Nodes.IndexOf(node);
+        if (index > 0)
+        {
+          parent.Nodes.RemoveAt(index);
+          parent.Nodes.Insert(index - 1, node);
+        }
+      }
+      else if (treeViewMenu.Nodes.Contains(node)) //root node
+      {
+        int index = treeViewMenu.Nodes.IndexOf(node);
+        if (index > 0)
+        {
+          treeViewMenu.Nodes.RemoveAt(index);
+          treeViewMenu.Nodes.Insert(index - 1, node);
+        }
+      }
+      _settingsChanged = true;
+      treeViewMenu.EndUpdate();
+      treeViewMenu.SelectedNode = node;
     }
 
     private void btnDownView_Click(object sender, EventArgs e)
     {
-
+      TreeNode node = treeViewMenu.SelectedNode;
+      TreeNode parent = node.Parent;
+      treeViewMenu.BeginUpdate();
+      if (parent != null)
+      {
+        int index = parent.Nodes.IndexOf(node);
+        if (index < parent.Nodes.Count - 1)
+        {
+          parent.Nodes.RemoveAt(index);
+          parent.Nodes.Insert(index + 1, node);
+        }
+      }
+      else if (treeViewMenu.Nodes.Contains(node)) //root node
+      {
+        int index = treeViewMenu.Nodes.IndexOf(node);
+        if (index < treeViewMenu.Nodes.Count - 1)
+        {
+          treeViewMenu.Nodes.RemoveAt(index);
+          treeViewMenu.Nodes.Insert(index + 1, node);
+        }
+      }
+      _settingsChanged = true;
+      treeViewMenu.EndUpdate();
+      treeViewMenu.SelectedNode = node;
     }
 
     private void btnCopyView_Click(object sender, EventArgs e)
@@ -467,6 +513,7 @@ namespace MediaPortal.Configuration.Sections
       clonedNode.Tag = view.Clone();
       treeViewMenu.Nodes.Add(clonedNode);
       treeViewMenu.SelectedNode = clonedNode;
+      _settingsChanged = true;
     }
 
     /// <summary>
@@ -533,7 +580,7 @@ namespace MediaPortal.Configuration.Sections
     private void treeViewMenu_AfterSelect(object sender, TreeViewEventArgs e)
     {
       _currentView = (ViewDefinitionNew)treeViewMenu.SelectedNode.Tag;
-      if (_currentView.SubViews.Count > 0)
+      if (treeViewMenu.SelectedNode.Nodes.Count > 0)
       {
         _datasetLevels.Clear();
         dataGrid.Hide();
@@ -728,16 +775,21 @@ namespace MediaPortal.Configuration.Sections
       }
 
       TreeNode newNode = (TreeNode)sourceNode.Clone();
+
       if (targetNode != null)
       {
-        // Add new Node
-        targetNode.Nodes.Add(newNode);
-        ViewDefinitionNew view = (ViewDefinitionNew)targetNode.Tag;
-        ViewDefinitionNew subview = (ViewDefinitionNew)sourceNode.Tag;
-        subview.Parent = view.LocalizedName;
-        sourceNode.Tag = subview;
-        view.SubViews.Add(subview);
-        targetNode.Tag = view;
+        // Are we at a root node?
+
+        if (targetNode.Parent == null)
+        {
+          // Add Node to Root Node
+          targetNode.Nodes.Add(newNode);
+        }
+        else
+        {
+          // Insert node after the Node selected
+          targetNode.Parent.Nodes.Insert(targetNode.Parent.Nodes.IndexOf(targetNode) + 1, newNode);
+        }
       }
       else
       {
@@ -748,19 +800,11 @@ namespace MediaPortal.Configuration.Sections
         treeViewMenu.Nodes.Add(newNode);
       }
 
-      // if the Node was part of a parent node, we need to remove it also from the view
-      TreeNode parentNode = sourceNode.Parent;
-      if (parentNode != null)
-      {
-        ViewDefinitionNew view = (ViewDefinitionNew)parentNode.Tag;
-        view.SubViews.Remove((ViewDefinitionNew)sourceNode.Tag);
-        parentNode.Tag = view;
-      }
-
       if (e.Effect == DragDropEffects.Move)
       {
         sourceNode.Remove();
       }
+      _settingsChanged = true;
       treeViewMenu.ExpandAll();
       treeViewMenu.Invalidate();
     }
@@ -981,10 +1025,15 @@ namespace MediaPortal.Configuration.Sections
       if (_settingsChanged)
       {
         _views.Clear();
-        TreeNodeCollection nodes = treeViewMenu.Nodes;
-        foreach (TreeNode node in nodes)
+        foreach (TreeNode node in treeViewMenu.Nodes)
         {
-          _views.Add((ViewDefinitionNew)node.Tag);
+          ViewDefinitionNew view = (ViewDefinitionNew)node.Tag;
+          view.SubViews.Clear();
+          foreach (TreeNode subNode in node.Nodes)
+          {
+            view.SubViews.Add((ViewDefinitionNew)subNode.Tag);
+          }
+          _views.Add(view);
         }
 
         // Now Serialize the View to the XML
