@@ -11,9 +11,10 @@
     private void InitializeComponent()
     {
       this.components = new System.ComponentModel.Container();
-      System.Windows.Forms.DataGridViewCellStyle dataGridViewCellStyle3 = new System.Windows.Forms.DataGridViewCellStyle();
+      System.Windows.Forms.DataGridViewCellStyle dataGridViewCellStyle1 = new System.Windows.Forms.DataGridViewCellStyle();
       System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(BaseViewsNew));
       this.groupBox = new MediaPortal.UserInterface.Controls.MPGroupBox();
+      this.mpLabel1 = new MediaPortal.UserInterface.Controls.MPLabel();
       this.btnCopyView = new MediaPortal.UserInterface.Controls.MPButton();
       this.btnDownView = new MediaPortal.UserInterface.Controls.MPButton();
       this.btnUpView = new MediaPortal.UserInterface.Controls.MPButton();
@@ -50,12 +51,24 @@
       this.groupBox.Controls.Add(this.btnSetDefaults);
       this.groupBox.Controls.Add(this.btnAddView);
       this.groupBox.Controls.Add(this.btnDeleteView);
+      this.groupBox.Controls.Add(this.mpLabel1);
       this.groupBox.FlatStyle = System.Windows.Forms.FlatStyle.Popup;
       this.groupBox.Location = new System.Drawing.Point(6, 0);
       this.groupBox.Name = "groupBox";
       this.groupBox.Size = new System.Drawing.Size(462, 408);
       this.groupBox.TabIndex = 0;
       this.groupBox.TabStop = false;
+      // 
+      // mpLabel1
+      // 
+      this.mpLabel1.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
+            | System.Windows.Forms.AnchorStyles.Right)));
+      this.mpLabel1.Location = new System.Drawing.Point(16, 227);
+      this.mpLabel1.Name = "mpLabel1";
+      this.mpLabel1.Size = new System.Drawing.Size(430, 29);
+      this.mpLabel1.TabIndex = 17;
+      this.mpLabel1.Text = "Drag the rows to change order. Drag on a Root node to create a subview";
+      this.mpLabel1.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
       // 
       // btnCopyView
       // 
@@ -107,14 +120,14 @@
             | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
       this.dataGrid.BackgroundColor = System.Drawing.SystemColors.Control;
-      dataGridViewCellStyle3.Alignment = System.Windows.Forms.DataGridViewContentAlignment.MiddleLeft;
-      dataGridViewCellStyle3.BackColor = System.Drawing.Color.LightSteelBlue;
-      dataGridViewCellStyle3.Font = new System.Drawing.Font("Microsoft Sans Serif", 8.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-      dataGridViewCellStyle3.ForeColor = System.Drawing.SystemColors.WindowText;
-      dataGridViewCellStyle3.SelectionBackColor = System.Drawing.SystemColors.Highlight;
-      dataGridViewCellStyle3.SelectionForeColor = System.Drawing.SystemColors.HighlightText;
-      dataGridViewCellStyle3.WrapMode = System.Windows.Forms.DataGridViewTriState.True;
-      this.dataGrid.ColumnHeadersDefaultCellStyle = dataGridViewCellStyle3;
+      dataGridViewCellStyle1.Alignment = System.Windows.Forms.DataGridViewContentAlignment.MiddleLeft;
+      dataGridViewCellStyle1.BackColor = System.Drawing.Color.LightSteelBlue;
+      dataGridViewCellStyle1.Font = new System.Drawing.Font("Microsoft Sans Serif", 8.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+      dataGridViewCellStyle1.ForeColor = System.Drawing.SystemColors.WindowText;
+      dataGridViewCellStyle1.SelectionBackColor = System.Drawing.SystemColors.Highlight;
+      dataGridViewCellStyle1.SelectionForeColor = System.Drawing.SystemColors.HighlightText;
+      dataGridViewCellStyle1.WrapMode = System.Windows.Forms.DataGridViewTriState.True;
+      this.dataGrid.ColumnHeadersDefaultCellStyle = dataGridViewCellStyle1;
       this.dataGrid.ColumnHeadersHeightSizeMode = System.Windows.Forms.DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
       this.dataGrid.Columns.AddRange(new System.Windows.Forms.DataGridViewColumn[] {
             this.dgSelection,
@@ -123,7 +136,7 @@
             this.dgSortAsc,
             this.dgSkip,
             this.dgEditFilter});
-      this.dataGrid.Location = new System.Drawing.Point(16, 247);
+      this.dataGrid.Location = new System.Drawing.Point(16, 254);
       this.dataGrid.MultiSelect = false;
       this.dataGrid.Name = "dataGrid";
       this.dataGrid.RowHeadersVisible = false;
@@ -190,7 +203,7 @@
       // 
       this.lblActionCodes.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
-      this.lblActionCodes.Location = new System.Drawing.Point(15, 370);
+      this.lblActionCodes.Location = new System.Drawing.Point(15, 373);
       this.lblActionCodes.Name = "lblActionCodes";
       this.lblActionCodes.Size = new System.Drawing.Size(430, 29);
       this.lblActionCodes.TabIndex = 12;
@@ -294,5 +307,6 @@
     private UserInterface.Controls.MPButton btnUpView;
     private UserInterface.Controls.MPButton btnCopyView;
     private UserInterface.Controls.MPButton btnDownView;
+    private UserInterface.Controls.MPLabel mpLabel1;
   }
 }
