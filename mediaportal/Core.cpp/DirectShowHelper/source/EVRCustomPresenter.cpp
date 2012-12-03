@@ -81,7 +81,7 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
   m_bEndBuffering(false),
   m_state(MP_RENDER_STATE_SHUTDOWN),
   m_streamDuration(0),
-  m_evrPresVer(676)
+  m_evrPresVer(677)
 {
   ZeroMemory((void*)&m_dPhaseDeviations, sizeof(double) * NUM_PHASE_DEVIATIONS);
 
@@ -167,6 +167,11 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
     m_LastStartOfPaintScanline    = 0;
     m_frameRateRatio              = 0;
     m_rawFRRatio                  = 0;
+
+    m_iVideoWidth  = 1;
+    m_iVideoHeight = 1;
+    m_iARX = 1;
+    m_iARY = 1;
     
     m_numFilters = 0;
     
@@ -187,6 +192,7 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
     m_rasterLimitNP     = (UINT)m_displayParams.maxVisScanLine; 
 
     m_bDrawStats = false;
+    m_bOddFrame = false;
   }
 
   //Read (and create if needed) debug registry settings
@@ -202,6 +208,9 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
   m_regTimerMmcssPriority  = TIMER_MMCSS_PRIORITY;
   m_bForceFirstFrame = FORCE_FIRST_FRAME;
   m_bLowResTiming = LOW_RES_TIMING;
+  m_regFPSLimRate = FPS_LIM_RATE;
+  m_regFPSLimV = FPS_LIM_V;
+  m_regFPSLimH = FPS_LIM_H;
   
   if (ERROR_SUCCESS==RegCreateKeyEx(HKEY_CURRENT_USER, _T("Software\\Team MediaPortal\\EVR Presenter"), 0, NULL, 
                                     REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, NULL, &key, NULL))
@@ -358,6 +367,48 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
     {
       Log("--- Disable Low Resolution Timing");
       m_bLowResTiming = false;
+    }
+
+    keyValue = (DWORD)m_regFPSLimRate;
+    LPCTSTR regFPSLimRate_RRK = TEXT("FPSLimitFrameRate");
+    ReadRegistryKeyDword(key, regFPSLimRate_RRK, keyValue);
+    if (keyValue)
+    {
+      m_regFPSLimRate = (int)keyValue;
+      Log("--- FPS Limiter Frame Rate = %d fps", m_regFPSLimRate);
+    }
+    else
+    {
+      m_regFPSLimRate = 0;
+      Log("--- FPS Limiter disabled");
+    }
+
+    keyValue = (DWORD)m_regFPSLimV;
+    LPCTSTR regFPSLimV_RRK = TEXT("FPSLimitHeightThresh");
+    ReadRegistryKeyDword(key, regFPSLimV_RRK, keyValue);
+    if (keyValue)
+    {
+      m_regFPSLimV = (int)keyValue;
+      Log("--- FPS Limit height threshold = %d", m_regFPSLimV);
+    }
+    else
+    {
+      m_regFPSLimV = 0;
+      Log("--- FPS Limit height threshold disabled");
+    }
+
+    keyValue = (DWORD)m_regFPSLimH;
+    LPCTSTR regFPSLimH_RRK = TEXT("FPSLimitWidthThresh");
+    ReadRegistryKeyDword(key, regFPSLimH_RRK, keyValue);
+    if (keyValue)
+    {
+      m_regFPSLimH = (int)keyValue;
+      Log("--- FPS Limit width threshold = %d", m_regFPSLimH);
+    }
+    else
+    {
+      m_regFPSLimH = 0;
+      Log("--- FPS Limit width threshold disabled");
     }
     
     RegCloseKey(key);
@@ -1462,6 +1513,24 @@ void MPEVRCustomPresenter::ReturnSample(IMFSample* pSample, BOOL tryNotify)
 HRESULT MPEVRCustomPresenter::PresentSample(IMFSample* pSample)
 {
   HRESULT hr = S_OK;
+  
+  //FPS rate limiter - Discard alternate samples to reduce rendering load when enabled
+  if (m_regFPSLimRate > 0)
+  {
+    m_bOddFrame = !m_bOddFrame;
+    if (!m_bOddFrame && !m_bDVDMenu && !m_bScrubbing && (m_iVideoHeight > m_regFPSLimV) && (m_iVideoWidth > m_regFPSLimH))
+    {    
+      LONGLONG sampleDuration, sampleTime;
+      pSample->GetSampleTime(&sampleTime);
+      pSample->GetSampleDuration(&sampleDuration);
+      if ((sampleDuration > 0) && (sampleDuration < (10000000/m_regFPSLimRate)) && (sampleTime > 0))
+      {
+        //Discard sample
+        return hr;
+      }
+    }
+  }
+
   IMFMediaBuffer* pBuffer = NULL;
   IDirect3DSurface9* pSurface = NULL;
   LONGLONG then = 0;
@@ -3576,6 +3645,7 @@ void MPEVRCustomPresenter::ResetFrameStats()
   m_iFramesDropped  = 0;
   m_iFramesProcessed = 0;
   m_iEarlyFrCnt     = 0;
+  m_bOddFrame = false;
   
   m_nNextCFP = 0;
   m_fCFPMean = 0;

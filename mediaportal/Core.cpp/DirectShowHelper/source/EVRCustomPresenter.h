@@ -47,6 +47,11 @@ using namespace std;
 //Minimum usable vsync correction delay in 100 ns units (used when LOW_RES_TIMING is true)
 #define MIN_VSC_DELAY 11000
 
+//Maximum FPS rate limiter default settings
+#define FPS_LIM_RATE 0
+#define FPS_LIM_V 700
+#define FPS_LIM_H 1200
+
 //Set MMCSS thread priorities - these are incremented by one to allow DWORD (unsigned) representation in Registry
 #define SCHED_MMCSS_PRIORITY  (AVRT_PRIORITY_HIGH + 1)  
 #define WORKER_MMCSS_PRIORITY (AVRT_PRIORITY_NORMAL + 1)
@@ -430,6 +435,11 @@ protected:
   double                            m_fPCDSumAvg;
 		
   int                               m_iFramesProcessed;
+
+  int                               m_regFPSLimRate;
+  int                               m_regFPSLimV;
+  int                               m_regFPSLimH;
+  bool                              m_bOddFrame;
  
   int       m_nNextSyncOffset;
   LONGLONG  nsSampleTime;
