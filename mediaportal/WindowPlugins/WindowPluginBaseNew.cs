@@ -388,8 +388,8 @@ namespace WindowPlugins
         default: // a db view
           {
             ViewDefinitionNew selectedView = (ViewDefinitionNew)handler.Views[selectedViewId - 1];
-            handler.CurrentView = selectedView.Name;
-            StateBase.View = selectedView.Name;
+            handler.CurrentView = selectedView.ToString();
+            StateBase.View = handler.CurrentView;
             int nNewWindow;
             if (isVideoWindow)
             {

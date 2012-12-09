@@ -31,14 +31,23 @@ namespace MediaPortal.GUI.View
   [Serializable]
   public class ViewDefinitionNew : ICloneable
   {
+    #region Variables
+
     protected List<FilterLevel> _listFilterLevels = new List<FilterLevel>();
     protected List<ViewDefinitionNew> _listSubViews = new List<ViewDefinitionNew>();
     protected List<FilterDefinitionNew> _listFilters = new List<FilterDefinitionNew>();
     private string _name;
     private string _parent;
 
-    public ViewDefinitionNew() {}
+    #endregion
 
+    #region ctor
+    public ViewDefinitionNew() {}
+    #endregion
+
+    /// <summary>
+    /// Internal Name of the View
+    /// </summary>
     [XmlElement("Name")]
     public string Name
     {
@@ -46,6 +55,9 @@ namespace MediaPortal.GUI.View
       set { _name = value; }
     }
 
+    /// <summary>
+    /// Name of the Parent
+    /// </summary>
     [XmlElement("Parent")]
     public string Parent
     {
@@ -53,6 +65,9 @@ namespace MediaPortal.GUI.View
       set { _parent = value; }
     }
 
+    /// <summary>
+    /// List of Filters assigned to the View
+    /// </summary>
     [XmlElement("Filter")]
     public List<FilterDefinitionNew> Filters
     {
@@ -60,6 +75,9 @@ namespace MediaPortal.GUI.View
       set { _listFilters = value; }
     }
 
+    /// <summary>
+    /// Level of the View
+    /// </summary>
     [XmlElement("FilterLevel")]
     public List<FilterLevel> Levels
     {
@@ -67,6 +85,9 @@ namespace MediaPortal.GUI.View
       set { _listFilterLevels = value; }
     }
 
+    /// <summary>
+    /// SubViews, if this is a Main View entry
+    /// </summary>
     [XmlElement("SubView")]
     public List<ViewDefinitionNew> SubViews
     {
@@ -74,6 +95,9 @@ namespace MediaPortal.GUI.View
       set { _listSubViews = value; }
     }
 
+    /// <summary>
+    /// The Localised name
+    /// </summary>
     public string LocalizedName
     {
       get
@@ -84,9 +108,17 @@ namespace MediaPortal.GUI.View
       }
     }
 
+    /// <summary>
+    /// The View name composed of the localised name
+    /// </summary>
+    /// <returns></returns>
     public override string ToString()
     {
-      return LocalizedName;
+      if (string.IsNullOrEmpty(_parent))
+      {
+        return LocalizedName;
+      }
+      return string.Format("{0}/{1}", _parent, LocalizedName);
     }
 
     #region ICloneable Members

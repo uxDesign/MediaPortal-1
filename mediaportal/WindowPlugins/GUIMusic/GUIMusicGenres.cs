@@ -617,6 +617,7 @@ namespace MediaPortal.GUI.Music
         {
           // this is a level in the view above the bottom
           ((MusicViewHandler)handler).Select(item.AlbumInfoTag as Song);
+          MusicState.View = handler.CurrentView;
         }
 
         m_iItemSelected = -1;

@@ -90,7 +90,7 @@ namespace MediaPortal.GUI.Library
         return currentView.LocalizedName;
       }
     }
-    
+
     /// <summary>
     /// Property for the view level name as localized string
     /// This will return the view level (ie. the where in view
@@ -104,18 +104,18 @@ namespace MediaPortal.GUI.Library
         {
           return string.Empty;
         }
-        
+
         if (currentView.Levels.Count == 0)
         {
           return currentView.LocalizedName;
         }
-        
+
         FilterLevel def = (FilterLevel)currentView.Levels[currentLevel];
 
-        return(GetLocalizedViewLevel(def.Selection));
+        return (GetLocalizedViewLevel(def.Selection));
       }
     }
-    
+
     protected virtual string GetLocalizedViewLevel(String lvlName)
     {
       return lvlName;
@@ -129,52 +129,73 @@ namespace MediaPortal.GUI.Library
         {
           return string.Empty;
         }
-        return currentView.Name;
+        return currentView.ToString();
       }
       set
       {
-        bool done = false;
-        
-        // Find out, if CurrentView was a Main View
         List<ViewDefinitionNew> searchViews = new List<ViewDefinitionNew>();
+        int searchIndex = 0;
 
-        if (currentView != null)
+        string[] splitView = value.Split('/');
+
+        // currentView is null on startup. Parse t
+        if (currentView == null)
         {
-          foreach (ViewDefinitionNew definition in views)
+          if (splitView.GetUpperBound(0) > 0)
           {
-            if (definition.ToString() == currentView.ToString())
+            searchViews = views;
+            foreach (ViewDefinitionNew view in views)
             {
-              if (currentView.SubViews.Count > 0)
+              if (view.LocalizedName == splitView[0])
               {
-                searchViews = currentView.SubViews;
-                done = true;
+                if (view.SubViews.Count > 0)
+                {
+                  searchViews = view.SubViews;
+                  searchIndex = 1;
+                }
+                break;
               }
-              break;
+            }
+          }
+          foreach (ViewDefinitionNew view in searchViews)
+          {
+            if (view.LocalizedName == splitView[searchIndex])
+            {
+              currentView = view;
+              CurrentLevel = 0;
+              return;
             }
           }
         }
-        if (!done)
+
+        // Is the selected View a Main View
+        foreach (ViewDefinitionNew view in views)
         {
-          searchViews = views;
+          if (view.LocalizedName == value)
+          {
+            currentView = view;
+            CurrentLevel = 0;
+            return;
+          }
         }
 
-        done = false;
-        foreach (ViewDefinitionNew definition in searchViews)
+        if (currentView != null && currentView.SubViews.Count > 0)
         {
-          if (definition.Name == value)
+          searchViews = currentView.SubViews;
+          foreach (ViewDefinitionNew view in searchViews)
           {
-            currentView = definition;
-            CurrentLevel = 0;
-            done = true;
-            break;
+            if (view.LocalizedName == value)
+            {
+              currentView = view;
+              CurrentLevel = 0;
+              return;
+            }
           }
         }
-        if (!done)
+
+        if (views.Count > 0)
         {
-          if (views.Count > 0)
-          {
-            currentView = (ViewDefinitionNew)views[0];
-          }
+         currentView = (ViewDefinitionNew)views[0];
         }
       }
     }
