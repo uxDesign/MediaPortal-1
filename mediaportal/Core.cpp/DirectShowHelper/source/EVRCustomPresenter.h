@@ -145,10 +145,12 @@ typedef struct _SchedulerParams
 {
   MPEVRCustomPresenter* pPresenter;
   CCritSec csLock;
-  CAMEvent eFlushOrStall;  //Delegated flush or stall event
+  CAMEvent eStall;  //Thread stall event
+  CAMEvent eFlush;  //Delegated flush event
   CAMEvent eHasWork;   //Urgent event
   CAMEvent eHasWorkLP; //Low-priority event
-  CAMEvent eTimerEndOrUnstall;  //Release stall event
+  CAMEvent eUnstall;  //Release stall event
+  CAMEvent eTimerEnd;  //Timer end event
   BOOL bDone;
   LONGLONG llTime;     //Timer target time
 } SchedulerParams;
@@ -290,6 +292,7 @@ public:
   bool           m_bLowResTiming;
 
   CAMEvent      m_WorkerStalledEvent;
+  CAMEvent      m_SchedulerStalledEvent;
 
   // IsRunning: The "running" state is not shutdown or stopped (used in Scheduler.cpp)
   inline BOOL IsRunning() const
@@ -331,7 +334,7 @@ protected:
   bool           SampleAvailable();
   HRESULT        TrackSample(IMFSample *pSample);
   HRESULT        GetFreeSample(IMFSample** ppSample);
-  void           ReturnSample(IMFSample* pSample, BOOL tryNotify);
+  void           ReturnSample(IMFSample* pSample, BOOL tryNotify, BOOL isWorker);
   HRESULT        PresentSample(IMFSample* pSample);
   void           VideoFpsFromSample(IMFSample* pSample);
   void           GetRealRefreshRate();
@@ -346,7 +349,9 @@ protected:
 
   void           StallWorker();
   void           ReleaseWorker();
-  
+  void           StallScheduler();
+  void           ReleaseScheduler();
+ 
   HRESULT EnumFilters(IFilterGraph *pGraph);
   bool GetFilterNames();
 
@@ -368,12 +373,16 @@ protected:
   CCritSec                          m_lockRenderStats;
   CCritSec                          m_lockMState;
   CCritSec                          m_lockWorkerStall;
+  CCritSec                          m_lockSchedulerStall;
   CCritSec                          m_lockDWM;
   
   int                               m_iFreeSamples;
   IMFSample*                        m_vFreeSamples[MAX_SURFACES];
   IMFSample*                        m_vAllSamples[MAX_SURFACES];
   CMyQueue<IMFSample*>              m_qScheduledSamples;
+  bool                              m_bWorkerHasSample;
+  bool                              m_bSchedulerHasSample;
+  
   SchedulerParams                   m_schedulerParams;
   SchedulerParams                   m_workerParams;
   SchedulerParams                   m_timerParams;
@@ -526,9 +535,6 @@ protected:
   
   int           m_qGoodPutCnt;
 
-  //  int           m_qGoodPopCnt;
-  //  int           m_qBadPopCnt;
-  //  int           m_qBadPutCnt;
   //  int           m_qBadSampTimCnt;
   
   LONGLONG      m_stallTime;

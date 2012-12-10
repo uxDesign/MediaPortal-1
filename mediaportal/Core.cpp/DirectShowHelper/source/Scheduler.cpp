@@ -145,8 +145,10 @@ UINT CALLBACK TimerThread(void* param)
   }
   p->eHasWork.Reset();
   p->eHasWorkLP.Reset();
-  p->eTimerEndOrUnstall.Reset();
-  p->eFlushOrStall.Reset();
+  p->eTimerEnd.Reset();
+  p->eUnstall.Reset();
+  p->eFlush.Reset();  
+  p->eStall.Reset();  
   timeEndPeriod(dwResolution);
   if (m_pAvRevertMmThreadCharacteristics) 
   {
@@ -168,7 +170,7 @@ UINT CALLBACK WorkerThread(void* param)
   DWORD dwResolution;
   LONGLONG now = 0;
   LONGLONG diff = 0;
-  HANDLE hEvts[] = {p->eFlushOrStall, p->eHasWork, p->eHasWorkLP};
+  HANDLE hEvts[] = {p->eStall, p->eHasWork, p->eHasWorkLP};
   DWORD dwObject;
 
     // Tell Multimedia Class Scheduler (MMCS) we are doing threaded playback
@@ -209,12 +211,15 @@ UINT CALLBACK WorkerThread(void* param)
     
       switch (dwObject)
       {
-        case WAIT_OBJECT_0 :     //eFlushOrStall
+        case WAIT_OBJECT_0 :     //eStall
           //Log("Worker - StallEvent 1a");
-          p->eFlushOrStall.Reset();
+          p->eFlush.Reset();
           p->pPresenter->m_WorkerStalledEvent.Set();
-          p->eTimerEndOrUnstall.Wait(200);
-          p->eTimerEndOrUnstall.Reset();
+          if (!p->eUnstall.Wait(500))
+          {
+            Log("Worker thread - Unstall Event timeout");
+          }
+          p->eUnstall.Reset();
           //Log("Worker - StallEvent 1b");
           break;
         case WAIT_OBJECT_0 + 1:     //eHasWork
@@ -243,12 +248,15 @@ UINT CALLBACK WorkerThread(void* param)
     {
       switch (dwObject)
       {
-        case WAIT_OBJECT_0 :     //eFlushOrStall
+        case WAIT_OBJECT_0 :     //eStall
           //Log("Worker - StallEvent 2a");
-          p->eFlushOrStall.Reset();
+          p->eStall.Reset();
           p->pPresenter->m_WorkerStalledEvent.Set();
-          p->eTimerEndOrUnstall.Wait(200);
-          p->eTimerEndOrUnstall.Reset();
+          if (!p->eUnstall.Wait(500))
+          {
+            Log("Worker thread - Unstall Event timeout");
+          }
+          p->eUnstall.Reset();
           //Log("Worker - StallEvent 2b");
           break;
         case WAIT_OBJECT_0 + 1 :     //eHasWork
@@ -267,8 +275,10 @@ UINT CALLBACK WorkerThread(void* param)
   // quit
   p->eHasWork.Reset();
   p->eHasWorkLP.Reset();
-  p->eTimerEndOrUnstall.Reset();
-  p->eFlushOrStall.Reset();
+  p->eTimerEnd.Reset();
+  p->eUnstall.Reset();
+  p->eFlush.Reset();  
+  p->eStall.Reset();  
   timeEndPeriod(dwResolution);
   if (m_pAvRevertMmThreadCharacteristics) 
   {
@@ -318,8 +328,8 @@ UINT CALLBACK SchedulerThread(void* param)
   dwResolution = min(max(tc.wPeriodMin, 1), tc.wPeriodMax);
   dwUser = timeBeginPeriod(dwResolution);
 
-  HANDLE hEvts3[] = {p->eFlushOrStall, p->eHasWork, p->eTimerEndOrUnstall};
-  HANDLE hEvts4[] = {p->eFlushOrStall, p->eHasWork, p->eTimerEndOrUnstall, p->eHasWorkLP};
+  HANDLE hEvts4[] = {p->eStall, p->eFlush, p->eHasWork, p->eTimerEnd};
+  HANDLE hEvts5[] = {p->eStall, p->eFlush, p->eHasWork, p->eTimerEnd, p->eHasWorkLP};
   
   while (!p->bDone)
   {   
@@ -346,7 +356,7 @@ UINT CALLBACK SchedulerThread(void* param)
          
     delay = min(1000000, delay); //limit max sleep time to 100ms
 
-    p->eTimerEndOrUnstall.Reset();
+    p->eTimerEnd.Reset();
     p->pPresenter->NotifyTimer(0); //Disable Timer thread
 
     if (idleWait)
@@ -355,30 +365,41 @@ UINT CALLBACK SchedulerThread(void* param)
       timDel = (DWORD)(delay/10000);
       LOG_TRACE("Setting Scheduler Timer to %d ms idle time", timDel);
       p->pPresenter->NotifyTimer(now + delay); //Wake up Timer thread
-      dwObject = WaitForMultipleObjects (4, hEvts4, FALSE, timDel);
+      dwObject = WaitForMultipleObjects (5, hEvts5, FALSE, timDel);
     }
     else if (delay >= 10000) // set timer if hnsTargetTime is at least 1 ms in the future
     {     
       timDel = (DWORD)(delay/10000);
       LOG_TRACE("Setting Scheduler Timer to %d ms video delay", timDel);
       p->pPresenter->NotifyTimer(hnsTargetTime); //Wake up Timer thread
-      dwObject = WaitForMultipleObjects (3, hEvts3, FALSE, timDel);
+      dwObject = WaitForMultipleObjects (4, hEvts4, FALSE, timDel);
     }
               
     switch (dwObject)
     {
-      case WAIT_OBJECT_0 :     //eFlushOrStall
+      case WAIT_OBJECT_0 :     //eStall
+        //Log("Sch - StallEvent start");
+        p->eFlush.Reset();
+        p->pPresenter->m_SchedulerStalledEvent.Set();
+        if (!p->eUnstall.Wait(500))
+        {
+          Log("Scheduler thread - Unstall Event timeout");
+        }
+        p->eUnstall.Reset();
+        //Log("Sch - StallEvent end");
+        break;
+      case WAIT_OBJECT_0 + 1 :     //eFlush
         // Log("Sch - FlushEvent");
-        p->eFlushOrStall.Reset();
+        p->eFlush.Reset();
         p->pPresenter->DelegatedFlush();
         delay = 0;
         hnsTargetTime = 0;
         break;
-      case WAIT_OBJECT_0 + 1 :     //eHasWork
+      case WAIT_OBJECT_0 + 2 :     //eHasWork
         p->eHasWork.Reset();
         break;
-      case WAIT_OBJECT_0 + 2 : //eTimerEnd
-        p->eTimerEndOrUnstall.Reset();
+      case WAIT_OBJECT_0 + 3 : //eTimerEnd
+        p->eTimerEnd.Reset();
         if (LOG_DELAYS)
         {
           delErr = GetCurrentTimestamp() - hnsTargetTime;
@@ -388,7 +409,7 @@ UINT CALLBACK SchedulerThread(void* param)
             Log("High timer latency in SchedulerThread: %.2f ms, target: %.2f ms", ((double)delErr)/10000.0, ((double)delay)/10000.0);
         }
         break;
-      case WAIT_OBJECT_0 + 3 : //eHasWorkLP
+      case WAIT_OBJECT_0 + 4 : //eHasWorkLP
         p->eHasWorkLP.Reset();
         break;
       case WAIT_TIMEOUT :
@@ -437,8 +458,10 @@ UINT CALLBACK SchedulerThread(void* param)
   // quit
   p->eHasWork.Reset();
   p->eHasWorkLP.Reset();
-  p->eTimerEndOrUnstall.Reset();
-  p->eFlushOrStall.Reset();  
+  p->eTimerEnd.Reset();
+  p->eUnstall.Reset();
+  p->eFlush.Reset();  
+  p->eStall.Reset();  
   timeEndPeriod(dwResolution);
   if (p->pPresenter->m_bSchedulerEnableMMCSS)
   {

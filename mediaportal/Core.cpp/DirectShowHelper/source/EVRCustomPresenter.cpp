@@ -81,7 +81,7 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
   m_bEndBuffering(false),
   m_state(MP_RENDER_STATE_SHUTDOWN),
   m_streamDuration(0),
-  m_evrPresVer(677)
+  m_evrPresVer(678)
 {
   ZeroMemory((void*)&m_dPhaseDeviations, sizeof(double) * NUM_PHASE_DEVIATIONS);
 
@@ -118,6 +118,8 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
     m_bSchedulerRunning        = FALSE;
     m_fRate                    = 1.0f;
     m_iFreeSamples             = 0;
+    m_bWorkerHasSample         = false;
+    m_bSchedulerHasSample      = false;
     m_nNextJitter              = 0;
     m_llLastPerf               = 0;
     m_fAvrFps                  = 0.0;
@@ -1288,15 +1290,11 @@ HRESULT MPEVRCustomPresenter::LogOutputTypes()
   return S_OK;
 }
 
-
+//The caller must perform any necessary worker/scheduler thread locking !!!
 HRESULT MPEVRCustomPresenter::RenegotiateMediaOutputType()
 {
   m_bFirstInputNotify = FALSE;
-  //This can be called via the Worker thread, so don't lock that thread here...
   Log("RenegotiateMediaOutputType 1");
-  CAutoLock sLock(&m_schedulerParams.csLock);
-  //Log("RenegotiateMediaOutputType 2");
-  CAutoLock tLock(&m_timerParams.csLock);
   DoFlush(TRUE);
   Log("RenegotiateMediaOutputType 3");
   HRESULT hr = S_OK;
@@ -1396,13 +1394,14 @@ HRESULT MPEVRCustomPresenter::GetFreeSample(IMFSample** ppSample)
   CAutoLock sLock(&m_lockSamples);
   //TIME_LOCK(&m_lockSamples, 50000, "GetFreeSample");
   LOG_TRACE("Trying to get free sample, size: %d", m_iFreeSamples);
-  if (m_iFreeSamples <= 0 || m_qScheduledSamples.IsFull())
+  if (m_iFreeSamples <= 0 || m_qScheduledSamples.IsFull() || m_bWorkerHasSample)
   {
     return E_FAIL;
   }
   m_iFreeSamples--;
   *ppSample = m_vFreeSamples[m_iFreeSamples];
   m_vFreeSamples[m_iFreeSamples] = NULL;
+  m_bWorkerHasSample = true;
 
   return S_OK;
 }
@@ -1432,7 +1431,7 @@ void MPEVRCustomPresenter::Flush(BOOL forced)
   if (m_bSchedulerRunning)
   {
     //This flush is delegated to the Scheduler thread, so wake it up....
-    m_schedulerParams.eFlushOrStall.Set();
+    m_schedulerParams.eFlush.Set();
   }
   else 
   {
@@ -1458,6 +1457,8 @@ void MPEVRCustomPresenter::DoFlush(BOOL forced)
     }
     m_iFreeSamples = m_regNumSamples;
     m_qScheduledSamples.Clear();
+    m_bWorkerHasSample = false;
+    m_bSchedulerHasSample = false;
   }
   else
   {
@@ -1471,11 +1472,23 @@ void MPEVRCustomPresenter::DoFlush(BOOL forced)
 }
 
 
-void MPEVRCustomPresenter::ReturnSample(IMFSample* pSample, BOOL tryNotify)
+void MPEVRCustomPresenter::ReturnSample(IMFSample* pSample, BOOL tryNotify, BOOL isWorker)
 {
   CAutoLock sLock(&m_lockSamples);
   //TIME_LOCK(&m_lockSamples, 50000, "ReturnSample")
   LOG_TRACE("Sample returned: now having %d samples", m_iFreeSamples+1);
+  
+  if (isWorker && !m_bWorkerHasSample)
+  {
+    //Error - worker thread returning un-allocated sample !!
+    return;
+  }
+  if (!isWorker && !m_bSchedulerHasSample)
+  {
+    //Error - scheduler thread returning un-allocated sample !!
+    return;
+  }
+    
   if (m_iFreeSamples >= m_regNumSamples)
   {
     //Error - all samples free !!
@@ -1497,6 +1510,15 @@ void MPEVRCustomPresenter::ReturnSample(IMFSample* pSample, BOOL tryNotify)
 
   m_vFreeSamples[m_iFreeSamples] = pSample;
   m_iFreeSamples++;
+
+  if (isWorker)
+  {
+    m_bWorkerHasSample = false;
+  }
+  else
+  {
+    m_bSchedulerHasSample = false;
+  }
   
   if (m_qScheduledSamples.IsEmpty())
   {
@@ -1780,7 +1802,7 @@ HRESULT MPEVRCustomPresenter::CheckForScheduledSample(LONGLONG *pTargetTime, LON
         CHECK_HR(PresentSample(pSample), "PresentSample failed");
         DwmFlush();
       }     
-      ReturnSample(pSample, TRUE);
+      ReturnSample(pSample, TRUE, FALSE);
       m_iFramesProcessed++;
       
       // Notify EVR of sample latency
@@ -1836,7 +1858,7 @@ HRESULT MPEVRCustomPresenter::CheckForScheduledSample(LONGLONG *pTargetTime, LON
       {
         break;
       }
-      ReturnSample(pSample, TRUE);
+      ReturnSample(pSample, TRUE, FALSE);
       
       // Notify EVR of late sample
       if( m_pEventSink )
@@ -1879,15 +1901,38 @@ void MPEVRCustomPresenter::StallWorker()
 {
 	CAutoLock sLock(&m_lockWorkerStall);
   m_WorkerStalledEvent.Reset();
-  m_workerParams.eFlushOrStall.Set(); //Request a stall of Worker Thread
+  m_workerParams.eStall.Set(); //Request a stall of Worker Thread
   m_WorkerStalledEvent.Wait(20); //Wait for stall to happen, but allow timeout to avoid deadlocks
+  
+  //  if (!m_WorkerStalledEvent.Wait(20))
+  //  {
+  //    Log("StallWorker() - timeout");
+  //  }
 }
 
 void MPEVRCustomPresenter::ReleaseWorker()
 {
 	CAutoLock sLock(&m_lockWorkerStall);
-  m_workerParams.eTimerEndOrUnstall.Set(); //Release stall of Worker Thread
+  m_workerParams.eUnstall.Set(); //Release stall of Worker Thread
 }
+
+void MPEVRCustomPresenter::StallScheduler()
+{
+	CAutoLock sLock(&m_lockSchedulerStall);
+  m_SchedulerStalledEvent.Reset();
+  m_schedulerParams.eStall.Set(); //Request a stall of Scheduler Thread
+  if (!m_SchedulerStalledEvent.Wait(100)) //Wait for stall to happen, but allow timeout to avoid deadlocks
+  {
+    Log("StallScheduler() - timeout");
+  }
+}
+
+void MPEVRCustomPresenter::ReleaseScheduler()
+{
+	CAutoLock sLock(&m_lockSchedulerStall);
+  m_schedulerParams.eUnstall.Set(); //Release stall of Scheduler Thread
+}
+
 
 void MPEVRCustomPresenter::StartWorkers()
 {
@@ -2215,7 +2260,7 @@ void MPEVRCustomPresenter::NotifySchedulerTimer()
 {
   if (m_bSchedulerRunning)
   {
-    m_schedulerParams.eTimerEndOrUnstall.Set();
+    m_schedulerParams.eTimerEnd.Set();
   }
   else 
   {
@@ -2256,6 +2301,7 @@ BOOL MPEVRCustomPresenter::PutSample(IMFSample* pSample)
   if (!m_qScheduledSamples.IsFull() && (m_iFreeSamples < m_regNumSamples))
   {
     m_qScheduledSamples.Put(pSample);
+    m_bWorkerHasSample = false;
     return TRUE;
   }
   return FALSE;
@@ -2265,13 +2311,12 @@ BOOL MPEVRCustomPresenter::PopSample()
 {
   CAutoLock sLock(&m_lockSamples);
   LOG_TRACE("Removing scheduled sample, size: %d", m_qScheduledSamples.Count());
-  if (!m_qScheduledSamples.IsEmpty() && (m_iFreeSamples < m_regNumSamples))
+  if (!m_qScheduledSamples.IsEmpty() && (m_iFreeSamples < m_regNumSamples) && !m_bSchedulerHasSample)
   {
     m_qScheduledSamples.Get();
-    // m_qGoodPopCnt++;
+    m_bSchedulerHasSample = true;
     return TRUE;
   }
-  // m_qBadPopCnt++;
   return FALSE;
 }
 
@@ -2344,8 +2389,7 @@ void MPEVRCustomPresenter::ScheduleSample(IMFSample* pSample)
   }
   else
   {
-    ReturnSample(pSample, FALSE);
-    // m_qBadPutCnt++;
+    ReturnSample(pSample, FALSE, TRUE);
     // Notify EVR of sample latency
     if( m_pEventSink )
     {
@@ -2478,8 +2522,7 @@ HRESULT MPEVRCustomPresenter::ProcessInputNotify(int* samplesProcessed, bool set
     }
     else 
     {
-      ReturnSample(sample, FALSE);
-      // m_qBadPutCnt++;
+      ReturnSample(sample, FALSE, TRUE);
       switch (hr)
       {
       case MF_E_TRANSFORM_NEED_MORE_INPUT:
@@ -2504,7 +2547,9 @@ HRESULT MPEVRCustomPresenter::ProcessInputNotify(int* samplesProcessed, bool set
         Log("ProcessOutput: change of type");
         bhasMoreSamples = FALSE;
        //LogOutputTypes();
+        StallScheduler();
         hr = RenegotiateMediaOutputType();
+        ReleaseScheduler();
       break;
 
       default:
@@ -2548,7 +2593,9 @@ HRESULT STDMETHODCALLTYPE MPEVRCustomPresenter::ProcessMessage(MFVP_MESSAGE_TYPE
       Log("ProcessMessage MFVP_MESSAGE_INVALIDATEMEDIATYPE");
       //LogOutputTypes();
       StallWorker();
+      StallScheduler();
       hr = RenegotiateMediaOutputType();
+      ReleaseScheduler();
       ReleaseWorker();
     break;
 
@@ -2684,8 +2731,9 @@ HRESULT STDMETHODCALLTYPE MPEVRCustomPresenter::OnClockStop(MFTIME hnsSystemTime
   if (m_state != MP_RENDER_STATE_STOPPED)
   {
     SetRenderState(MP_RENDER_STATE_STOPPED);
-    CAutoLock sLock(&m_schedulerParams.csLock);
+    StallScheduler();
     DoFlush(FALSE);
+    ReleaseScheduler();
   }
 
   return S_OK;
@@ -2867,6 +2915,8 @@ void MPEVRCustomPresenter::ReleaseSurfaces()
   { //Context for CAutoLock
     CAutoLock sLock(&m_lockSamples);
     m_iFreeSamples = 0;
+    m_bWorkerHasSample = false;
+    m_bSchedulerHasSample = false;
     for (int i = 0; i < MAX_SURFACES; i++)
     {
       samples[i] = NULL;
@@ -3682,9 +3732,6 @@ void MPEVRCustomPresenter::ResetFrameStats()
 
   m_qGoodPutCnt = 0;
 
-  //  m_qGoodPopCnt     = 0;
-  //  m_qBadPopCnt      = 0; 
-  //  m_qBadPutCnt      = 0; 
   //  m_qBadSampTimCnt  = 0; 
 
   m_iClockAdjustmentsDone = 0;
