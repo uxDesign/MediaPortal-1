@@ -1921,7 +1921,7 @@ void MPEVRCustomPresenter::StallScheduler()
 	CAutoLock sLock(&m_lockSchedulerStall);
   m_SchedulerStalledEvent.Reset();
   m_schedulerParams.eStall.Set(); //Request a stall of Scheduler Thread
-  if (!m_SchedulerStalledEvent.Wait(100)) //Wait for stall to happen, but allow timeout to avoid deadlocks
+  if (!m_SchedulerStalledEvent.Wait(200)) //Wait for stall to happen, but allow timeout to avoid deadlocks
   {
     Log("StallScheduler() - timeout");
   }
@@ -2592,11 +2592,11 @@ HRESULT STDMETHODCALLTYPE MPEVRCustomPresenter::ProcessMessage(MFVP_MESSAGE_TYPE
       // The mixer's output format has changed. The EVR will initiate format negotiation.
       Log("ProcessMessage MFVP_MESSAGE_INVALIDATEMEDIATYPE");
       //LogOutputTypes();
-      StallWorker();
       StallScheduler();
+      StallWorker();
       hr = RenegotiateMediaOutputType();
-      ReleaseScheduler();
       ReleaseWorker();
+      ReleaseScheduler();
     break;
 
     case MFVP_MESSAGE_PROCESSINPUTNOTIFY:

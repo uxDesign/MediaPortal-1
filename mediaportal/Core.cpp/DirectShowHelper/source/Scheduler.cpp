@@ -215,7 +215,7 @@ UINT CALLBACK WorkerThread(void* param)
           //Log("Worker - StallEvent 1a");
           p->eFlush.Reset();
           p->pPresenter->m_WorkerStalledEvent.Set();
-          if (!p->eUnstall.Wait(500))
+          if (!p->eUnstall.Wait(1000))
           {
             Log("Worker thread - Unstall Event timeout");
           }
@@ -252,7 +252,7 @@ UINT CALLBACK WorkerThread(void* param)
           //Log("Worker - StallEvent 2a");
           p->eStall.Reset();
           p->pPresenter->m_WorkerStalledEvent.Set();
-          if (!p->eUnstall.Wait(500))
+          if (!p->eUnstall.Wait(1000))
           {
             Log("Worker thread - Unstall Event timeout");
           }
@@ -381,7 +381,7 @@ UINT CALLBACK SchedulerThread(void* param)
         //Log("Sch - StallEvent start");
         p->eFlush.Reset();
         p->pPresenter->m_SchedulerStalledEvent.Set();
-        if (!p->eUnstall.Wait(500))
+        if (!p->eUnstall.Wait(1000))
         {
           Log("Scheduler thread - Unstall Event timeout");
         }
