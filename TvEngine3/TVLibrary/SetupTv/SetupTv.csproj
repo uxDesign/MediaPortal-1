@@ -211,9 +211,7 @@
       <DependentUpon>CardDvbIP.cs</DependentUpon>
     </Compile>
     <Compile Include="Sections\CIMenu\CiMenuHandler.cs" />
-    <Compile Include="Sections\CIMenu\CI_Menu_Dialog.cs">
-      <SubType>UserControl</SubType>
-    </Compile>
+    <Compile Include="Sections\CIMenu\CI_Menu_Dialog.cs" />
     <Compile Include="Sections\CIMenu\CI_Menu_Dialog.designer.cs">
       <DependentUpon>CI_Menu_Dialog.cs</DependentUpon>
     </Compile>
@@ -680,6 +678,10 @@
     <EmbeddedResource Include="40_upgrade_sqlserver_database.sql" />
   </ItemGroup>
   <ItemGroup>
+    <EmbeddedResource Include="60_upgrade_mysql_database.sql" />
+    <EmbeddedResource Include="60_upgrade_sqlserver_database.sql" />
+    <EmbeddedResource Include="61_upgrade_mysql_database.sql" />
+    <EmbeddedResource Include="61_upgrade_sqlserver_database.sql" />
     <Content Include="images\animation.SatDish.gif" />
     <Content Include="images\icon.card.gif" />
     <Content Include="images\icon.computer.gif" />

@@ -22,6 +22,7 @@ using System;
 using System.Collections;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading;
 using MediaPortal.Database;
@@ -69,7 +70,8 @@ namespace MediaPortal.GUI.Video
     private static string _searchMovieDbField = string.Empty;
     private static string _searchMovieString = string.Empty;
     private static string _searchActorString = string.Empty;
-    private static string _currentView = string.Empty;
+    private static string _currentViewHistory = string.Empty;
+    private static string _currentBaseView = string.Empty; // lvl 0 view name (origin view which can be drilled down liek genres, index, years..))
     // Last View lvl postion on back from VideoInfo screen
     private int _currentLevel = 0;
     
@@ -169,6 +171,7 @@ namespace MediaPortal.GUI.Video
 
             ArrayList sortStrings = new ArrayList();
             sortStrings.Add("Name");
+            sortStrings.Add("NameAll");
             sortStrings.Add("Date");
             sortStrings.Add("Size");
             sortStrings.Add("Year");
@@ -269,7 +272,7 @@ namespace MediaPortal.GUI.Video
         _searchActor = false;
         _currentLevel = 0;
       }
-      
+
       string view = VideoState.View;
       
       if (view == string.Empty)
@@ -280,6 +283,7 @@ namespace MediaPortal.GUI.Video
       handler.CurrentView = view;
       // Resume view lvl position (back from VideoInfo window)
       handler.CurrentLevel = _currentLevel;
+      _currentBaseView = handler.CurrentLevelWhere.ToLower();
 
       // Set views
       if (btnViews != null)
@@ -292,7 +296,7 @@ namespace MediaPortal.GUI.Video
 
       SetPinLockProperties();
     }
-
+    
     protected override void OnPageDestroy(int newWindowId)
     {
       if (_setThumbs != null && _setThumbs.IsAlive)
@@ -306,11 +310,7 @@ namespace MediaPortal.GUI.Video
       {
         VideoState.StartWindow = newWindowId;
       }
-      // Set current view lvl if new window is VideoInfo
-      //if (newWindowId == (int)Window.WINDOW_VIDEO_INFO)
-      //{
       _currentLevel = handler.CurrentLevel;
-      //}
 
       base.OnPageDestroy(newWindowId);
     }
@@ -439,6 +439,7 @@ namespace MediaPortal.GUI.Video
         }
         
         dlg.AddLocalizedString(1262); // Update grabber scripts
+        dlg.AddLocalizedString(1307); // Update internal grabber scripts
         dlg.AddLocalizedString(1263); // Set default grabber
         dlg.DoModal(GetID);
 
@@ -464,17 +465,22 @@ namespace MediaPortal.GUI.Video
             OnSearchActor();
             break;
           case 1262: // Update grabber scripts
-            GUIVideoFiles.UpdateGrabberScripts();
+            GUIVideoFiles.UpdateGrabberScripts(false);
+            break;
+          case 1307: // Update internal grabber scripts
+            GUIVideoFiles.UpdateGrabberScripts(true);
             break;
         }
         return;
       }
+
       // Context menu on folders (Group names)
       if (movie.ID < 0)
       {
         DialogProtectedContent(dlg);
         return;
       }
+
       // Context menu on movie title
       dlg.Reset();
       dlg.SetHeading(498); // menu
@@ -486,28 +492,45 @@ namespace MediaPortal.GUI.Video
       {
         dlg.AddLocalizedString(208); //play
         dlg.AddLocalizedString(368); //IMDB
+        dlg.AddLocalizedString(1304); //Make nfo file
+        dlg.AddLocalizedString(1306); //Make nfo files
         dlg.AddLocalizedString(926); //add to playlist
 
-        if (handler.CurrentLevelWhere == "user groups")
+        if (!movie.IsEmpty)
+        {
+          if (item.IsPlayed)
+          {
+            dlg.AddLocalizedString(830); //Reset watched status
+          }
+          else
+          {
+            dlg.AddLocalizedString(1260); // Set watched status
+          }
+        }
+
+        if (CurrentBaseView == "user groups")
         {
           dlg.AddLocalizedString(1272); //Add new usergroup
-          
+
           ArrayList userGroups = new ArrayList();
           ArrayList movieUserGroups = new ArrayList();
           VideoDatabase.GetUserGroups(userGroups);
           VideoDatabase.GetMovieUserGroups(movie.ID, movieUserGroups);
+
           // Add movie to user group if there is available user groups for that movie
           if (movieUserGroups.Count < userGroups.Count)
           {
             dlg.AddLocalizedString(1270); //add movie to usergroup
           }
+
+          if (handler.CurrentLevel > 0)
+          {
+            dlg.AddLocalizedString(1271); //remove from usergroup
+          }
         }
-        
-        if (handler.CurrentLevel > 0)
-        {
-          dlg.AddLocalizedString(1271); //remove from usergroup
-        }
+
         dlg.AddLocalizedString(118); //rename title
+        dlg.AddLocalizedString(1308); //Rename sort title
         dlg.AddLocalizedString(925); //delete
       }
 
@@ -532,28 +555,35 @@ namespace MediaPortal.GUI.Video
       }
       
       dlg.AddLocalizedString(1262); // Update grabber scripts
+      dlg.AddLocalizedString(1307); // Update internal grabber scripts
       dlg.AddLocalizedString(1263); // Set default grabber
 
       dlg.DoModal(GetID);
+
       if (dlg.SelectedId == -1)
       {
         return;
       }
+
       switch (dlg.SelectedId)
       {
         case 118: // Rename title
           OnRenameTitle(itemNo);
           break;
+        
         case 925: // Delete
           OnDeleteItem(item);
           break;
+        
         case 368: // IMDB
           OnInfo(itemNo);
           break;
+        
         case 208: // play
           _playClicked = true; // Override movieinfo before play
           OnClick(itemNo);
           break;
+        
         case 926: //add to playlist
           OnQueueItem(itemNo);
           break;
@@ -561,23 +591,57 @@ namespace MediaPortal.GUI.Video
         case 1241: //Unlock content
           OnContentLock();
           break;
+        
         case 1293: //Search movie
           OnSearchMovie();
           break;
+        
         case 1262: // Update grabber scripts
-          GUIVideoFiles.UpdateGrabberScripts();
+          GUIVideoFiles.UpdateGrabberScripts(false);
           break;
+
+        case 1307: // Update internal grabber scripts
+          GUIVideoFiles.UpdateGrabberScripts(true);
+          break;
+        
         case 1263: // Set default grabber
           GUIVideoFiles.SetDefaultGrabber();
           break;
+        
         case 1270: // Add to user group
           OnAddToUserGroup(movie, itemNo);
           break;
+        
         case 1271: // Remove from user group
           OnRemoveFromUserGroup(movie, itemNo);
           break;
+        
         case 1272: // Add user group
           OnAddUserGroup();
+          break;
+        
+        case 1308: // Rename sort title
+          OnChangeSortTitle(movie, itemNo);
+          break;
+        
+        case 1304: // Make nfo file
+          OnCreateNfoFile(movie.ID);
+          break;
+        
+        case 1306: // Make nfo files
+          OnCreateNfoFiles();
+          break;
+        
+        case 830: // Reset watched status
+          movie.Watched = 0;
+          VideoDatabase.SetWatched(movie);
+          item.IsPlayed = false;
+          break;
+
+        case 1260: // Set watched status
+          movie.Watched = 1;
+          VideoDatabase.SetWatched(movie);
+          item.IsPlayed = true;
           break;
       }
     }
@@ -596,6 +660,7 @@ namespace MediaPortal.GUI.Video
         ((VideoViewHandler)handler).Select(listItem.AlbumInfoTag as IMDBMovie);
         ArrayList movies = ((VideoViewHandler)handler).Execute();
         handler.CurrentLevel--;
+
         foreach (IMDBMovie movie in movies)
         {
           if (movie.ID > 0)
@@ -619,6 +684,7 @@ namespace MediaPortal.GUI.Video
       {
         IMDBMovie movie = listItem.AlbumInfoTag as IMDBMovie;
         if (movie != null) VideoDatabase.GetFilesForMovie(movie.ID, ref files);
+
         foreach (string file in files)
         {
           listItem.Path = file;
@@ -632,22 +698,28 @@ namespace MediaPortal.GUI.Video
     protected override void SetView(int selectedViewId)
     {
       // Set current view before change (reset search variables)
-      _currentView = handler.CurrentLevelWhere;
+      _currentViewHistory = handler.CurrentLevelWhere.ToLower();
+      // Set new view
       base.SetView(selectedViewId);
+      _currentBaseView = handler.CurrentLevelWhere.ToLower();
     }
 
     protected override void OnInfo(int itemIndex)
     {
       GUIListItem item = facadeLayout[itemIndex];
+
       if (item == null)
       {
         return;
       }
+
       IMDBMovie movie = item.AlbumInfoTag as IMDBMovie;
+
       if (movie == null)
       {
         return;
       }
+
       if (movie.ID >= 0)
       {
         GUIVideoInfo videoInfo = (GUIVideoInfo)GUIWindowManager.GetWindow((int)Window.WINDOW_VIDEO_INFO);
@@ -655,6 +727,7 @@ namespace MediaPortal.GUI.Video
         videoInfo.FolderForThumbs = string.Empty;
         GUIWindowManager.ActivateWindow((int)Window.WINDOW_VIDEO_INFO);
       }
+
       // F3 key actor info action
       if (movie.ActorID >= 0)
       {
@@ -709,48 +782,46 @@ namespace MediaPortal.GUI.Video
     protected override void LoadDirectory(string strNewDirectory)
     {
       GUIWaitCursor.Show();
-      
       currentFolder = strNewDirectory;
-
       GUIControl.ClearControl(GetID, facadeLayout.GetID);
-
       ArrayList itemlist = new ArrayList();
       ArrayList movies = new ArrayList();
 
       if (_searchMovie)
       {
         string sql = "SELECT DISTINCT " +
-              "movieinfo.idMovie," +
-              "movieinfo.idDirector," +
-              "movieinfo.strDirector," +
-              "movieinfo.strPlotOutline," +
-              "movieinfo.strPlot," +
-              "movieinfo.strTagLine," +
-              "movieinfo.strVotes," +
-              "movieinfo.fRating," +
-              "movieinfo.strCast," +
-              "movieinfo.strCredits," +
-              "movieinfo.iYear," +
-              "movieinfo.strGenre," +
-              "movieinfo.strPictureURL," +
-              "movieinfo.strTitle," +
-              "movieinfo.IMDBID," +
-              "movieinfo.mpaa," +
-              "movieinfo.runtime," +
-              "movieinfo.iswatched," +
-              "movieinfo.strUserReview," +
-              "movieinfo.strFanartURL," +
-              "movieinfo.dateAdded," +
-              "movieinfo.dateWatched," +
-              "movieinfo.studios," +
-              "movieinfo.country," +
-              "movieinfo.language," +
-              "movieinfo.lastupdate " +
-              "FROM movieinfo " +
-              "INNER JOIN actorlinkmovie ON actorlinkmovie.idMovie = movieinfo.idMovie " +
-              "INNER JOIN actors ON actors.idActor = actorlinkmovie.idActor " +
-              "WHERE "+ _searchMovieDbField + " LIKE '%" + _searchMovieString + "%' " +
-              "ORDER BY movieinfo.strTitle ASC";
+                     "movieinfo.idMovie," +
+                     "movieinfo.idDirector," +
+                     "movieinfo.strDirector," +
+                     "movieinfo.strPlotOutline," +
+                     "movieinfo.strPlot," +
+                     "movieinfo.strTagLine," +
+                     "movieinfo.strVotes," +
+                     "movieinfo.fRating," +
+                     "movieinfo.strCast," +
+                     "movieinfo.strCredits," +
+                     "movieinfo.iYear," +
+                     "movieinfo.strGenre," +
+                     "movieinfo.strPictureURL," +
+                     "movieinfo.strTitle," +
+                     "movieinfo.IMDBID," +
+                     "movieinfo.mpaa," +
+                     "movieinfo.runtime," +
+                     "movieinfo.iswatched," +
+                     "movieinfo.strUserReview," +
+                     "movieinfo.strFanartURL," +
+                     "movieinfo.dateAdded," +
+                     "movieinfo.dateWatched," +
+                     "movieinfo.studios," +
+                     "movieinfo.country," +
+                     "movieinfo.language," +
+                     "movieinfo.lastupdate " +
+			               "movieinfo.strSortTitle " +
+                     "FROM movieinfo " +
+                     "INNER JOIN actorlinkmovie ON actorlinkmovie.idMovie = movieinfo.idMovie " +
+                     "INNER JOIN actors ON actors.idActor = actorlinkmovie.idActor " +
+                     "WHERE "+ _searchMovieDbField + " LIKE '%" + _searchMovieString + "%' " +
+                     "ORDER BY movieinfo.strTitle ASC";
 
         VideoDatabase.GetMoviesByFilter(sql, out movies, false, true, false, false);
       }
@@ -760,7 +831,9 @@ namespace MediaPortal.GUI.Video
         
         if (handler.CurrentLevelWhere == "director")
         {
-          sql = "SELECT idActor, strActor, imdbActorId FROM actors INNER JOIN movieinfo ON movieinfo.idDirector = actors.idActor WHERE strActor LIKE '%" + _searchActorString + "%' ORDER BY strActor ASC";
+          sql = "SELECT idActor, strActor, imdbActorId FROM actors INNER JOIN movieinfo ON movieinfo.idDirector = actors.idActor WHERE strActor LIKE '%" 
+                + _searchActorString + 
+                "%' ORDER BY strActor ASC";
         }
         else
         {
@@ -790,10 +863,15 @@ namespace MediaPortal.GUI.Video
         facadeLayout.Add(listItem);
       }
 
+      VirtualDirectory vDir = new VirtualDirectory();
+      // Get protected share paths for videos
+      vDir.LoadSettings("movies");
+
       foreach (IMDBMovie movie in movies)
       {
         GUIListItem item = new GUIListItem();
         item.Label = movie.Title;
+
         if (handler.CurrentLevelWhere != "user groups")
         {
           if (handler.CurrentLevel + 1 < handler.MaxLevels)
@@ -826,7 +904,7 @@ namespace MediaPortal.GUI.Video
         // in movie list. Non-protected item will skip check and will be always visible.
         if (!string.IsNullOrEmpty(item.Path))
         {
-          if (!CheckItem(item))
+          if (!IsItemPinProtected(item, vDir))
             continue;
         }
         //
@@ -836,20 +914,39 @@ namespace MediaPortal.GUI.Video
         item.DVDLabel = movie.DVDLabel;
         item.Rating = movie.Rating;
         item.IsPlayed = movie.Watched > 0;
-        int percent = 0;
-        int timesWatched = 0;
-        VideoDatabase.GetmovieWatchedStatus(movie.ID, out percent, out timesWatched);
-        item.Label3 = percent + "% #" + timesWatched;
+
+        try
+        {
+          if (item.Path.ToUpperInvariant().Contains(@"\VIDEO_TS"))
+          {
+            item.Label3 = MediaTypes.DVD.ToString() + " #" + movie.WatchedCount;;
+          }
+          else if (item.Path.ToUpperInvariant().Contains(@"\BDMV"))
+          {
+            item.Label3 = MediaTypes.BD.ToString() + " #" + movie.WatchedCount;
+          }
+          else if (VirtualDirectory.IsImageFile(Path.GetExtension(item.Path)))
+          {
+            item.Label3 = MediaTypes.ISO.ToString() + " #" + movie.WatchedCount; ;
+          }
+          else
+          {
+            item.Label3 = movie.WatchedPercent + "% #" + movie.WatchedCount;
+          }
+        }
+        catch (Exception ex){}
+        
         item.OnItemSelected += OnItemSelected;
         SetLabel(item);
         ((VideoViewHandler)handler).SetLabel(item.AlbumInfoTag as IMDBMovie, ref item);
+        // Movie/group content list skin property will read from musictag
+        item.MusicTag = SetMovieListGroupedBy(item);
         facadeLayout.Add(item);
         itemlist.Add(item);
       }
 
       // Sort
       facadeLayout.Sort(new VideoSort(CurrentSortMethod, CurrentSortAsc));
-
       int itemIndex = 0;
       string viewFolder = SetItemViewHistory();
       string selectedItemLabel = m_history.Get(viewFolder);
@@ -908,12 +1005,10 @@ namespace MediaPortal.GUI.Video
         {
           case "genre":
             SetGenreThumbs(itemlist);
-            //SelectItem();
             break;
 
           case "user groups":
             SetUserGroupsThumbs(itemlist);
-            //SelectItem();
             break;
 
           case "actor":
@@ -923,7 +1018,6 @@ namespace MediaPortal.GUI.Video
 
           case "year":
             SetYearThumbs(itemlist);
-            //SelectItem();
             break;
 
           case "actorindex":
@@ -935,7 +1029,6 @@ namespace MediaPortal.GUI.Video
               itemAbc.IconImage = @"alpha\" + itemAbc.Label + ".png";
               itemAbc.ThumbnailImage = @"alpha\" + itemAbc.Label + ".png";
             }
-            //SelectItem();
             break;
 
           default:
@@ -968,9 +1061,12 @@ namespace MediaPortal.GUI.Video
     {
       int maximumShares = 128;
       ArrayList availablePaths = new ArrayList();
+      bool _useOnlyNfoScraper = false;
 
       using (Profile.Settings xmlreader = new MPSettings())
       {
+        _useOnlyNfoScraper = xmlreader.GetValueAsBool("moviedatabase", "useonlynfoscraper", false);
+
         for (int index = 0; index < maximumShares; index++)
         {
           string sharePath = String.Format("sharepath{0}", index);
@@ -982,10 +1078,24 @@ namespace MediaPortal.GUI.Video
           {
             availablePaths.Add(shareDir);
           }
-
         }
 
-        IMDBFetcher.ScanIMDB(this, availablePaths, true, true, true, false);
+        if (!_useOnlyNfoScraper)
+        {
+          IMDBFetcher.ScanIMDB(this, availablePaths, true, true, true, false);
+        }
+        else
+        {
+          ArrayList nfoFiles = new ArrayList();
+          
+          foreach (string availablePath in availablePaths)
+          {
+            GetNfoFiles(availablePath, ref nfoFiles);
+          }
+          
+          IMDBFetcher fetcher = new IMDBFetcher(this);
+          fetcher.FetchNfo(nfoFiles, true, false);
+        }
         // Send global message that movie is refreshed/scanned
         GUIMessage msg = new GUIMessage(GUIMessage.MessageType.GUI_MSG_VIDEOINFO_REFRESH, 0, 0, 0, 0, 0, null);
         GUIWindowManager.SendMessage(msg);
@@ -1011,33 +1121,27 @@ namespace MediaPortal.GUI.Video
     {
       IMDBMovie movie = item.AlbumInfoTag as IMDBMovie;
 
-      if (movie != null && movie.ID > 0 && !item.IsFolder)
+      if (movie != null && movie.ID > 0 && (!item.IsFolder || CurrentSortMethod == VideoSort.SortMethod.NameAll))
       {
-        if (CurrentSortMethod == VideoSort.SortMethod.Name)
+        if (CurrentSortMethod == VideoSort.SortMethod.Name || CurrentSortMethod == VideoSort.SortMethod.NameAll)
         {
-          //item.Label2 = Util.Utils.SecondsToHMString(movie.RunTime * 60);
-
-          // Show real movie duration (from video file)
-          int mDuration = VideoDatabase.GetMovieDuration(movie.ID);
-
-          if (mDuration <= 0)
+          if (item.IsFolder)
           {
-            ArrayList mFiles = new ArrayList();
-            VideoDatabase.GetFilesForMovie(movie.ID, ref mFiles);
-            mDuration = GUIVideoFiles.MovieDuration(mFiles, true);
+            item.Label2 = string.Empty;
+          }
+          else
+          {
+            // Show real movie duration (from video file)
+            int mDuration = movie.Duration;
 
             if (mDuration <= 0)
             {
-              item.Label2 = Util.Utils.SecondsToHMString(movie.RunTime * 60);
+              item.Label2 = Util.Utils.SecondsToHMString(movie.RunTime*60);
             }
             else
             {
               item.Label2 = Util.Utils.SecondsToHMString(mDuration);
             }
-          }
-          else
-          {
-            item.Label2 = Util.Utils.SecondsToHMString(mDuration);
           }
         }
         else if (CurrentSortMethod == VideoSort.SortMethod.Year)
@@ -1050,7 +1154,7 @@ namespace MediaPortal.GUI.Video
         }
         else if (CurrentSortMethod == VideoSort.SortMethod.Label)
         {
-          item.Label2 = movie.DVDLabel.ToString();
+          item.Label2 = movie.DVDLabel;
         }
         else if (CurrentSortMethod == VideoSort.SortMethod.Size)
         {
@@ -1067,10 +1171,12 @@ namespace MediaPortal.GUI.Video
       else
       {
         string strSize1 = string.Empty, strDate = string.Empty;
+
         if (item.FileInfo != null && !item.IsFolder)
         {
           strSize1 = Util.Utils.GetSize(item.FileInfo.Length);
         }
+
         if (item.FileInfo != null && !item.IsFolder)
         {
           if (CurrentSortMethod == VideoSort.SortMethod.Modified)
@@ -1118,6 +1224,7 @@ namespace MediaPortal.GUI.Video
       {
         dlg.AddLocalizedString(1295); //Search actor
       }
+
       if (handler.CurrentLevelWhere == "director" && facadeLayout.Count > 1)
       {
         dlg.AddLocalizedString(1268); // Search director
@@ -1136,9 +1243,9 @@ namespace MediaPortal.GUI.Video
         }
       }
 
-      dlg.AddLocalizedString(1263); // Set default grabber
       dlg.AddLocalizedString(1262); // Update grabber scripts
-
+      dlg.AddLocalizedString(1307); // Update internal grabber scripts
+      dlg.AddLocalizedString(1263); // Set default grabber
       // Show menu
       dlg.DoModal(GetID);
 
@@ -1167,7 +1274,10 @@ namespace MediaPortal.GUI.Video
           GUIVideoFiles.SetDefaultGrabber();
           break;
         case 1262: // Update grabber scripts
-          GUIVideoFiles.UpdateGrabberScripts();
+          GUIVideoFiles.UpdateGrabberScripts(false);
+          break;
+        case 1307: // Update internal grabber scripts
+          GUIVideoFiles.UpdateGrabberScripts(true);
           break;
         case 1272: // Add user group
           OnAddUserGroup();
@@ -1202,6 +1312,7 @@ namespace MediaPortal.GUI.Video
       {
         // get the genre somewhere since the label isn't set yet.
         IMDBMovie movie = item.AlbumInfoTag as IMDBMovie;
+
         if (movie != null) 
         {
           string genreCover = Util.Utils.GetCoverArt(Thumbs.MovieGenre, movie.SingleGenre);
@@ -1230,16 +1341,16 @@ namespace MediaPortal.GUI.Video
             }
             else
             {
-              ArrayList mList = new ArrayList();
-              VideoDatabase.GetMoviesByUserGroup(movie.SingleUserGroup, ref mList);
-              IMDBMovie cMovie = GetRandomMovie(mList);
+              //ArrayList mList = new ArrayList();
+              //VideoDatabase.GetMoviesByUserGroup(movie.SingleUserGroup, ref mList);
+              //IMDBMovie cMovie = GetRandomMovie(mList);
 
-              if ( cMovie != null)
-              {
-                string titleExt = cMovie.Title + "{" + cMovie.ID + "}";
-                usergroupCover = Util.Utils.GetCoverArt(Thumbs.MovieTitle, titleExt);
-                SetItemThumb(item, usergroupCover);
-              }
+              //if ( cMovie != null)
+              //{
+              //  string titleExt = cMovie.Title + "{" + cMovie.ID + "}";
+              //  usergroupCover = Util.Utils.GetCoverArt(Thumbs.MovieTitle, titleExt);
+              //  SetItemThumb(item, usergroupCover);
+              //}
             }
           }
           else
@@ -1279,6 +1390,7 @@ namespace MediaPortal.GUI.Video
         {
           // get the actors somewhere since the label isn't set yet.
           IMDBMovie movie = item.AlbumInfoTag as IMDBMovie;
+
           if (movie != null)
           {
             string actorCover = Util.Utils.GetCoverArt(Thumbs.MovieActors, movie.ActorID.ToString());
@@ -1298,6 +1410,7 @@ namespace MediaPortal.GUI.Video
       foreach (GUIListItem item in itemlist)
       {
         IMDBMovie movie = item.AlbumInfoTag as IMDBMovie;
+
         if (movie != null) 
         {
           string yearCover = Util.Utils.GetCoverArt(Thumbs.MovieYear, movie.Year.ToString());
@@ -1331,6 +1444,7 @@ namespace MediaPortal.GUI.Video
           string coverArtImage = string.Empty;
           GUIListItem listItem = (GUIListItem)_threadGUIItems[x];
           IMDBMovie movie = listItem.AlbumInfoTag as IMDBMovie;
+
           if (movie != null)
           {
             if (movie.ID >= 0)
@@ -1453,11 +1567,14 @@ namespace MediaPortal.GUI.Video
       {
         return;
       }
+
       IMDBMovie movie = item.AlbumInfoTag as IMDBMovie;
+
       if (movie == null)
       {
         return;
       }
+
       if (movie.ID < 0)
       {
         return;
@@ -1468,6 +1585,7 @@ namespace MediaPortal.GUI.Video
       {
         return;
       }
+
       dlgYesNo.SetHeading(GUILocalizeStrings.Get(925));
       dlgYesNo.SetLine(1, movie.Title);
       dlgYesNo.SetLine(2, string.Empty);
@@ -1480,13 +1598,15 @@ namespace MediaPortal.GUI.Video
       }
 
       DoDeleteItem(item);
-
       currentSelectedItem = facadeLayout.SelectedListItemIndex;
+
       if (currentSelectedItem > 0)
       {
         currentSelectedItem--;
       }
+
       LoadDirectory(currentFolder);
+
       if (currentSelectedItem >= 0)
       {
         GUIControl.SelectItemControl(GetID, facadeLayout.GetID, currentSelectedItem);
@@ -1496,18 +1616,22 @@ namespace MediaPortal.GUI.Video
     private void DoDeleteItem(GUIListItem item)
     {
       IMDBMovie movie = item.AlbumInfoTag as IMDBMovie;
+
       if (movie == null)
       {
         return;
       }
+
       if (movie.ID < 0)
       {
         return;
       }
+
       if (item.IsFolder)
       {
         return;
       }
+
       if (!item.IsRemote)
       {
         VideoDatabase.DeleteMovieInfoById(movie.ID);
@@ -1518,15 +1642,18 @@ namespace MediaPortal.GUI.Video
     {
       GUIVideoArtistInfo infoDlg =
         (GUIVideoArtistInfo)GUIWindowManager.GetWindow((int)Window.WINDOW_VIDEO_ARTIST_INFO);
+
       if (infoDlg == null)
       {
         return;
       }
+
       if (actor == null)
       {
         OnInfo(facadeLayout.SelectedListItemIndex);
         return;
       }
+
       infoDlg.Actor = actor;
       ArrayList movies = new ArrayList();
       IMDBMovie movie = new IMDBMovie();
@@ -1535,6 +1662,7 @@ namespace MediaPortal.GUI.Video
       if (movies.Count > 0)
       {
         Random rnd = new Random();
+
         for (int i = movies.Count - 1; i > 0; i--)
         {
           int position = rnd.Next(i + 1);
@@ -1542,8 +1670,10 @@ namespace MediaPortal.GUI.Video
           movies[i] = movies[position];
           movies[position] = temp;
         }
+
         movie = (IMDBMovie)movies[0];
       }
+
       m_history.Set(facadeLayout.SelectedListItem.Label, currentFolder);
       infoDlg.Movie = movie;
       GUIWindowManager.ActivateWindow((int)Window.WINDOW_VIDEO_ARTIST_INFO);
@@ -1583,6 +1713,7 @@ namespace MediaPortal.GUI.Video
               selectedValue = VideoDatabase.GetUserGroupById(iSelectedValue);
             }
           }
+
           GUIPropertyManager.SetProperty("#currentmodule",
                                          String.Format("{0}/{1} - {2}", GUILocalizeStrings.Get(100006),
                                                        handler.LocalizedCurrentView, selectedValue));
@@ -1613,12 +1744,9 @@ namespace MediaPortal.GUI.Video
         movie = new IMDBMovie();
       }
       
-      ArrayList files = new ArrayList();
-      VideoDatabase.GetFilesForMovie(movie.ID, ref files);
-      
-      if (files.Count > 0)
+      if (!string.IsNullOrEmpty(movie.VideoFileName))
       {
-        movie.SetProperties(false, (string)files[0]);
+        movie.SetProperties(false, movie.VideoFileName);
       }
       else
       {
@@ -1630,6 +1758,7 @@ namespace MediaPortal.GUI.Video
             movie.IsEmpty = true;
             movie.SetProperties(false, string.Empty);
             break;
+
           default:
             movie.SetProperties(false, string.Empty);
             break;
@@ -1639,7 +1768,27 @@ namespace MediaPortal.GUI.Video
         if (!string.IsNullOrEmpty(item.Label))
         {
           GUIPropertyManager.SetProperty("#title", item.Label);
-          GUIPropertyManager.SetProperty("#groupmovielist", SetMovieListGroupedBy(item));
+
+          //if (strView != "director" && strView != "actor")
+          //{
+            if (item.MusicTag != null)
+            {
+              GUIPropertyManager.SetProperty("#groupmovielist", item.MusicTag.ToString());
+            }
+          //}
+
+          //if (strView == "director" || strView == "actor")
+          //{
+          //  if (item.MusicTag == null)
+          //  {
+          //    item.MusicTag = SetMovieListGroupedBy(item);
+          //    GUIPropertyManager.SetProperty("#groupmovielist", item.MusicTag.ToString());
+          //  }
+          //  else
+          //  {
+          //    GUIPropertyManager.SetProperty("#groupmovielist", item.MusicTag.ToString());
+          //  }
+          //}
         }
       }
       
@@ -1677,7 +1826,7 @@ namespace MediaPortal.GUI.Video
         }
       }
       
-      // Random movieId by view (for FA) for selected groups
+      // Random movieId by view (for FA) for selected group
       ArrayList mList = new ArrayList();
       GetItemViewHistory(strView, mList, currentViewlvl);
     }
@@ -1685,69 +1834,80 @@ namespace MediaPortal.GUI.Video
     // Set property value for #groupmovielist
     private string SetMovieListGroupedBy(GUIListItem item)
     {
-      ArrayList movies = new ArrayList();
       string strMovies = string.Empty;
+      string where = string.Empty;
+      string value = string.Empty;
+      string sql = string.Empty;
+      string view = handler.CurrentLevelWhere.ToLower();
+      string groupDescription = string.Empty;
+      IMDBMovie movie = item.AlbumInfoTag as IMDBMovie;
 
-      // Set coverflow info property for groups (folder type item)
-      if (handler.CurrentLevelWhere.ToLower() == "genre")
+      switch (view)
       {
-        VideoDatabase.GetMoviesByGenre(item.Label, ref movies);
-      }
-      else if (handler.CurrentLevelWhere == "user groups")
-      {
-        VideoDatabase.GetMoviesByUserGroup(item.Label, ref movies);
-      }
-      else if (handler.CurrentLevelWhere.ToLower() == "actor" || handler.CurrentLevelWhere.ToLower() == "director")
-      {
-        VideoDatabase.GetMoviesByActor(item.Label, ref movies);
-      }
-      else if (handler.CurrentLevelWhere.ToLower() == "year")
-      {
-        VideoDatabase.GetMoviesByYear(item.Label, ref movies);
-      }
-      else if (handler.CurrentLevelWhere.ToLower() == "actorindex")
-      {
-        string where = string.Empty;
-        string value = DatabaseUtility.RemoveInvalidChars(item.Label);
-        where = SetWhere(value, "strActor");
+        case "genre":
+        strMovies = VideoDatabase.GetMovieTitlesByGenre(item.Label);
+          break;
+      
+        case "user groups":
+          int grpId = VideoDatabase.GetUserGroupId(item.Label);
+          groupDescription = VideoDatabase.GetUserGroupDescriptionById(grpId);
+          strMovies = VideoDatabase.GetMovieTitlesByUserGroup(grpId);
 
-        string sql = "SELECT strActor, idActor FROM actors " + where +
-                     "AND idActor NOT IN (SELECT idDirector from movieinfo) GROUP BY strActor ORDER BY strActor ASC";
-        VideoDatabase.GetIndexByFilter(sql, false, out movies);
-      }
-      else if (handler.CurrentLevelWhere.ToLower() == "directorindex")
-      {
-        string where = string.Empty;
-        string value = DatabaseUtility.RemoveInvalidChars(item.Label);
-        where = SetWhere(value, "strActor");
-        string sql = "SELECT strActor, idActor FROM actors INNER JOIN movieinfo ON movieinfo.idDirector = actors.idActor " + where + 
-                     "GROUP BY strActor ORDER BY strActor ASC";
-        VideoDatabase.GetIndexByFilter(sql, false, out movies);
-      }
-      else if (handler.CurrentLevelWhere.ToLower() == "titleindex")
-      {
-        string where = string.Empty;
-        string value = DatabaseUtility.RemoveInvalidChars(item.Label);
-        where = SetWhere(value, "strTitle");
-        string sql = "SELECT strTitle, idMovie FROM movieinfo " + where +
-                     "GROUP BY strTitle ORDER BY strTitle ASC ";
-        VideoDatabase.GetIndexByFilter(sql, false, out movies);
-      }
-
-      if (movies.Count > 0)
-      {
-        foreach (IMDBMovie movieInGroup in movies)
-        {
-          if (strMovies.Length > 0)
+          if (!string.IsNullOrEmpty(groupDescription))
           {
-            strMovies += "\n";
+            groupDescription += ("\n\n" + GUILocalizeStrings.Get(342) + ":\n"); //Movies
           }
-          strMovies += movieInGroup.Title;
-        }
-        return strMovies;
+          break;
+      
+        case "actor":
+          if (movie != null)
+          {
+            strMovies = VideoDatabase.GetMovieTitlesByActor(movie.ActorID);
+          }
+          break;
+
+        case "director":
+          if (movie != null)
+          {
+            strMovies = VideoDatabase.GetMovieTitlesByDirector(movie.ActorID);
+          }
+          break;
+        
+        case "year":
+          strMovies = VideoDatabase.GetMovieTitlesByYear(item.Label);
+          break;
+        
+        case"actorindex":
+          value = DatabaseUtility.RemoveInvalidChars(item.Label);
+          where = SetWhere(value, "strActor");
+          sql = "SELECT strActor FROM actors " + where +
+                     "AND idActor NOT IN (SELECT idDirector FROM movieinfo) GROUP BY strActor ORDER BY strActor ASC";
+          strMovies = VideoDatabase.GetMovieTitlesByIndex(sql);
+          break;
+      
+        case "directorindex":
+          value = DatabaseUtility.RemoveInvalidChars(item.Label);
+          where = SetWhere(value, "strActor");
+          sql = "SELECT strActor FROM actors INNER JOIN movieinfo ON movieinfo.idDirector = actors.idActor " + where + 
+                     "GROUP BY strActor ORDER BY strActor ASC";
+          strMovies = VideoDatabase.GetMovieTitlesByIndex(sql);
+          break;
+        
+        case "titleindex":
+          value = DatabaseUtility.RemoveInvalidChars(item.Label);
+          where = SetWhere(value, "strTitle");
+          sql = "SELECT strTitle FROM movieinfo " + where +
+                     "GROUP BY strTitle ORDER BY strTitle ASC ";
+          strMovies = VideoDatabase.GetMovieTitlesByIndex(sql);
+          break;
       }
 
-      return string.Empty;
+      if (!string.IsNullOrEmpty(groupDescription))
+      {
+        strMovies = groupDescription + strMovies;
+      }
+      
+      return strMovies;
     }
 
     private string SetWhere(string value, string field)
@@ -1762,8 +1922,9 @@ namespace MediaPortal.GUI.Video
       }
       else
       {
-        where = "WHERE SUBSTR(" + field + ",1,1) = '" + value + "' ";
+        where = @"WHERE SUBSTR(" + field + ",1,1) = '" + value + "' ";
       }
+
       return where;
     }
 
@@ -1794,6 +1955,7 @@ namespace MediaPortal.GUI.Video
       {
         return;
       }
+
       // Context menu on movie title
       dlg.Reset();
       dlg.SetHeading(498); // menu
@@ -1806,10 +1968,12 @@ namespace MediaPortal.GUI.Video
       dlg.AddLocalizedString(1286);// Add("By Certification (MPAA rating)");
         
       dlg.DoModal(GetID);
+
       if (dlg.SelectedLabel == -1)
       {
         return;
       }
+      
       switch (dlg.SelectedLabel)
       {
         case 0:
@@ -1831,6 +1995,7 @@ namespace MediaPortal.GUI.Video
           _searchMovieDbField = "movieInfo.mpaa";
           break;
       }
+
       GetKeyboard(ref _searchMovieString);
       _searchMovie = true;
       LoadDirectory(currentFolder);
@@ -1861,23 +2026,15 @@ namespace MediaPortal.GUI.Video
         return;
       }
       IMDBMovie movie = item.AlbumInfoTag as IMDBMovie;
+      
       if (movie == null)
       {
         return;
       }
+      
       if (movie.ID >= 0)
       {
         string movieTitle = movie.Title;
-        ArrayList files = new ArrayList();
-        VideoDatabase.GetFilesForMovie(movie.ID, ref files);
-        string movieFileName = string.Empty;
-
-        if (files.Count > 0)
-        {
-          movieFileName = (string)files[0];
-          movieFileName = Util.Utils.GetFilename(movieFileName, true);
-        }
-
         GetKeyboard(ref movieTitle);
 
         if (string.IsNullOrEmpty(movieTitle) || movieTitle.Trim() == movie.Title)
@@ -1911,10 +2068,41 @@ namespace MediaPortal.GUI.Video
         }
 
         movie.Title = movieTitle;
-        VideoDatabase.SetMovieInfoById(movie.ID, ref movie);
+        // update db
+        bool error;
+        string errorMessage = string.Empty;
+        string sql = string.Format("UPDATE movieinfo SET strTitle = '{0}' WHERE idMovie = {1}", movieTitle, movie.ID);
+        VideoDatabase.ExecuteSql(sql, out error, out errorMessage);
 
+        if (error)
+        {
+          return;
+        }
+
+        // updateitem
+        facadeLayout[itemIndex].AlbumInfoTag = movie;
+        facadeLayout[itemIndex].Label = movieTitle;
         // Update thumbs for selected item
-        LoadDirectory(currentFolder);
+        facadeLayout[itemIndex].ThumbnailImage = newLargeThumb;
+        facadeLayout[itemIndex].IconImageBig = newSmallThumb;
+        facadeLayout[itemIndex].IconImage = newSmallThumb;
+
+        // Update sort
+        facadeLayout.Sort(new VideoSort(CurrentSortMethod, CurrentSortAsc));
+        itemIndex = 0;
+
+        for (int i = 0; i < facadeLayout.Count; ++i)
+        {
+          GUIListItem lItem = facadeLayout[itemIndex];
+
+          if (item.Label == lItem.Label)
+          {
+            currentSelectedItem = itemIndex;
+            break;
+          }
+
+          itemIndex++;
+        }
 
         GUIControl.SelectItemControl(GetID, facadeLayout.GetID, itemIndex);
       }
@@ -2016,6 +2204,124 @@ namespace MediaPortal.GUI.Video
       VideoDatabase.DeleteUserGroup(group);
       LoadDirectory(currentFolder);
     }
+
+    private void OnChangeSortTitle(IMDBMovie movie, int itemIndex)
+    {
+      GUIListItem currentItem = facadeLayout[itemIndex];
+      
+      if (currentItem == null)
+      {
+        return;
+      }
+      
+      if (movie == null)
+      {
+        return;
+      }
+
+      string movieSortTitle = movie.SortTitle;
+      GetKeyboard(ref movieSortTitle);
+
+      if (string.IsNullOrEmpty(movieSortTitle) || movieSortTitle.Trim() == movie.Title)
+      {
+        return;
+      }
+
+      movie.SortTitle = movieSortTitle;
+      // update db
+      bool error;
+      string errorMessage = string.Empty;
+      string sql = string.Format("UPDATE movieinfo SET strSortTitle = '{0}' WHERE idMovie = {1}", movieSortTitle, movie.ID);
+      VideoDatabase.ExecuteSql(sql, out error, out  errorMessage);
+
+      if (error)
+      {
+        return;
+      }
+
+      // updateitem
+      facadeLayout[itemIndex].AlbumInfoTag = movie;
+
+      if (movie.ID >= 0)
+      {
+        // Update sort
+        facadeLayout.Sort(new VideoSort(CurrentSortMethod, CurrentSortAsc));
+        itemIndex = 0;
+        
+        for (int i = 0; i < facadeLayout.Count; ++i)
+        {
+          GUIListItem item = facadeLayout[itemIndex];
+
+          if (item.Label == currentItem.Label)
+          {
+            currentSelectedItem = itemIndex;
+            break;
+          }
+
+          itemIndex++;
+        }
+
+        GUIControl.SelectItemControl(GetID, facadeLayout.GetID, itemIndex);
+      }
+    }
+
+    private void OnCreateNfoFile(int movieId)
+    {
+      if (movieId > 0)
+      {
+        VideoDatabase.MakeNfo(movieId);
+
+        // Notify user that new fanart download failed
+        GUIDialogNotify dlgNotify =
+          (GUIDialogNotify)GUIWindowManager.GetWindow((int)Window.WINDOW_DIALOG_NOTIFY);
+        if (null != dlgNotify)
+        {
+          dlgNotify.SetHeading(GUILocalizeStrings.Get(1304));
+          dlgNotify.SetText(GUILocalizeStrings.Get(1305));
+          dlgNotify.DoModal(GetID);
+        }
+      }
+    }
+
+    private void OnCreateNfoFiles()
+    {
+      if (facadeLayout != null)
+      {
+        // Initialize progress bar
+        GUIDialogProgress progressDialog =
+          (GUIDialogProgress)GUIWindowManager.GetWindow((int)Window.WINDOW_DIALOG_PROGRESS);
+        progressDialog.Reset();
+        progressDialog.SetHeading("Exporting movies....");
+        progressDialog.ShowProgressBar(true);
+        progressDialog.SetLine(1, "Creating nfo file");
+        progressDialog.SetLine(2, "Working...");
+        progressDialog.StartModal(GUIWindowManager.ActiveWindow);
+        int percent = 0;
+        int moviesCount = facadeLayout.ListLayout.ListItems.Count;
+
+        foreach (GUIListItem item in facadeLayout.ListLayout.ListItems)
+        {
+          if (progressDialog.IsCanceled)
+          {
+            break;
+          }
+
+          IMDBMovie movie = item.AlbumInfoTag as IMDBMovie;
+          
+          if (movie != null)
+          {
+            progressDialog.SetLine(1, "Creating nfo for: " + movie.Title);
+            progressDialog.SetLine(2, "Working...");
+            progressDialog.SetPercentage(percent);
+            percent += 100 / (moviesCount - 1);
+            progressDialog.Progress();
+            VideoDatabase.MakeNfo(movie.ID);
+          }
+        }
+
+        progressDialog.Close();
+      }
+    }
     
     // Get all shares and pins for protected video folders
     private void GetProtectedShares(ref ArrayList shares)
@@ -2045,11 +2351,13 @@ namespace MediaPortal.GUI.Video
       bool retry = true;
       bool sucess = false;
       _currentProtectedShare.Clear();
+
       while (retry)
       {
         GUIMessage msgGetPassword = new GUIMessage(GUIMessage.MessageType.GUI_MSG_GET_PASSWORD, 0, 0, 0, 0, 0, 0);
         GUIWindowManager.SendMessage(msgGetPassword);
         int iPincode = -1;
+
         try
         {
           iPincode = Int32.Parse(msgGetPassword.Label);
@@ -2066,6 +2374,7 @@ namespace MediaPortal.GUI.Video
             _currentPin = iPincode;
             continue;
           }
+
           if (iPincode == Convert.ToInt32(pin[0]))
           {
             _currentPin = iPincode;
@@ -2090,6 +2399,7 @@ namespace MediaPortal.GUI.Video
           retry = true;
         }
       }
+
       _currentPin = 0;
       return false;
     }
@@ -2113,15 +2423,15 @@ namespace MediaPortal.GUI.Video
 
     // Check if item is pin protected and if it exists within unlocked shares
     // Returns true if item is valid or if item is not within protected shares
-    private bool CheckItem(GUIListItem item)
+    private bool IsItemPinProtected(GUIListItem item, VirtualDirectory vDir)
     {
       string directory = Path.GetDirectoryName(item.Path); // item path
 
       if (directory != null)
       {
-        VirtualDirectory vDir = new VirtualDirectory();
-        // Get protected share paths for videos
-        vDir.LoadSettings("movies");
+        //VirtualDirectory vDir = new VirtualDirectory();
+        //// Get protected share paths for videos
+        //vDir.LoadSettings("movies");
 
         // Check if item belongs to protected shares
         int pincode = 0;
@@ -2142,6 +2452,7 @@ namespace MediaPortal.GUI.Video
             success = true;
             break;
           }
+
           // current item is not within unlocked shares, 
           // don't show item and go to the next item
           if (!success)
@@ -2150,6 +2461,7 @@ namespace MediaPortal.GUI.Video
           }
           return true;
         }
+
         // Nothing unlocked and item belongs to protected shares,
         // don't show item and go to the next item
         if (folderPinProtected && !_ageConfirmed)
@@ -2157,6 +2469,7 @@ namespace MediaPortal.GUI.Video
           return false;
         }
       }
+
       // Item is not inside protected shares, show it
       return true;
     }
@@ -2164,6 +2477,11 @@ namespace MediaPortal.GUI.Video
     // Set movieID skin property (locked movies will be discarded)
     private void SetRandomMovieId(ArrayList mList)
     {
+      if (mList.Count == 0)
+      {
+        GUIPropertyManager.SetProperty("#movieid", "-1");
+        return;
+      }
       try
       {
         ArrayList movies = new ArrayList(mList);
@@ -2173,26 +2491,23 @@ namespace MediaPortal.GUI.Video
         {
           char[] splitter = { '|' };
           string[] pin = p.Split(splitter);
+
           // Only add shares which are unlocked
           if (Convert.ToInt32(pin[0]) == _currentPin)
+          {
             pShares.Add(pin[1]);
+          }
         }
 
         // Do not show fanart for unlocked protected movies
         foreach (IMDBMovie m in movies)
         {
-          ArrayList files = new ArrayList();
-          VideoDatabase.GetFilesForMovie(m.ID, ref files);
+          string directory = Path.GetDirectoryName(m.VideoFilePath);
 
-          if (string.IsNullOrEmpty(files[0].ToString()))
+          if (string.IsNullOrEmpty(directory))
           {
             continue;
           }
-
-          string directory = Path.GetDirectoryName(files[0].ToString());
-
-          if (string.IsNullOrEmpty(directory))
-            continue;
 
           VirtualDirectory vDir = new VirtualDirectory();
           vDir.LoadSettings("movies");
@@ -2220,9 +2535,12 @@ namespace MediaPortal.GUI.Video
                 break;
               }
             }
+
             // If movie is not from unlocked shares, don't show fanart
             if (!found)
+            {
               mList.Remove(m);
+            }
           }
         }
 
@@ -2257,7 +2575,9 @@ namespace MediaPortal.GUI.Video
           string[] pin = p.Split(splitter);
           // Only add shares which are unlocked
           if (Convert.ToInt32(pin[0]) == _currentPin)
+          {
             pShares.Add(pin[1]);
+          }
         }
 
         // Do not show fanart for unlocked protected movies
@@ -2304,7 +2624,9 @@ namespace MediaPortal.GUI.Video
             }
             // If movie is not from unlocked shares, don't show fanart
             if (!found)
+            {
               mList.Remove(m);
+            }
           }
         }
 
@@ -2317,7 +2639,7 @@ namespace MediaPortal.GUI.Video
         }
         else
         {
-          return  null;
+          return null;
         }
       }
       catch (Exception)
@@ -2327,7 +2649,7 @@ namespace MediaPortal.GUI.Video
     }
 
     // Set selected item position in history of current view 
-    // (when user switch view and get back item position will berestored)
+    // (when user switch view and get back item position will be restored)
     private string SetItemViewHistory()
     {
       string viewFolder = handler.CurrentLevelWhere.ToLower();
@@ -2348,7 +2670,7 @@ namespace MediaPortal.GUI.Video
           {
             case "genre":
               m_history.Set(selectedLabel, view);
-              VideoDatabase.GetMoviesByGenre(selectedLabel, ref mList);
+              VideoDatabase.GetRandomMoviesByGenre(selectedLabel, ref mList, 1);
               SetRandomMovieId(mList);
               break;
 
@@ -2357,7 +2679,7 @@ namespace MediaPortal.GUI.Video
               IMDBMovie movie = facadeLayout.SelectedListItem.AlbumInfoTag as IMDBMovie;
               if (movie == null || movie.ID == -1)
               {
-                VideoDatabase.GetMoviesByUserGroup(selectedLabel, ref mList);
+                VideoDatabase.GetRandomMoviesByUserGroup(selectedLabel, ref mList, 1);
                 SetRandomMovieId(mList);
               }
               break;
@@ -2365,34 +2687,42 @@ namespace MediaPortal.GUI.Video
             case "actor":
             case "director":
               m_history.Set(selectedLabel, view);
-              VideoDatabase.GetMoviesByActor(selectedLabel, ref mList);
+              VideoDatabase.GetRandomMoviesByActor(selectedLabel, ref mList, 1);
               SetRandomMovieId(mList);
               break;
 
             case "year":
               m_history.Set(selectedLabel, view);
-              VideoDatabase.GetMoviesByYear(selectedLabel, ref mList);
+              VideoDatabase.GetRandomMoviesByYear(selectedLabel, ref mList, 1);
               SetRandomMovieId(mList);
               break;
 
             case "recently added":
               if (currentLvl == 0)
+              {
                 m_history.Set(selectedLabel, view);
+              }
               break;
 
             case "recently watched":
               if (currentLvl == 0)
+              {
                 m_history.Set(selectedLabel, view);
+              }
               break;
 
             case "watched":
               if (currentLvl == 0)
+              {
                 m_history.Set(selectedLabel, view);
+              }
               break;
 
             case "unwatched":
               if (currentLvl == 0)
+              {
                 m_history.Set(selectedLabel, view);
+              }
               break;
 
             case "titleindex":
@@ -2400,7 +2730,7 @@ namespace MediaPortal.GUI.Video
               {
                 string where = SetWhere(selectedLabel, "strTitle");
                 string sql = "SELECT * FROM movieinfo " + where +
-                             "GROUP BY strTitle ORDER BY strTitle ASC ";
+                             "GROUP BY strTitle ORDER BY RANDOM() LIMIT 1";
 
                 VideoDatabase.GetMoviesByFilter(sql, out mList, false, true, false, false);
                 SetRandomMovieId(mList);
@@ -2413,6 +2743,17 @@ namespace MediaPortal.GUI.Video
               break;
           }
         }
+      }
+    }
+
+    private void GetNfoFiles(string path, ref ArrayList nfoFiles)
+    {
+      string[] files = Directory.GetFiles(path, "*.nfo", SearchOption.AllDirectories);
+      var sortedFiles = files.OrderBy(f => f);
+
+      foreach (string file in sortedFiles)
+      {
+        nfoFiles.Add(file);
       }
     }
     
@@ -2448,9 +2789,14 @@ namespace MediaPortal.GUI.Video
       set { _searchActorString = value; }
     }
 
-    public static string CurrentView
+    public static string CurrentViewHistory
     {
-      get { return _currentView; }
+      get { return _currentViewHistory; }
+    }
+
+    public static string CurrentBaseView
+    {
+      get { return _currentBaseView; }
     }
 
     #endregion

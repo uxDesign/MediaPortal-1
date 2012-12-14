@@ -20,11 +20,9 @@
 
 using System;
 using System.Collections;
-using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Runtime.Serialization.Formatters.Soap;
-using System.Text.RegularExpressions;
 using MediaPortal.Configuration;
 using MediaPortal.Database;
 using MediaPortal.GUI.Library;
@@ -135,7 +133,7 @@ namespace MediaPortal.GUI.Video
           }
           else
           {
-            sql = String.Format("SELECT * FROM actors WHERE idActor NOT IN (SELECT DISTINCT idDirector FROM movieinfo WHERE strActor <> 'unknown') AND strActor <> 'unknown' ");
+            sql = String.Format("SELECT * FROM actors WHERE strActor <> 'unknown' ");
           }
 
           if (whereClause != string.Empty && defRoot.Where == "director")
@@ -303,7 +301,7 @@ namespace MediaPortal.GUI.Video
       {
         sql =
           String.Format(
-            "SELECT movieinfo.idMovie, " + 
+            "SELECT DISTINCT movieinfo.idMovie, " + 
                    "movieinfo.idDirector, " +
                    "movieinfo.strDirector, " + 
                    "movieinfo.strPlotOutline, " +
@@ -329,6 +327,7 @@ namespace MediaPortal.GUI.Video
                    "movieinfo.country, " +
                    "movieinfo.language, " +
                    "movieinfo.lastupdate, " +
+                   "movieinfo.strSortTitle, " +
                    "path.strPath, " +
                    "movie.discid, " +
                    "path.cdlabel " +
@@ -397,8 +396,11 @@ namespace MediaPortal.GUI.Video
 
       if (useActorsTable)
       {
-        fromClause += String.Format(",actors ,actorlinkmovie");
-        whereClause += " AND actors.idActor=actorlinkmovie.idActor AND actorlinkmovie.idMovie=movieinfo.idMovie";
+        if (CurrentLevel == MaxLevels - 1 && filter.Where == "actor")
+        {
+          fromClause += String.Format(",actors ,actorlinkmovie");
+          whereClause += " AND actors.idActor=actorlinkmovie.idActor AND actorlinkmovie.idMovie=movieinfo.idMovie";
+        }
         return;
       }
     }
@@ -579,7 +581,7 @@ namespace MediaPortal.GUI.Video
       }
       if (where == "director")
       {
-        return "actors.idActor";
+        return "movieinfo.idDirector";
       }
       if (where == "title")
       {
@@ -609,9 +611,13 @@ namespace MediaPortal.GUI.Video
       {
         return "movieinfo.idMovie";
       }
-      if (where == "actorindex" || where == "directorindex")
+      if (where == "actorindex")
       {
         return "SUBSTR(actors.strActor,1,1)";
+      }
+      if (where == "directorindex")
+      {
+        return "SUBSTR(movieinfo.strDirector,1,1)";
       }
       if (where == "titleindex")
       {

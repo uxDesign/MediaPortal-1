@@ -183,11 +183,17 @@ namespace TvDatabase
     #region channels
 
     // This is really needed
-    public Channel AddNewChannel(string name)
+    public Channel AddNewChannel(string name, int channelNumber)
     {
       Channel newChannel = new Channel(false, false, 0, new DateTime(2000, 1, 1), false, new DateTime(2000, 1, 1),
-                                       -1, true, "", name);
+                                       -1, true, "", name, channelNumber);
       return newChannel;
+    }
+
+    [System.Obsolete("use AddNewChannel(name, channelNumber)")]
+    public Channel AddNewChannel(string name)
+    {
+      return AddNewChannel(name, 10000);
     }
 
     public ChannelGroup CreateGroup(string groupName)
@@ -845,7 +851,7 @@ namespace TvDatabase
       {
         symbolRate = dvbcChannel.SymbolRate;
         modulation = (int)dvbcChannel.ModulationType;
-        channelNumber = dvbcChannel.LogicalChannelNumber > 999 ? channel.IdChannel : dvbcChannel.LogicalChannelNumber;
+        channelNumber = dvbcChannel.LogicalChannelNumber;
         channelType = 2;
       }
 
@@ -862,7 +868,7 @@ namespace TvDatabase
         innerFecRate = (int)dvbsChannel.InnerFecRate;
         pilot = (int)dvbsChannel.Pilot;
         rollOff = (int)dvbsChannel.Rolloff;
-        channelNumber = dvbsChannel.LogicalChannelNumber > 999 ? channel.IdChannel : dvbsChannel.LogicalChannelNumber;
+        channelNumber = dvbsChannel.LogicalChannelNumber;
         channelType = 3;
       }
 
@@ -975,7 +981,7 @@ namespace TvDatabase
       {
         symbolRate = dvbcChannel.SymbolRate;
         modulation = (int)dvbcChannel.ModulationType;
-        channelNumber = dvbcChannel.LogicalChannelNumber > 999 ? channel.IdChannel : dvbcChannel.LogicalChannelNumber;
+        channelNumber = dvbcChannel.LogicalChannelNumber;
         channelType = 2;
       }
 
@@ -992,7 +998,7 @@ namespace TvDatabase
         innerFecRate = (int)dvbsChannel.InnerFecRate;
         pilot = (int)dvbsChannel.Pilot;
         rollOff = (int)dvbsChannel.Rolloff;
-        channelNumber = dvbsChannel.LogicalChannelNumber > 999 ? channel.IdChannel : dvbsChannel.LogicalChannelNumber;
+        channelNumber = dvbsChannel.LogicalChannelNumber;
         channelType = 3;
       }
 
