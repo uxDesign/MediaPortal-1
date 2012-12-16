@@ -81,7 +81,7 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
   m_bEndBuffering(false),
   m_state(MP_RENDER_STATE_SHUTDOWN),
   m_streamDuration(0),
-  m_evrPresVer(678)
+  m_evrPresVer(EVR_PRES_VERSION)
 {
   ZeroMemory((void*)&m_dPhaseDeviations, sizeof(double) * NUM_PHASE_DEVIATIONS);
 
@@ -444,9 +444,11 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
   }
   
   m_pStatsRenderer = new StatsRenderer(this, m_pD3DDev);
-  
-  //Setup the Desktop Window Manager (DWM)
-  DwmInit(m_regNumDWMBuffers, NUM_DWM_FRAMES);
+    
+  { //Context for CAutoLock
+    CAutoLock sLock(&m_lockDWM);  
+    DwmEnableMMCSSOnOff(m_bDWMEnableMMCSS && (GetDisplayCycle() <= DWM_REFRESH_THRESH));
+  }
   StartWorkers();
 }
 
@@ -2126,10 +2128,6 @@ void MPEVRCustomPresenter::DwmSetParameters(BOOL useSourceRate, UINT buffers, UI
 
 void MPEVRCustomPresenter::DwmInit(UINT buffers, UINT rfshPerFrame)
 {
-  CAutoLock sLock(&m_lockDWM);
-  
-  DwmEnableMMCSSOnOff(m_bDWMEnableMMCSS && (GetDisplayCycle() <= DWM_REFRESH_THRESH));
-
   if (!m_bEnableDWMQueued || m_bDWMinit || (GetDisplayCycle() > DWM_REFRESH_THRESH))
   {
     return;
@@ -2618,8 +2616,6 @@ HRESULT STDMETHODCALLTYPE MPEVRCustomPresenter::ProcessMessage(MFVP_MESSAGE_TYPE
       SetRenderState(MP_RENDER_STATE_PAUSED);
       ResetTraceStats();
       ResetFrameStats();
-      //      //Setup the Desktop Window Manager (DWM)
-      //      DwmInit(m_regNumDWMBuffers, NUM_DWM_FRAMES);
       StartWorkers();
       // TODO add 2nd monitor support
     break;
@@ -2680,6 +2676,8 @@ HRESULT STDMETHODCALLTYPE MPEVRCustomPresenter::OnClockStart(MFTIME hnsSystemTim
 
   ResetTraceStats();
   ResetFrameStats();
+  //Setup the Desktop Window Manager (DWM)
+  DwmInit(m_regNumDWMBuffers, NUM_DWM_FRAMES);
 
   LOG_TRACE("pre buffering on 2");
   m_bDoPreBuffering = true;
@@ -2771,6 +2769,9 @@ HRESULT STDMETHODCALLTYPE MPEVRCustomPresenter::OnClockRestart(MFTIME hnsSystemT
   }
 
   ResetFrameStats();
+  //Setup the Desktop Window Manager (DWM) - in case the display refresh rate has
+  //been changed while the pres clock was stopped or paused.
+  DwmInit(m_regNumDWMBuffers, NUM_DWM_FRAMES);
 
   LOG_TRACE("pre buffering on 3");
   m_bDoPreBuffering = true;
@@ -4015,6 +4016,10 @@ void MPEVRCustomPresenter::UpdateDisplayFPS()
       {
         //Setup the Desktop Window Manager (DWM)
         DwmReset(false);
+        { //Context for CAutoLock
+          CAutoLock sLock(&m_lockDWM);  
+          DwmEnableMMCSSOnOff(m_bDWMEnableMMCSS && (GetDisplayCycle() <= DWM_REFRESH_THRESH));
+        }
         DwmInit(m_regNumDWMBuffers, NUM_DWM_FRAMES);
       }
     }

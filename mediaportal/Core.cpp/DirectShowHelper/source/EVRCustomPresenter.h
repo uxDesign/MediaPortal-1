@@ -28,6 +28,9 @@
 using namespace std;
 #define CHECK_HR(hr, msg) if (FAILED(hr)) Log(msg);
 #define SAFE_RELEASE(p) { if(p) { (p)->Release(); (p)=NULL; } }
+  
+//Version number
+#define EVR_PRES_VERSION 679
 
 //Disables MP audio renderer functions if true
 #define NO_MP_AUD_REND false
