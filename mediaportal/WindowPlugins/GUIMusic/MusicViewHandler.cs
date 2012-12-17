@@ -143,13 +143,32 @@ namespace MediaPortal.GUI.Music
 
       string whereClause = string.Empty;
       string orderClause = string.Empty;
-      FilterLevel level = (FilterLevel)currentView.Levels[CurrentLevel];
+      string filterClause = string.Empty;
+      FilterLevel level = currentView.Levels[CurrentLevel];
+
+      if (!string.IsNullOrEmpty(currentView.Parent))
+      {
+        List<FilterDefinitionNew> parentFilter = new List<FilterDefinitionNew>();
+        foreach (ViewDefinitionNew view in views)
+        {
+          if (currentView.Parent == view.LocalizedName)
+          {
+            parentFilter = view.Filters;
+            break;
+          }
+        }
+        if (parentFilter.Count > 0)
+        {
+          BuildFilter(parentFilter, ref filterClause);
+        }
+      }
 
       for (int i = 0; i < CurrentLevel; ++i)
       {
-        BuildSelect((FilterLevel)currentView.Levels[i], ref whereClause, i);
+        BuildSelect(currentView.Levels[i], ref whereClause, i);
+        BuildFilter(currentView.Levels[i].Filters, ref filterClause);
       }
-      BuildOrder((FilterLevel)currentView.Levels[CurrentLevel], ref orderClause);
+      BuildOrder(currentView.Levels[CurrentLevel], ref orderClause);
 
       if (CurrentLevel > 0)
       {
@@ -591,28 +610,28 @@ namespace MediaPortal.GUI.Music
       }
     }
 
-    private void BuildWhere(FilterLevel filter, ref string whereClause)
+    private void BuildFilter(List<FilterDefinitionNew> filters, ref string filterClause)
     {
-      if (filter.SelectedValue != "*" && filter.SelectedValue != "")
+      if (filters.Count == 0)
       {
-        if (whereClause != "")
-        {
-          whereClause += " and ";
-        }
-        string selectedValue = filter.SelectedValue;
-        DatabaseUtility.RemoveInvalidChars(ref selectedValue);
+        return;
+      }
 
-        // Do we have a Multiplevalues field, then we need compare with like
-        if (IsMultipleValueField(GetField(filter.Selection)))
+      if (filterClause != "")
+      {
+        filterClause += " AND ";
+      }
+
+      filterClause += "(";
+      foreach (FilterDefinitionNew filter in filters)
+      {
+        filterClause += string.Format("{0} {1} {2}", GetField(filter.Where), GetSqlOperator(filter.SqlOperator), GetFormattedFilterValue(filter));
+        if (!string.IsNullOrEmpty(filter.AndOr))
         {
-          whereClause += String.Format(" {0} like '%| {1} |%'", GetField(filter.Selection), selectedValue);
-        }
-        else
-        {
-          // use like for case insensitivity
-          whereClause += String.Format(" {0} like '{1}'", GetField(filter.Selection), selectedValue);
+          filterClause += string.Format(" {0}", filter.AndOr);
         }
       }
+      filterClause += ")";
     }
 
     private void BuildOrder(FilterLevel filter, ref string orderClause)
@@ -925,6 +944,92 @@ namespace MediaPortal.GUI.Music
         return "iDisc|iTrack"; // We need to sort on Discid + Track
       }
       return GetField(filter.Selection);
+    }
+
+    private string GetSqlOperator(string sqloperator)
+    {
+      switch (sqloperator.ToLower())
+      {
+        case "equals":
+        case "contains":
+        case "starts":
+        case "ends":
+          return "like";
+
+        case "not equals":
+        case "not contains":
+        case "not starts":
+        case "not ends":
+          return "not like";
+
+        case "greater than":
+          return ">";
+
+        case "greater equals":
+          return ">=";
+
+        case "less than":
+          return "<";
+
+        case "less equals":
+          return "<=";
+
+        case "in":
+          return "in";
+
+        case "not in":
+          return "not in";
+      }
+      return "like";
+    }
+
+    private string GetFormattedFilterValue(FilterDefinitionNew filter)
+    {
+      string filterValue = string.Empty;
+
+      switch (filter.SqlOperator.ToLower())
+      {
+        case "equals": 
+        case "not equals":
+        case "greater than":
+        case "greater equals":
+        case "less than":
+        case "less equals":
+          filterValue = string.Format("'{0}'",filter.WhereValue);
+          break;
+
+        case "contains":
+        case "not contains":
+          filterValue = string.Format("'%{0}%'", filter.WhereValue);
+          break;
+
+        case "starts":
+        case "not starts":
+          filterValue = string.Format("'{0}%'", filter.WhereValue);
+          break;
+
+        case "ends":
+        case "not ends":
+          filterValue = string.Format("'%{0}'", filter.WhereValue);
+          break;
+
+        case "in":
+        case "not in":
+          string[] splitValues = filterValue.Split(',');
+          filterValue = "(";
+
+          foreach (string splitValue in splitValues)
+          {
+            filterValue += string.Format("'{0}'", splitValue);
+            filterValue += " ,";
+          }
+          // Remove the Last ","
+          filterValue = filterValue.Substring(0, filterValue.Length - 1);
+          filterValue += ")";
+          break;
+      }
+
+      return filterValue;
     }
 
     protected override string GetLocalizedViewLevel(string lvlName)
