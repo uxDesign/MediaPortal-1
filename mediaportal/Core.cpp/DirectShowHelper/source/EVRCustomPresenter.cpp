@@ -33,6 +33,7 @@
 #include "timesource.h"
 #include "statsrenderer.h"
 #include "autoint.h"
+#include "version.h"
 
 // For more details for memory leak detection see the alloctracing.h header
 #include "..\..\alloctracing.h"
@@ -81,7 +82,7 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
   m_bEndBuffering(false),
   m_state(MP_RENDER_STATE_SHUTDOWN),
   m_streamDuration(0),
-  m_evrPresVer(EVR_PRES_VERSION)
+  m_evrPresVer(DSHOWHELPER_VERSION)
 {
   ZeroMemory((void*)&m_dPhaseDeviations, sizeof(double) * NUM_PHASE_DEVIATIONS);
 
