@@ -47,6 +47,8 @@ using namespace std;
 #define LOW_RES_TIMING false
 //Minimum usable vsync correction delay in 100 ns units (used when LOW_RES_TIMING is true)
 #define MIN_VSC_DELAY 11000
+//Enable late DWM init when true
+#define ENABLE_LATE_DWM_INIT false
 
 //Maximum FPS rate limiter default settings
 #define FPS_LIM_RATE 0
@@ -147,7 +149,7 @@ typedef struct _SchedulerParams
   MPEVRCustomPresenter* pPresenter;
   CCritSec csLock;
   CAMEvent eStall;  //Thread stall event
-  CAMEvent eFlush;  //Delegated flush event
+  CAMEvent eDoHPtask;  //Delegated high priority event
   CAMEvent eHasWork;   //Urgent event
   CAMEvent eHasWorkLP; //Low-priority event
   CAMEvent eUnstall;  //Release stall event
@@ -278,7 +280,7 @@ public:
   void           UpdateDisplayFPS();
 
   void           DwmReset(bool newWinHand);
-  void           DwmInit(UINT buffers, UINT rfshPerFrame);
+  void           DwmInit();
 
   bool           m_bScrubbing;
   bool           m_bZeroScrub;
@@ -352,6 +354,7 @@ protected:
   void           ReleaseWorker();
   void           StallScheduler();
   void           ReleaseScheduler();
+  void           DwmInitDelegated();
  
   HRESULT EnumFilters(IFilterGraph *pGraph);
   bool GetFilterNames();
@@ -553,6 +556,7 @@ protected:
   bool          m_bDWMEnableMMCSS;
   bool          m_bEnableAudioDelayComp;
   bool          m_bForceFirstFrame;
+  bool          m_bLateDWMInit;
   
   char          m_filterNames[FILTER_LIST_SIZE][MAX_FILTER_NAME];
   int           m_numFilters;
@@ -581,6 +585,7 @@ protected:
   CAMEvent      m_EndOfStreamingEvent;
 
   CAMEvent      m_bFlushDone;
+  CAMEvent      m_bDwmInitDone;
 
   // CheckShutdown: 
   //     Returns MF_E_SHUTDOWN if the presenter is shutdown.

@@ -214,6 +214,7 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
   m_regFPSLimRate = FPS_LIM_RATE;
   m_regFPSLimV = FPS_LIM_V;
   m_regFPSLimH = FPS_LIM_H;
+  m_bLateDWMInit = ENABLE_LATE_DWM_INIT;
   
   if (ERROR_SUCCESS==RegCreateKeyEx(HKEY_CURRENT_USER, _T("Software\\Team MediaPortal\\EVR Presenter"), 0, NULL, 
                                     REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, NULL, &key, NULL))
@@ -413,6 +414,20 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
       m_regFPSLimH = 0;
       Log("--- FPS Limit width threshold disabled");
     }
+
+    keyValue = m_bLateDWMInit ? 1 : 0;
+    LPCTSTR lateDWMInit_RRK = TEXT("EnableLateDWMInit");
+    ReadRegistryKeyDword(key, lateDWMInit_RRK, keyValue);
+    if (keyValue)
+    {
+      Log("--- Enable late DWM init");
+      m_bLateDWMInit = true;
+    }
+    else
+    {
+      Log("--- Disable late DWM init");
+      m_bLateDWMInit = false;
+    }
     
     RegCloseKey(key);
   }
@@ -450,7 +465,14 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
     CAutoLock sLock(&m_lockDWM);  
     DwmEnableMMCSSOnOff(m_bDWMEnableMMCSS && (GetDisplayCycle() <= DWM_REFRESH_THRESH));
   }
+  
   StartWorkers();
+  
+  if (!m_bLateDWMInit)
+  {
+    //Setup the Desktop Window Manager (DWM)
+    DwmInitDelegated();
+  }
 }
 
 void MPEVRCustomPresenter::SetFrameSkipping(bool onOff)
@@ -1434,7 +1456,7 @@ void MPEVRCustomPresenter::Flush(BOOL forced)
   if (m_bSchedulerRunning)
   {
     //This flush is delegated to the Scheduler thread, so wake it up....
-    m_schedulerParams.eFlush.Set();
+    m_schedulerParams.eDoHPtask.Set();
   }
   else 
   {
@@ -1800,7 +1822,7 @@ HRESULT MPEVRCustomPresenter::CheckForScheduledSample(LONGLONG *pTargetTime, LON
         CHECK_HR(PresentSample(pSample), "PresentSample failed");
       }
       
-      if ((m_iFramesDrawn < (int)m_regNumDWMBuffers) && m_bDwmCompEnabled) //Push extra samples into the pipeline at start of play
+      if ((m_iFramesDrawn < (int)m_dwmBuffers) && m_bDwmCompEnabled) //Push extra samples into the pipeline at start of play
       {
         CHECK_HR(PresentSample(pSample), "PresentSample failed");
         DwmFlush();
@@ -1898,6 +1920,22 @@ HRESULT MPEVRCustomPresenter::CheckForScheduledSample(LONGLONG *pTargetTime, LON
   } // end of while loop
   
   return hr;
+}
+
+
+void MPEVRCustomPresenter::DwmInitDelegated()
+{
+  m_bDwmInitDone.Reset();
+  if (m_bSchedulerRunning)
+  {
+    m_timerParams.eDoHPtask.Set(); //Request DwmInit() via timer thread
+  }
+  else 
+  {
+    Log("DwmInit() - Timer thread is shut down");
+    DwmInit();
+  }  
+  m_bDwmInitDone.Wait(1000);
 }
 
 void MPEVRCustomPresenter::StallWorker()
@@ -2127,14 +2165,23 @@ void MPEVRCustomPresenter::DwmSetParameters(BOOL useSourceRate, UINT buffers, UI
 
 }
 
-void MPEVRCustomPresenter::DwmInit(UINT buffers, UINT rfshPerFrame)
+void MPEVRCustomPresenter::DwmInit()
 {
-  if (!m_bEnableDWMQueued || m_bDWMinit || (GetDisplayCycle() > DWM_REFRESH_THRESH))
+  if (!m_bEnableDWMQueued || m_bDWMinit)
   {
+    m_bDwmInitDone.Set();
     return;
   }
+  
+  UINT buffers = m_regNumDWMBuffers;
+  UINT rfshPerFrame = NUM_DWM_FRAMES;
+
+  if (GetDisplayCycle() > DWM_REFRESH_THRESH)
+  {
+    buffers = 2;
+  }
     
-  Log("EVRCustomPresenter::DwmInit, frame = %d", m_iFramesDrawn);  
+  Log("EVRCustomPresenter::DwmInit - start, frame = %d", m_iFramesDrawn);  
   //Initialise the DWM parameters
   DwmGetState();  
   DwmFlush();
@@ -2144,6 +2191,8 @@ void MPEVRCustomPresenter::DwmInit(UINT buffers, UINT rfshPerFrame)
   DwmFlush();
   
   m_bDWMinit = true;
+  m_bDwmInitDone.Set();
+  Log("EVRCustomPresenter::DwmInit - done");  
 }  
 
 
@@ -2371,6 +2420,8 @@ void MPEVRCustomPresenter::ScheduleSample(IMFSample* pSample)
       if (!SampleAvailable())
       {       
         LOG_NOSCRUB("Adding first sample to empty queue");
+        //Setup the Desktop Window Manager (DWM)
+        DwmInitDelegated();
         if (m_bForceFirstFrame)
         {
           //Force first sample to be presented (not dropped)
@@ -2546,9 +2597,13 @@ HRESULT MPEVRCustomPresenter::ProcessInputNotify(int* samplesProcessed, bool set
         Log("ProcessOutput: change of type");
         bhasMoreSamples = FALSE;
        //LogOutputTypes();
-        StallScheduler();
-        hr = RenegotiateMediaOutputType();
-        ReleaseScheduler();
+        //StallScheduler();
+        {
+          CAutoLock sLock(&m_schedulerParams.csLock);
+          CAutoLock tLock(&m_timerParams.csLock);
+          hr = RenegotiateMediaOutputType();
+        }
+        //ReleaseScheduler();
       break;
 
       default:
@@ -2591,11 +2646,15 @@ HRESULT STDMETHODCALLTYPE MPEVRCustomPresenter::ProcessMessage(MFVP_MESSAGE_TYPE
       // The mixer's output format has changed. The EVR will initiate format negotiation.
       Log("ProcessMessage MFVP_MESSAGE_INVALIDATEMEDIATYPE");
       //LogOutputTypes();
-      StallScheduler();
+      //StallScheduler();
       StallWorker();
-      hr = RenegotiateMediaOutputType();
+      {
+        CAutoLock sLock(&m_schedulerParams.csLock);
+        CAutoLock tLock(&m_timerParams.csLock);
+        hr = RenegotiateMediaOutputType();
+      }
       ReleaseWorker();
-      ReleaseScheduler();
+      //ReleaseScheduler();
     break;
 
     case MFVP_MESSAGE_PROCESSINPUTNOTIFY:
@@ -2618,6 +2677,8 @@ HRESULT STDMETHODCALLTYPE MPEVRCustomPresenter::ProcessMessage(MFVP_MESSAGE_TYPE
       ResetTraceStats();
       ResetFrameStats();
       StartWorkers();
+      //Setup the Desktop Window Manager (DWM)
+      //DwmInitDelegated();
       // TODO add 2nd monitor support
     break;
 
@@ -2677,8 +2738,6 @@ HRESULT STDMETHODCALLTYPE MPEVRCustomPresenter::OnClockStart(MFTIME hnsSystemTim
 
   ResetTraceStats();
   ResetFrameStats();
-  //Setup the Desktop Window Manager (DWM)
-  DwmInit(m_regNumDWMBuffers, NUM_DWM_FRAMES);
 
   LOG_TRACE("pre buffering on 2");
   m_bDoPreBuffering = true;
@@ -2730,9 +2789,10 @@ HRESULT STDMETHODCALLTYPE MPEVRCustomPresenter::OnClockStop(MFTIME hnsSystemTime
   if (m_state != MP_RENDER_STATE_STOPPED)
   {
     SetRenderState(MP_RENDER_STATE_STOPPED);
-    StallScheduler();
+    //StallScheduler();
+    CAutoLock sLock(&m_schedulerParams.csLock);
     DoFlush(FALSE);
-    ReleaseScheduler();
+    //ReleaseScheduler();
   }
 
   return S_OK;
@@ -2770,9 +2830,6 @@ HRESULT STDMETHODCALLTYPE MPEVRCustomPresenter::OnClockRestart(MFTIME hnsSystemT
   }
 
   ResetFrameStats();
-  //Setup the Desktop Window Manager (DWM) - in case the display refresh rate has
-  //been changed while the pres clock was stopped or paused.
-  DwmInit(m_regNumDWMBuffers, NUM_DWM_FRAMES);
 
   LOG_TRACE("pre buffering on 3");
   m_bDoPreBuffering = true;
@@ -4021,7 +4078,7 @@ void MPEVRCustomPresenter::UpdateDisplayFPS()
           CAutoLock sLock(&m_lockDWM);  
           DwmEnableMMCSSOnOff(m_bDWMEnableMMCSS && (GetDisplayCycle() <= DWM_REFRESH_THRESH));
         }
-        DwmInit(m_regNumDWMBuffers, NUM_DWM_FRAMES);
+        DwmInitDelegated();
       }
     }
   }

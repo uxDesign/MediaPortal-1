@@ -17,8 +17,8 @@
 
 // Version numbers (used for resource and stats display)
 #define DSHOWHELPER_MAJOR_VERSION 1,6
-#define DSHOWHELPER_VERSION 679
-#define DSHOWHELPER_VERSION_STR "1.6.679.0\0"
+#define DSHOWHELPER_VERSION 684
+#define DSHOWHELPER_VERSION_STR "1.6.684.0\0"
 
 #define MP_VERSION 1,2,200,0
 #define MP_VERSION_STR "1.2.200.0\0"

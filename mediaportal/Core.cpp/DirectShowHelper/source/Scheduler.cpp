@@ -45,6 +45,7 @@ UINT CALLBACK TimerThread(void* param)
   LONGLONG now = 0;
   LONGLONG diff = 0;
   DWORD dwObject;
+  DWORD dwObject2;
   HANDLE hWTEvent = NULL;
   LONGLONG delay = 0;
   
@@ -71,7 +72,8 @@ UINT CALLBACK TimerThread(void* param)
 
   hWTEvent = CreateWaitableTimer(NULL, FALSE, NULL); //Synchronisation timer mode
 
-  HANDLE hEvts[] = {p->eHasWork, p->eHasWorkLP, hWTEvent};
+  HANDLE hEvts[] = {p->eDoHPtask, p->eHasWork, p->eHasWorkLP, hWTEvent};
+  HANDLE hEvts2[] = {p->eDoHPtask, hWTEvent};
 
   if (hWTEvent == NULL)
   {
@@ -87,14 +89,18 @@ UINT CALLBACK TimerThread(void* param)
   {    
     LOG_TRACE("Timer sleeping.");
 
-    dwObject = WaitForMultipleObjects (3, hEvts, FALSE, 150);
+    dwObject = WaitForMultipleObjects (4, hEvts, FALSE, 150);
 
     switch (dwObject)
     {
-      case WAIT_OBJECT_0 :     //eHasWork
+      case WAIT_OBJECT_0 :     //eDoHPtask
+        p->eDoHPtask.Reset();
+        p->pPresenter->DwmInit(); //Initialise DWM
+        break;
+      case WAIT_OBJECT_0 + 1 :     //eHasWork
         p->eHasWork.Reset();
         break;
-      case WAIT_OBJECT_0 + 1 : //eHasWorkLP
+      case WAIT_OBJECT_0 + 2 : //eHasWorkLP
         p->eHasWorkLP.Reset();
         if (p->llTime > 0)
         {
@@ -104,7 +110,18 @@ UINT CALLBACK TimerThread(void* param)
           {        
             liDueTime.QuadPart = -delay;
       		  SetWaitableTimer(hWTEvent, &liDueTime, 0, NULL, NULL, 0);
-            WaitForSingleObject(hWTEvent, 150);        
+            dwObject2 = WaitForMultipleObjects (2, hEvts2, FALSE, 110);
+            switch (dwObject2)
+            {
+              case WAIT_OBJECT_0 :     //eDoHPtask
+                p->eDoHPtask.Reset();
+                p->pPresenter->DwmInit(); //Initialise DWM
+                break;
+              case WAIT_OBJECT_0 + 1 :     //hWTEvent
+                break;
+              case WAIT_TIMEOUT :
+                break;
+            }
             
             if (!p->bDone)
             {
@@ -127,7 +144,7 @@ UINT CALLBACK TimerThread(void* param)
         }
         CancelWaitableTimer(hWTEvent);
         break;
-      case WAIT_OBJECT_0 + 2 :  //hWTEvent - do nothing (just to discard spurious events)
+      case WAIT_OBJECT_0 + 3 :  //hWTEvent - do nothing (just to discard spurious events)
         CancelWaitableTimer(hWTEvent);
         break;
       case WAIT_TIMEOUT :
@@ -147,7 +164,7 @@ UINT CALLBACK TimerThread(void* param)
   p->eHasWorkLP.Reset();
   p->eTimerEnd.Reset();
   p->eUnstall.Reset();
-  p->eFlush.Reset();  
+  p->eDoHPtask.Reset();  
   p->eStall.Reset();  
   timeEndPeriod(dwResolution);
   if (m_pAvRevertMmThreadCharacteristics) 
@@ -213,7 +230,7 @@ UINT CALLBACK WorkerThread(void* param)
       {
         case WAIT_OBJECT_0 :     //eStall
           //Log("Worker - StallEvent 1a");
-          p->eFlush.Reset();
+          p->eStall.Reset();
           p->pPresenter->m_WorkerStalledEvent.Set();
           if (!p->eUnstall.Wait(1000))
           {
@@ -277,7 +294,7 @@ UINT CALLBACK WorkerThread(void* param)
   p->eHasWorkLP.Reset();
   p->eTimerEnd.Reset();
   p->eUnstall.Reset();
-  p->eFlush.Reset();  
+  p->eDoHPtask.Reset();  
   p->eStall.Reset();  
   timeEndPeriod(dwResolution);
   if (m_pAvRevertMmThreadCharacteristics) 
@@ -328,8 +345,8 @@ UINT CALLBACK SchedulerThread(void* param)
   dwResolution = min(max(tc.wPeriodMin, 1), tc.wPeriodMax);
   dwUser = timeBeginPeriod(dwResolution);
 
-  HANDLE hEvts4[] = {p->eStall, p->eFlush, p->eHasWork, p->eTimerEnd};
-  HANDLE hEvts5[] = {p->eStall, p->eFlush, p->eHasWork, p->eTimerEnd, p->eHasWorkLP};
+  HANDLE hEvts4[] = {p->eStall, p->eDoHPtask, p->eHasWork, p->eTimerEnd};
+  HANDLE hEvts5[] = {p->eStall, p->eDoHPtask, p->eHasWork, p->eTimerEnd, p->eHasWorkLP};
   
   while (!p->bDone)
   {   
@@ -379,7 +396,7 @@ UINT CALLBACK SchedulerThread(void* param)
     {
       case WAIT_OBJECT_0 :     //eStall
         //Log("Sch - StallEvent start");
-        p->eFlush.Reset();
+        p->eStall.Reset();
         p->pPresenter->m_SchedulerStalledEvent.Set();
         if (!p->eUnstall.Wait(1000))
         {
@@ -388,9 +405,9 @@ UINT CALLBACK SchedulerThread(void* param)
         p->eUnstall.Reset();
         //Log("Sch - StallEvent end");
         break;
-      case WAIT_OBJECT_0 + 1 :     //eFlush
+      case WAIT_OBJECT_0 + 1 :     //eDoHPtask
         // Log("Sch - FlushEvent");
-        p->eFlush.Reset();
+        p->eDoHPtask.Reset();
         p->pPresenter->DelegatedFlush();
         delay = 0;
         hnsTargetTime = 0;
@@ -460,7 +477,7 @@ UINT CALLBACK SchedulerThread(void* param)
   p->eHasWorkLP.Reset();
   p->eTimerEnd.Reset();
   p->eUnstall.Reset();
-  p->eFlush.Reset();  
+  p->eDoHPtask.Reset();  
   p->eStall.Reset();  
   timeEndPeriod(dwResolution);
   if (p->pPresenter->m_bSchedulerEnableMMCSS)
