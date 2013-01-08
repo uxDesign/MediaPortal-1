@@ -49,6 +49,10 @@ using namespace std;
 #define MIN_VSC_DELAY 11000
 //Enable late DWM init when true
 #define ENABLE_LATE_DWM_INIT false
+//Enable DWM init sleep when true
+#define ENABLE_DWM_INIT_SLEEP true
+//Enable DWM init for 24Hz true
+#define ENABLE_DWM_FOR_24Hz true
 
 //Maximum FPS rate limiter default settings
 #define FPS_LIM_RATE 0
@@ -86,6 +90,7 @@ using namespace std;
 #define NUM_DWM_FRAMES 1
 
 //skip DwmInit() if display refresh period is > 25.0 ms (i.e. below 40Hz refresh rate)
+//if ENABLE_DWM_FOR_24Hz is false
 #define DWM_REFRESH_THRESH 25.0
 
 //Bring DWM under Multimedia Class Scheduler Service (MMCSS) control if 'true'
@@ -291,7 +296,6 @@ public:
   int            m_regWorkerMmcssPriority; 
   int            m_regTimerMmcssPriority;   
   
-  int            m_evrPresVer;
   bool           m_bLowResTiming;
 
   CAMEvent      m_WorkerStalledEvent;
@@ -557,6 +561,8 @@ protected:
   bool          m_bEnableAudioDelayComp;
   bool          m_bForceFirstFrame;
   bool          m_bLateDWMInit;
+  bool          m_bDWMInitSleep;
+  double        m_dDWMRefreshThresh;
   
   char          m_filterNames[FILTER_LIST_SIZE][MAX_FILTER_NAME];
   int           m_numFilters;

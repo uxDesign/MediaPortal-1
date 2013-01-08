@@ -132,6 +132,15 @@ HRESULT __fastcall UnicodeToAnsi(LPCOLESTR pszW, LPSTR* ppszA)
   return NOERROR;
 }
 
+//-------------------- Async logging methods -------------------------------------------------
+
+CCritSec m_qLock;
+CCritSec m_logFileLock;
+std::queue<std::string> m_logQueue;
+BOOL m_bLoggerRunning;
+HANDLE m_hLogger = NULL;
+CAMEvent m_EndLoggingEvent;
+
 
 void LogPath(TCHAR* dest, TCHAR* name)
 {
@@ -143,6 +152,7 @@ void LogPath(TCHAR* dest, TCHAR* name)
 
 void LogRotate()
 {
+  CAutoLock lock(&m_logFileLock);
   TCHAR fileName[MAX_PATH];
   LogPath(fileName, _T("log"));
   TCHAR bakFileName[MAX_PATH];
@@ -151,11 +161,6 @@ void LogRotate()
   _trename(fileName, bakFileName);
 }
 
-
-CCritSec m_qLock;
-std::queue<std::string> m_logQueue;
-BOOL m_bLoggerRunning;
-HANDLE m_hLogger = NULL;
 
 string GetLogLine()
 {
@@ -174,8 +179,11 @@ UINT CALLBACK LogThread(void* param)
 {
   TCHAR fileName[MAX_PATH];
   LogPath(fileName, _T("log"));
-  while ( m_bLoggerRunning ) {
-    if ( m_logQueue.size() > 0 ) {
+  while ( m_bLoggerRunning || (m_logQueue.size() > 0) ) 
+  {
+    if ( m_logQueue.size() > 0 ) 
+    {
+      CAutoLock lock(&m_logFileLock);
       FILE* fp = _tfopen(fileName, _T("a+"));
       if (fp!=NULL)
       {
@@ -190,7 +198,10 @@ UINT CALLBACK LogThread(void* param)
         fclose(fp);
       }
     }
-    Sleep(1000);
+    if (m_bLoggerRunning)
+    {
+      m_EndLoggingEvent.Wait(1000); //Sleep for 1000ms, unless thread is ending
+    }
   }
   return 0;
 }
@@ -209,7 +220,9 @@ void StopLogger()
   if (m_hLogger)
   {
     m_bLoggerRunning = FALSE;
+    m_EndLoggingEvent.Set();
     WaitForSingleObject(m_hLogger, INFINITE);	
+    m_EndLoggingEvent.Reset();
     m_hLogger = NULL;
   }
 }

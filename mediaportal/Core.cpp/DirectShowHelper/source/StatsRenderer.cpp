@@ -21,6 +21,7 @@
 
 #include "statsrenderer.h"
 #include "evrcustompresenter.h"
+#include "version.h"
 
 // For more details for memory leak detection see the alloctracing.h header
 #include "..\..\alloctracing.h"
@@ -228,7 +229,7 @@ void StatsRenderer::DrawStats()
     strText.Format(_T("Rptd FPS: %.3f | Detd FPS: %.3f | DetFrT_SD: %+5.3f ms | DetSDur: %+5.3f ms | ver: %d"),  
       ((m_pPresenter->m_rtTimePerFrame > 0) ? (10000000.0/m_pPresenter->m_rtTimePerFrame) : 0), 
       ((m_pPresenter->m_DetFrameTimeAve > 0) ? (1.0/(m_pPresenter->m_DetFrameTimeAve)) : 0),
-      (m_pPresenter->m_DetectedFrameTimeStdDev/10000.0), (m_pPresenter->m_SampDuration/10000.0), m_pPresenter->m_evrPresVer );
+      (m_pPresenter->m_DetectedFrameTimeStdDev/10000.0), (m_pPresenter->m_SampDuration/10000.0), DSHOWHELPER_VERSION);
     DrawText(rc, strText);
     OffsetRect(&rc, 0, TextHeight);
 

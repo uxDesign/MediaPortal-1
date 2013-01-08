@@ -81,8 +81,7 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
   m_pOuterEVR(NULL),
   m_bEndBuffering(false),
   m_state(MP_RENDER_STATE_SHUTDOWN),
-  m_streamDuration(0),
-  m_evrPresVer(DSHOWHELPER_VERSION)
+  m_streamDuration(0)
 {
   ZeroMemory((void*)&m_dPhaseDeviations, sizeof(double) * NUM_PHASE_DEVIATIONS);
 
@@ -90,14 +89,14 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
   if (m_pMFCreateVideoSampleFromSurface)
   {
     HRESULT hr;
-    LogRotate();
+    //LogRotate();
     if (NO_MP_AUD_REND)
     {
-      Log("--- v1.6.%d Unicode with DWM queue support --- instance 0x%x", m_evrPresVer, this);
+      Log("--- v1.6.%d Unicode with DWM queue support --- instance 0x%x", DSHOWHELPER_VERSION, this);
     }
     else
     {
-      Log("--- v1.6.%d Unicode with DWM queue support --- instance 0x%x", m_evrPresVer, this);
+      Log("--- v1.6.%d Unicode with DWM queue support --- instance 0x%x", DSHOWHELPER_VERSION, this);
       Log("---------- audio renderer enabled ------------- instance 0x%x", this);
     }
     m_hMonitor = monitor;
@@ -215,6 +214,8 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
   m_regFPSLimV = FPS_LIM_V;
   m_regFPSLimH = FPS_LIM_H;
   m_bLateDWMInit = ENABLE_LATE_DWM_INIT;
+  m_bDWMInitSleep = ENABLE_DWM_INIT_SLEEP;
+  m_dDWMRefreshThresh = DWM_REFRESH_THRESH;
   
   if (ERROR_SUCCESS==RegCreateKeyEx(HKEY_CURRENT_USER, _T("Software\\Team MediaPortal\\EVR Presenter"), 0, NULL, 
                                     REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, NULL, &key, NULL))
@@ -428,7 +429,35 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
       Log("--- Disable late DWM init");
       m_bLateDWMInit = false;
     }
-    
+
+    keyValue = m_bDWMInitSleep ? 1 : 0;
+    LPCTSTR DWMInitSleep_RRK = TEXT("EnableDWMInitSleep");
+    ReadRegistryKeyDword(key, DWMInitSleep_RRK, keyValue);
+    if (keyValue)
+    {
+      Log("--- Enable DWM init sleep");
+      m_bDWMInitSleep = true;
+    }
+    else
+    {
+      Log("--- Enable DWM init sleep");
+      m_bDWMInitSleep = false;
+    }
+
+    keyValue = ENABLE_DWM_FOR_24Hz ? 1 : 0;
+    LPCTSTR Enable24HzDWM_RRK = TEXT("Enable24HzDWM");
+    ReadRegistryKeyDword(key, Enable24HzDWM_RRK, keyValue);
+    if (keyValue)
+    {
+      Log("--- Enable DWM init for 24Hz");
+      m_dDWMRefreshThresh = 1000.0; // 1Hz threshold
+    }
+    else
+    {
+      Log("--- Disable DWM init for 24Hz");
+      m_dDWMRefreshThresh = DWM_REFRESH_THRESH;
+    }
+        
     RegCloseKey(key);
   }
 
@@ -463,7 +492,7 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
     
   { //Context for CAutoLock
     CAutoLock sLock(&m_lockDWM);  
-    DwmEnableMMCSSOnOff(m_bDWMEnableMMCSS && (GetDisplayCycle() <= DWM_REFRESH_THRESH));
+    DwmEnableMMCSSOnOff(m_bDWMEnableMMCSS && (GetDisplayCycle() <= m_dDWMRefreshThresh));
   }
   
   StartWorkers();
@@ -2176,7 +2205,7 @@ void MPEVRCustomPresenter::DwmInit()
   UINT buffers = m_regNumDWMBuffers;
   UINT rfshPerFrame = NUM_DWM_FRAMES;
 
-  if (GetDisplayCycle() > DWM_REFRESH_THRESH)
+  if (GetDisplayCycle() > m_dDWMRefreshThresh)
   {
     buffers = 2;
   }
@@ -2189,6 +2218,11 @@ void MPEVRCustomPresenter::DwmInit()
   DwmFlush();
   DwmSetParameters(FALSE, buffers, rfshPerFrame); //'Display rate' mode
   DwmFlush();
+  
+  if (m_bDWMInitSleep)
+  {
+    Sleep((DWORD)(GetDisplayCycle()*3.5));
+  }
   
   m_bDWMinit = true;
   m_bDwmInitDone.Set();
@@ -2218,6 +2252,11 @@ void MPEVRCustomPresenter::DwmReset(bool newWinHand)
   DwmFlush();
   DwmSetParameters(FALSE, 2, 1); //'Display rate' mode
   DwmFlush();
+
+  if (m_bDWMInitSleep)
+  {
+    Sleep((DWORD)(GetDisplayCycle()*2.5));
+  }
   
   m_bDWMinit = false;
 }  
@@ -4076,7 +4115,7 @@ void MPEVRCustomPresenter::UpdateDisplayFPS()
         DwmReset(false);
         { //Context for CAutoLock
           CAutoLock sLock(&m_lockDWM);  
-          DwmEnableMMCSSOnOff(m_bDWMEnableMMCSS && (GetDisplayCycle() <= DWM_REFRESH_THRESH));
+          DwmEnableMMCSSOnOff(m_bDWMEnableMMCSS && (GetDisplayCycle() <= m_dDWMRefreshThresh));
         }
         DwmInitDelegated();
       }
