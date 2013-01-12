@@ -9,43 +9,55 @@
       <id>0</id>
       <width>1280</width>
       <height>720</height>
-      <texture>black.png</texture>
-      <colordiffuse>40ffffff</colordiffuse>
+      <texture>white.png</texture>
+      <colordiffuse>201e90ff</colordiffuse>
+      <visible>!window.isvisible(602)+!window.isvisible(2005)</visible>
     </control>
     <control>
       <type>group</type>
       <description>group element</description>
-      
-      
       <control>
         <type>image</type>
         <id>0</id>
-        <posX>568</posX>
-        <posY>500</posY>
+        <posX>368</posX>
+        <posY>0</posY>
         <width>622</width>
-        <height>212</height>
+        <height>160</height>
         <texture>dialog_background.png</texture>
+        <colordiffuse>ffffffff</colordiffuse>
+        <visible>!window.isvisible(602)+!window.isvisible(2005)</visible>
+      </control>
+      <control>
+        <type>image</type>
+        <id>0</id>
+        <posX>368</posX>
+        <posY>0</posY>
+        <width>622</width>
+        <height>160</height>
+        <texture>dialog_background.png</texture>
+        <colordiffuse>99222222</colordiffuse>
+        <visible>window.isvisible(602)|window.isvisible(2005)</visible>
       </control>
       <control>
         <description>Heading text label</description>
         <type>label</type>
         <id>3</id>
-        <posX>640</posX>
-        <posY>531</posY>
+        <posX>420</posX>
+        <posY>27</posY>
         <label>181</label>
-        <font>font10</font>
+        <font>font12</font>
         <textcolor>FFFFFFFF</textcolor>
       </control>
       <control>
         <description>OK button</description>
         <type>button</type>
         <id>4</id>
-        <posX>1093</posX>
-        <posY>522</posY>
-        <width>50</width>
-        <height>40</height>
-        <textureFocus>dialogue_ok_focus.png</textureFocus>
-        <textureNoFocus>dialogue_ok_nofocus.png</textureNoFocus>
+        <posX>913</posX>
+        <posY>27</posY>
+        <width>30</width>
+        <height>30</height>
+        <textureFocus>top_exit_enabled.png</textureFocus>
+        <textureNoFocus>top_exit_disabled.png</textureNoFocus>
         <label>-</label>
         <onleft>4</onleft>
         <onright>4</onright>
@@ -56,10 +68,10 @@
         <description>logo</description>
         <type>image</type>
         <id>5</id>
-        <posX>622</posX>
-        <posY>562</posY>
-        <width>124</width>
-        <height>87</height>
+        <posX>422</posX>
+        <posY>67</posY>
+        <width>60</width>
+        <height>60</height>
         <texture>#thumb</texture>
         <colorkey>FFFF00FF</colorkey>
         <colordiffuse>FFFFFFFF</colordiffuse>
@@ -69,8 +81,8 @@
         <description>textarea</description>
         <type>textbox</type>
         <id>6</id>
-        <posX>755</posX>
-        <posY>556</posY>
+        <posX>525</posX>
+        <posY>67</posY>
         <width>391</width>
         <height>112</height>
         <spinPosX>1031</spinPosX>
@@ -80,6 +92,7 @@
         <onup>4</onup>
         <ondown>4</ondown>
         <label>-</label>
+        <font>font9</font>
       </control>
     </control>
   </controls>

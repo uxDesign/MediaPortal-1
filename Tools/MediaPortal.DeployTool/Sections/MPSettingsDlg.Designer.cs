@@ -52,8 +52,8 @@ namespace MediaPortal.DeployTool.Sections
       // 
       // textBoxDir
       // 
-      this.textBoxDir.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)
-                  | System.Windows.Forms.AnchorStyles.Right)));
+      this.textBoxDir.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
+            | System.Windows.Forms.AnchorStyles.Right)));
       this.textBoxDir.Location = new System.Drawing.Point(30, 116);
       this.textBoxDir.Name = "textBoxDir";
       this.textBoxDir.Size = new System.Drawing.Size(463, 20);
@@ -87,7 +87,7 @@ namespace MediaPortal.DeployTool.Sections
       this.checkBoxFirewall.CheckState = System.Windows.Forms.CheckState.Checked;
       this.checkBoxFirewall.Cursor = System.Windows.Forms.Cursors.Hand;
       this.checkBoxFirewall.ForeColor = System.Drawing.Color.White;
-      this.checkBoxFirewall.Location = new System.Drawing.Point(30, 192);
+      this.checkBoxFirewall.Location = new System.Drawing.Point(30, 166);
       this.checkBoxFirewall.Name = "checkBoxFirewall";
       this.checkBoxFirewall.Size = new System.Drawing.Size(343, 17);
       this.checkBoxFirewall.TabIndex = 23;
@@ -96,7 +96,6 @@ namespace MediaPortal.DeployTool.Sections
       // 
       // MPSettingsDlg
       // 
-	  this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
       this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.None;
       this.BackgroundImage = global::MediaPortal.DeployTool.Images.Background_middle_empty;
       this.Controls.Add(this.checkBoxFirewall);

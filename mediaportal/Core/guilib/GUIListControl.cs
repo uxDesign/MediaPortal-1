@@ -164,10 +164,13 @@ namespace MediaPortal.GUI.Library
     [XMLSkinElement("spinPosY")] protected int _spinControlPositionY;
 
     [XMLSkinElement("unfocusedAlpha")] protected int _unfocusedAlpha = 0xFF;
+    [XMLSkin("unfocusedAlpha", "applyToAll")] protected bool _unfocusedAlphaApplyToAll = false;
 
     [XMLSkinElement("spinCanFocus")] protected bool _spinCanFocus = true;
 
     [XMLSkinElement("explicitlyEnableScrollLabel")] protected bool _explicitlyEnableScrollLabel = false;
+
+    [XMLSkinElement("bdDvdDirectoryColor")] protected long _bdDvdDirectoryColor = 0xFFFFFFFF;
 
     protected GUIFont _font = null;
     protected GUIFont _font2 = null;
@@ -477,14 +480,7 @@ namespace MediaPortal.GUI.Library
           GUIControl btn = _listButtons[buttonNr];
           if (btn != null)
           {
-            if (gotFocus || !Focus)
-            {
-              btn.ColourDiffuse = 0xffffffff;
-            }
-            else
-            {
-              btn.ColourDiffuse = Color.FromArgb(_unfocusedAlpha, Color.White).ToArgb();
-            }
+            btn.ColourDiffuse = Color.FromArgb((int)_diffuseColor).ToArgb();
             btn.Focus = gotFocus;
             btn.SetPosition(x, y);
             btn.Render(timePassed);
@@ -534,6 +530,10 @@ namespace MediaPortal.GUI.Library
         {
           pImage.ColourDiffuse = Color.FromArgb(_unfocusedAlpha, Color.White).ToArgb();
         }
+        if (!pItem.Selected && !gotFocus && _unfocusedAlphaApplyToAll)
+        {
+          pImage.ColourDiffuse = Color.FromArgb(_unfocusedAlpha, Color.White).ToArgb();
+        }
         pImage.DimColor = DimColor;
         pImage.Render(timePassed);
         pImage = null;
@@ -575,6 +575,10 @@ namespace MediaPortal.GUI.Library
           pinImage.ColourDiffuse = 0xffffffff;
         }
         else
+        {
+          pinImage.ColourDiffuse = Color.FromArgb(_unfocusedAlpha, Color.White).ToArgb();
+        }
+        if (!pItem.Selected && !gotFocus && _unfocusedAlphaApplyToAll)
         {
           pinImage.ColourDiffuse = Color.FromArgb(_unfocusedAlpha, Color.White).ToArgb();
         }
@@ -653,6 +657,11 @@ namespace MediaPortal.GUI.Library
           }
         }
 
+        if (pItem.IsBdDvdFolder)
+        {
+          dwColor = _bdDvdDirectoryColor;
+        }
+
         if (!Focus)
         {
           dwColor &= DimColor;
@@ -719,6 +728,12 @@ namespace MediaPortal.GUI.Library
             dwColor = _downloadColor;
           }
         }
+
+        if (pItem.IsBdDvdFolder)
+        {
+          dwColor = _bdDvdDirectoryColor;
+        }
+
         if (!pItem.Selected && !gotFocus)
         {
           dwColor = Color.FromArgb(_unfocusedAlpha, Color.FromArgb((int)dwColor)).ToArgb();
@@ -755,6 +770,12 @@ namespace MediaPortal.GUI.Library
             dwColor = _downloadColor;
           }
         }
+
+        if (pItem.IsBdDvdFolder)
+        {
+          dwColor = _bdDvdDirectoryColor;
+        }
+
         if (!Focus)
         {
           dwColor &= DimColor;
@@ -785,6 +806,10 @@ namespace MediaPortal.GUI.Library
               label2.TextColor = dwColor;
             }
             else
+            {
+              label2.TextColor = Color.FromArgb(_unfocusedAlpha, Color.FromArgb((int)dwColor)).ToArgb();
+            }
+            if (!pItem.Selected && !gotFocus && _unfocusedAlphaApplyToAll)
             {
               label2.TextColor = Color.FromArgb(_unfocusedAlpha, Color.FromArgb((int)dwColor)).ToArgb();
             }
@@ -819,6 +844,12 @@ namespace MediaPortal.GUI.Library
             dwColor = _downloadColor;
           }
         }
+
+        if (pItem.IsBdDvdFolder)
+        {
+          dwColor = _bdDvdDirectoryColor;
+        }
+
         if (!Focus)
         {
           dwColor &= DimColor;
@@ -858,6 +889,10 @@ namespace MediaPortal.GUI.Library
               label3.TextColor = dwColor;
             }
             else
+            {
+              label3.TextColor = Color.FromArgb(_unfocusedAlpha, Color.FromArgb((int)dwColor)).ToArgb();
+            }
+            if (!pItem.Selected && !gotFocus && _unfocusedAlphaApplyToAll)
             {
               label3.TextColor = Color.FromArgb(_unfocusedAlpha, Color.FromArgb((int)dwColor)).ToArgb();
             }
@@ -3341,8 +3376,8 @@ namespace MediaPortal.GUI.Library
       {
         _listItems.Add(item);
       }
-      int iPages = _listItems.Count / _itemsPerPage;
-      if ((_listItems.Count % _itemsPerPage) != 0)
+      int iPages = _itemsPerPage == 0 ? 0 : _listItems.Count / _itemsPerPage;
+      if (_itemsPerPage != 0 && (_listItems.Count % _itemsPerPage) != 0)
       {
         iPages++;
       }
@@ -3818,6 +3853,12 @@ namespace MediaPortal.GUI.Library
     {
       get { return _downloadColor; }
       set { _downloadColor = value; }
+    }
+
+    public long BdDvdDirectoryColor
+    {
+      get { return _bdDvdDirectoryColor; }
+      set { _bdDvdDirectoryColor = value; }
     }
 
     public string Text3Content

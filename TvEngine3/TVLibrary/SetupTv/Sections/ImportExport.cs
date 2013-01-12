@@ -140,6 +140,7 @@ namespace SetupTv.Sections
         AddAttribute(nodechannel, "TotalTimeWatched", channel.TotalTimeWatched);
         AddAttribute(nodechannel, "VisibleInGuide", channel.VisibleInGuide);
         AddAttribute(nodechannel, "DisplayName", channel.DisplayName);
+        AddAttribute(nodechannel, "ChannelNumber", channel.ChannelNumber);
 
         XmlNode nodeMaps = xmlDoc.CreateElement("mappings");
         foreach (ChannelMap map in channel.ReferringChannelMap())
@@ -215,8 +216,7 @@ namespace SetupTv.Sections
           AddAttribute(nodeSchedule, "Quality", schedule.Quality);
           AddAttribute(nodeSchedule, "Directory", schedule.Directory);
           AddAttribute(nodeSchedule, "KeepMethod", schedule.KeepMethod);
-          AddAttribute(nodeSchedule, "MaxAirings", schedule.MaxAirings);
-          AddAttribute(nodeSchedule, "RecommendedCard", schedule.RecommendedCard);
+          AddAttribute(nodeSchedule, "MaxAirings", schedule.MaxAirings);          
           AddAttribute(nodeSchedule, "ScheduleType", schedule.ScheduleType);
           AddAttribute(nodeSchedule, "Series", schedule.Series);
           nodeSchedules.AppendChild(nodeSchedule);
@@ -360,6 +360,7 @@ namespace SetupTv.Sections
               bool visibileInGuide = (GetNodeAttribute(nodeChannel, "VisibleInGuide", "True") == "True");
               bool FreeToAir = (GetNodeAttribute(nodeChannel, "FreeToAir", "True") == "True");
               string displayName = GetNodeAttribute(nodeChannel, "DisplayName", "Unkown");
+              int chChannelNumber = Int32.Parse(GetNodeAttribute(nodeChannel, "ChannelNumber", "10000"));
 
               // Only import TV or radio channels if the corresponding checkbox was checked
               if ((isTv && !importtv) || (isRadio && !importradio))
@@ -378,7 +379,7 @@ namespace SetupTv.Sections
               }
               else
               {
-                dbChannel = layer.AddNewChannel(displayName);
+                dbChannel = layer.AddNewChannel(displayName, chChannelNumber);
               }
 
               dbChannel.GrabEpg = grabEpg;
@@ -716,8 +717,7 @@ namespace SetupTv.Sections
               schedule.Quality = Int32.Parse(nodeSchedule.Attributes["Quality"].Value);
               schedule.Directory = nodeSchedule.Attributes["Directory"].Value;
               schedule.KeepMethod = Int32.Parse(nodeSchedule.Attributes["KeepMethod"].Value);
-              schedule.MaxAirings = Int32.Parse(nodeSchedule.Attributes["MaxAirings"].Value);
-              schedule.RecommendedCard = Int32.Parse(nodeSchedule.Attributes["RecommendedCard"].Value);
+              schedule.MaxAirings = Int32.Parse(nodeSchedule.Attributes["MaxAirings"].Value);              
               schedule.ScheduleType = Int32.Parse(nodeSchedule.Attributes["ScheduleType"].Value);
               schedule.Series = (GetNodeAttribute(nodeSchedule, "Series", "False") == "True");
               if (idChannel > -1)

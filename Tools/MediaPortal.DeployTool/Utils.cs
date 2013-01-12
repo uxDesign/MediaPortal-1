@@ -19,11 +19,13 @@
 #endregion
 
 using System;
+using System.Linq;
 using System.Windows.Forms;
 using System.IO;
 using System.Resources;
 using System.Globalization;
 using System.Xml;
+using System.Xml.Linq;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Microsoft.Win32;
@@ -210,7 +212,7 @@ namespace MediaPortal.DeployTool
       return NewFileName;
     }
 
-    private static string GetUserAgentOsString()
+    internal static string GetUserAgentOsString()
     {
       return "Windows NT " + OSInfo.OSInfo.OSMajorVersion + "." + OSInfo.OSInfo.OSMinorVersion;
     }
@@ -551,8 +553,8 @@ namespace MediaPortal.DeployTool
           break;
         case "max":
           major = 1;
-          minor = 1;
-          revision = 8; // 1.1.8 = 1.2.0 RC1
+          minor = 2;
+          revision = 100;
           break;
       }
       Version ver = new Version(major, minor, revision);
@@ -602,7 +604,52 @@ namespace MediaPortal.DeployTool
 
     public static string GetDisplayVersion()
     {
-      return "1.2.0";
+      return "1.3.0 Beta";
+    }
+
+    /// <summary>
+    /// Adds a record to deploy.xml (will be created if it does not exist).
+    /// This will then be picked up by MP itself and applied to mediaportal.xml
+    /// </summary>
+    /// <param name="section">name attribute of section element in mediaportal.xml</param>
+    /// <param name="entry">name attribute of entry element in mediaportal.xml</param>
+    /// <param name="value">Value to be set for this section/entry</param>
+    public static void SetDeployXml(string section, string entry, string value)
+    {
+      var commonAppsDir = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData) +
+                          @"\Team MediaPortal\MediaPortal\";
+      if (!Directory.Exists(commonAppsDir))
+      {
+        Directory.CreateDirectory(commonAppsDir);
+      }
+
+      var deployXmlLocation = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData) +
+                              @"\Team MediaPortal\MediaPortal\deploy.xml";
+      var deployXml = File.Exists(deployXmlLocation) ? XDocument.Load(deployXmlLocation) : new XDocument();
+      var root = deployXml.Elements("deploySettings").FirstOrDefault();
+      if (root == null)
+      {
+        deployXml.Add(new XElement("deploySettings"));
+        root = deployXml.Elements("deploySettings").First();
+      }
+
+      var existingNode =
+        (from x in deployXml.Elements("deploySettings").Elements()
+         where (string) x.Attribute("section") == section &&
+               (string) x.Attribute("entry") == entry
+         select x).FirstOrDefault();
+
+      if (existingNode == null)
+      {
+        root.Add(new XElement("deploySetting", new XAttribute("section", section), new XAttribute("entry", entry),
+                              value));
+      }
+      else
+      {
+        existingNode.Value = value;
+      }
+
+      deployXml.Save(deployXmlLocation);
     }
 
     #endregion

@@ -1,53 +1,55 @@
 <?xml version="1.0" encoding="utf-8" standalone="yes"?>
-
+<!--version="1.0" encoding="utf-8" standalone="yes"-->
 <window>
   <controls>
     <control>
       <description>BG</description>
       <type>image</type>
       <id>1</id>
-      <texture>Background.png</texture>
-      <width>720</width>
-      <height>576</height>
+      <texture>settings.jpg</texture>
+      <width>960</width>
+      <height>720</height>
+      <colordiffuse>ffffffff</colordiffuse>
     </control>
     <control>
-      <type>label</type>
+      <description>BG</description>
+      <type>image</type>
       <id>1</id>
-      <posX>33</posX>
-      <posY>21</posY>
-      <label>#currentmodule</label>
-      <font>font16</font>
-      <align>left</align>
-      <textcolor>White</textcolor>
-      
-      
+      <texture>background.png</texture>
+      <width>960</width>
+      <height>720</height>
+      <visible>skin.hassetting(#skin.no.category.fanart)</visible>
     </control>
     <control>
-      
-      
-      <description>Selected item Label</description>
-      <type>fadelabel</type>
-      <id>1</id>
-      <posX>33</posX>
-      <posY>52</posY>
-      <width>399</width>
-      <label>#selecteditem</label>
-      <font>font13</font>
-      <align>left</align>
-      <textcolor>ffa9d0f7</textcolor>
-    </control>
-    <control>
-      <description>Date Time</description>
-      <type>label</type>
+      <description>General Overlay</description>
       <id>0</id>
-      <posX>699</posX>
-      <posY>21</posY>
-      <label>#date | #time</label>
-      <align>right</align>
-      <font>font13</font>
-      <textcolor>ffa9d0f7</textcolor>
-      
-      
+      <type>image</type>
+      <posX>0</posX>
+      <posY>-70</posY>
+      <width>960</width>
+      <height>970</height>
+      <texture>general_overlay.png</texture>
+    </control>
+    <control>
+      <description>background top overlay</description>
+      <type>image</type>
+      <id>1</id>
+      <posX>0</posX>
+      <posY>0</posY>
+      <width>960</width>
+      <height>180</height>
+      <texture>overlay_top.png</texture>
+      <colordiffuse>ccffffff</colordiffuse>
+    </control>
+    <control>
+      <type>label</type>
+      <id>1</id>
+      <posX>22</posX>
+      <posY>10</posY>
+      <label>#(iif(and(neq(L(102012), #currentmodule), neq(L(102002), #currentmodule), neq(L(100100), #currentmodule), neq(L(102015), #currentmodule)), #currentmodule, ' '))</label>
+      <font>font11</font>
+      <align>left</align>
+      <textcolor>ff6FAFE1</textcolor>
     </control>
   </controls>
 </window>

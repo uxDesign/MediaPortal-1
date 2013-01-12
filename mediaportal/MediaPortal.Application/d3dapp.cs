@@ -55,7 +55,6 @@ namespace MediaPortal
   public class D3DApp : MPForm
   {
     private const int MILLI_SECONDS_TIMER = 1;
-    protected string m_strSkin = "Default";
     public static string _strSkinOverride = string.Empty;
     protected string m_strLanguage = "english";
 
@@ -846,11 +845,7 @@ namespace MediaPortal
         GUIGraphicsContext.DX9Device.Reset(presentParams);
         if (GUIGraphicsContext.IsDirectX9ExUsed() && !useEnhancedVideoRenderer)
         {
-          if (!m_strSkin.Equals(GUIGraphicsContext.Skin))
-          {
-            m_strSkin = GUIGraphicsContext.Skin;
-          }
-          GUIFontManager.LoadFonts(Config.GetFile(Config.Dir.Skin, m_strSkin, "fonts.xml"));
+          GUIFontManager.LoadFonts(GUIGraphicsContext.GetThemedSkinFile(@"\fonts.xml"));
           GUIFontManager.InitializeDeviceObjects();
         }
 
@@ -887,11 +882,7 @@ namespace MediaPortal
           GUIGraphicsContext.DX9Device.Reset(presentParams);
           if (GUIGraphicsContext.IsDirectX9ExUsed() && !useEnhancedVideoRenderer)
           {
-            if (!m_strSkin.Equals(GUIGraphicsContext.Skin))
-            {
-              m_strSkin = GUIGraphicsContext.Skin;
-            }
-            GUIFontManager.LoadFonts(Config.GetFile(Config.Dir.Skin, m_strSkin, "fonts.xml"));
+            GUIFontManager.LoadFonts(GUIGraphicsContext.GetThemedSkinFile("fonts.xml"));
             GUIFontManager.InitializeDeviceObjects();
           }
         }
@@ -1965,6 +1956,11 @@ namespace MediaPortal
         lastActiveModule = xmlreader.GetValueAsInt("general", "lastactivemodule", -1);
         lastActiveModuleFullscreen = xmlreader.GetValueAsBool("general", "lastactivemodulefullscreen", false);
 
+        if (Util.Utils.IsGUISettingsWindow(lastActiveModule))
+        {
+          return false;
+        }
+
         // check if system has been awaken by user or psclient.
         // if by psclient, DO NOT resume last active module
         if (showLastActiveModule)
@@ -2658,6 +2654,37 @@ namespace MediaPortal
     {
       try
       {
+        bool flag = false;
+        while (Win32API.PeekMessage(ref msgApi, IntPtr.Zero, 0, 0, 0))
+        {
+          if (msgApi.hwnd != IntPtr.Zero && Win32API.IsWindowUnicode(new HandleRef(null, msgApi.hwnd)))
+          {
+            flag = true;
+            if (!Win32API.GetMessageW(ref msgApi, IntPtr.Zero, 0, 0))
+            {
+              continue;
+            }
+          }
+          else
+          {
+            flag = false;
+            if (!Win32API.GetMessageA(ref msgApi, IntPtr.Zero, 0, 0))
+            {
+              continue;
+            }
+          }
+          Win32API.TranslateMessage(ref msgApi);
+          if (flag)
+          {
+            Win32API.DispatchMessageW(ref msgApi);
+          }
+          else
+          {
+            Win32API.DispatchMessageA(ref msgApi);
+          }
+        }
+
+        /* close, but no cigar
         // fully process ours
         if (Win32API.PeekMessage(ref msgApi, this.Handle, 0, 0, 0))
         {
@@ -2680,6 +2707,7 @@ namespace MediaPortal
         Win32API.TranslateMessage(ref msgApi);
         Win32API.DispatchMessageA(ref msgApi);
         //	System.Windows.Forms.Application.DoEvents();//SLOW
+        */
       }
 #if DEBUG
       catch (Exception ex)

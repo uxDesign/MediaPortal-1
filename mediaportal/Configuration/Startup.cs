@@ -28,6 +28,7 @@ using MediaPortal.GUI.Library;
 using MediaPortal.Services;
 using MediaPortal.Util;
 using MediaPortal.Profile;
+using System.Runtime.InteropServices;
 
 namespace MediaPortal.Configuration
 {
@@ -37,6 +38,8 @@ namespace MediaPortal.Configuration
   public class Startup
   {
     public static bool _automaticMovieCodec = false;
+    public static bool _automaticMovieFilter = false;
+    public static bool _automaticBDCodec = false;
 
     private enum StartupMode
     {
@@ -86,7 +89,7 @@ namespace MediaPortal.Configuration
       Log.Info("Using Directories:");
       foreach (string options in Enum.GetNames(typeof (Config.Dir)))
       {
-        Log.Info("{0} - {1}", options, Config.GetFolder((Config.Dir)Enum.Parse(typeof (Config.Dir), options)));
+        Log.Info("{0} - {1}", options, Config.GetFolder((Config.Dir) Enum.Parse(typeof (Config.Dir), options)));
       }
 
       // rtv: disabled Wizard due to frequent bug reports on serveral sections.
@@ -127,6 +130,7 @@ namespace MediaPortal.Configuration
             {
               ISettingsProvider mpConfig = new XmlSettingsProvider(MPSettings.ConfigPathName);
               SettingsUpgradeManager.Instance.UpgradeToLatest(mpConfig);
+              SettingsUpgradeManager.Instance.ApplyDeploySettingUpgrade(mpConfig);
             }
             catch (Exception ex)
             {
@@ -151,6 +155,15 @@ namespace MediaPortal.Configuration
 
         }
       }
+
+      // we are not in deploy mode but there is not mediaportal.xml file
+      // create one and apply any updates from deploy.xml
+      if (!_preventGUILaunch && !File.Exists(Config.GetFile(Config.Dir.Config, "mediaportal.xml")))
+      {
+        Log.Info("mediaportal.xml does not exist.   Creating a new file and applying deploy tool parameters");
+        SettingsUpgradeManager.Instance.ApplyDeploySetting();
+      }
+
     }
 
     /// <summary>

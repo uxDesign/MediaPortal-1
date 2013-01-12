@@ -112,6 +112,7 @@ Var MPTray_Running
 !include Library.nsh
 !include FileFunc.nsh
 !include Memento.nsh
+!include WinMessages.nsh
 
 !include "${git_InstallScripts}\include\FileAssociation.nsh"
 !include "${git_InstallScripts}\include\LanguageMacros.nsh"
@@ -120,6 +121,9 @@ Var MPTray_Running
 !include "${git_InstallScripts}\include\MediaPortalMacros.nsh"
 !include "${git_InstallScripts}\include\ProcessMacros.nsh"
 !include "${git_InstallScripts}\include\WinVerEx.nsh"
+!include "${git_InstallScripts}\include\CPUDesc.nsh"
+!include "${git_InstallScripts}\include\FontReg.nsh"
+!include "${git_InstallScripts}\include\FontName.nsh"
 
 !ifndef GIT_BUILD
 !include "${git_InstallScripts}\pages\AddRemovePage.nsh"
@@ -207,7 +211,7 @@ UninstPage custom un.UninstallModePage un.UninstallModePageLeave
 # INSTALLER ATTRIBUTES
 #---------------------------------------------------------------------------
 Name          "${PRODUCT_NAME}"
-BrandingText  "${PRODUCT_NAME} ${VERSION} by ${PRODUCT_PUBLISHER}"
+BrandingText  "${PRODUCT_NAME} ${VERSION_DISP} by ${PRODUCT_PUBLISHER}"
 !if ${VER_BUILD} == 0       # it's an official release
   OutFile "${git_OUT}\package-mediaportal.exe"
 !else                       # it's a git release
@@ -220,11 +224,11 @@ RequestExecutionLevel admin
 ShowInstDetails show
 VIProductVersion "${VER_MAJOR}.${VER_MINOR}.${VER_REVISION}.${VER_BUILD}"
 VIAddVersionKey /LANG=${LANG_ENGLISH} ProductName       "${PRODUCT_NAME}"
-VIAddVersionKey /LANG=${LANG_ENGLISH} ProductVersion    "${VERSION}"
+VIAddVersionKey /LANG=${LANG_ENGLISH} ProductVersion    "${VERSION_DISP}"
 VIAddVersionKey /LANG=${LANG_ENGLISH} CompanyName       "${PRODUCT_PUBLISHER}"
 VIAddVersionKey /LANG=${LANG_ENGLISH} CompanyWebsite    "${PRODUCT_WEB_SITE}"
 VIAddVersionKey /LANG=${LANG_ENGLISH} FileVersion       "${VERSION}"
-VIAddVersionKey /LANG=${LANG_ENGLISH} FileDescription   "${PRODUCT_NAME} installation ${VERSION}"
+VIAddVersionKey /LANG=${LANG_ENGLISH} FileDescription   "${PRODUCT_NAME} installation ${VERSION_DISP}"
 VIAddVersionKey /LANG=${LANG_ENGLISH} LegalCopyright    "Copyright © 2005-2011 ${PRODUCT_PUBLISHER}"
 ShowUninstDetails show
 
@@ -236,9 +240,6 @@ ShowUninstDetails show
   ${LOG_TEXT} "DEBUG" "MACRO SectionList ${MacroName}"
   ; This macro used to perform operation on multiple sections.
   ; List all of your components in following manner here.
-!ifndef HEISE_BUILD
-  !insertmacro "${MacroName}" "SecGabest"
-!endif
   !insertmacro "${MacroName}" "SecPowerScheduler"
   !insertmacro "${MacroName}" "SecMpeInstaller"
 !macroend
@@ -414,8 +415,12 @@ Section "MediaPortal core files (required)" SecCore
   
   SetOutPath "$MPdir.Config\scripts\MovieInfo"
   File /nonfatal "${MEDIAPORTAL.BASE}\scripts\MovieInfo\IMDB.csscript"
-
-
+  File /nonfatal "${MEDIAPORTAL.BASE}\scripts\MovieInfo\IMDB_MP13x.csscript"
+  
+  SetOutPath "$MPdir.Config\scripts"
+  File /nonfatal "${MEDIAPORTAL.BASE}\scripts\InternalActorMoviesGrabber.csscript"
+  File /nonfatal "${MEDIAPORTAL.BASE}\scripts\VDBParserStrings.xml"
+  
   SetOutPath "$MPdir.Base"
   File "${git_MP}\MediaPortal.Base\MediaPortalDirs.xml"
   File "${git_MP}\MediaPortal.Base\BuiltInPlugins.xml"
@@ -425,7 +430,7 @@ Section "MediaPortal core files (required)" SecCore
   ; Configuration
   File "${git_MP}\Configuration\bin\${BUILD_TYPE}\Configuration.exe"
   File "${git_MP}\Configuration\bin\${BUILD_TYPE}\Configuration.exe.config"
-  ; Core
+  File "${git_MP}\Configuration\bin\${BUILD_TYPE}\WinCustomControls.dll"  ; Core
   File "${git_MP}\core\bin\${BUILD_TYPE}\Core.dll"
   File "${git_Common_MP_TVE3}\DirectShowLib\bin\${BUILD_TYPE}\DirectShowLib.dll"
   File "${git_MP}\core.cpp\fontEngine\bin\${BUILD_TYPE}\fontengine.dll"
@@ -471,6 +476,12 @@ Section "MediaPortal core files (required)" SecCore
   SetOutPath "$MPdir.Base\Docs"
   File "${git_MP}\Docs\BASS License.txt"
   File "${git_MP}\Docs\MediaPortal License.rtf"
+  ; libbluray
+  SetOutPath "$MPdir.Base"
+  File "${git_DirectShowFilters}\BDReader\libbluray\bluray.dll"
+  ; TvLibrary for Genre
+  File "${git_TVServer}\TvLibrary.Interfaces\bin\${BUILD_TYPE}\TvLibrary.Interfaces.dll"
+  ; MediaPortal.exe
 
   #---------------------------------------------------------------------------
   # FILTER REGISTRATION
@@ -488,6 +499,38 @@ Section "MediaPortal core files (required)" SecCore
   WriteRegStr HKCR "Media Type\Extensions\.tsbuffer"  "Source Filter" "{b9559486-e1bb-45d3-a2a2-9a7afe49b23f}"
   WriteRegStr HKCR "Media Type\Extensions\.rtsp"      "Source Filter" "{b9559486-e1bb-45d3-a2a2-9a7afe49b23f}"
 
+  ; used for Blu-ray
+  !insertmacro InstallLib REGDLL NOTSHARED NOREBOOT_NOTPROTECTED "${git_DirectShowFilters}\BDReader\bin\${BUILD_TYPE}\BDReader.ax"                "$MPdir.Base\BDReader.ax"         "$MPdir.Base"
+  !insertmacro InstallLib REGDLL NOTSHARED NOREBOOT_NOTPROTECTED "${git_DirectShowFilters}\DVBSubtitle3\bin\${BUILD_TYPE}\DVBSub3.ax"             "$MPdir.Base\DVBSub3.ax"          "$MPdir.Base"
+  
+  ; used for Mediaportal Audio Renderer
+  ${If} ${SSE2Supported} 
+  ${AndIf} ${AtLeastWinVista}
+    !insertmacro InstallLib REGDLL NOTSHARED NOREBOOT_NOTPROTECTED "${git_DirectShowFilters}\MPAudioRenderer\bin\${BUILD_TYPE}\mpaudiorenderer.ax"                "$MPdir.Base\mpaudiorenderer.ax"         "$MPdir.Base"
+  ${EndIf}
+
+  ; used for Default Skin Font
+  StrCpy $FONT_DIR $FONTS
+  !insertmacro InstallTTFFont "${MEDIAPORTAL.BASE}\skin\DefaultWide\MPDefaultFonts\MediaPortalDefault.ttf"
+  SendMessage ${HWND_BROADCAST} ${WM_FONTCHANGE} 0 0 /TIMEOUT=5000
+  
+  ; used for Titan Skin
+  StrCpy $FONT_DIR $FONTS
+  !insertmacro InstallTTFFont "${MEDIAPORTAL.BASE}\skin\Titan\Fonts\TitanSmall.ttf"
+  SendMessage ${HWND_BROADCAST} ${WM_FONTCHANGE} 0 0 /TIMEOUT=5000  
+  
+  StrCpy $FONT_DIR $FONTS
+  !insertmacro InstallTTFFont "${MEDIAPORTAL.BASE}\skin\Titan\Fonts\Titan.ttf"
+  SendMessage ${HWND_BROADCAST} ${WM_FONTCHANGE} 0 0 /TIMEOUT=5000    
+
+  StrCpy $FONT_DIR $FONTS
+  !insertmacro InstallTTFFont "${MEDIAPORTAL.BASE}\skin\Titan\Fonts\TitanLight.ttf"
+  SendMessage ${HWND_BROADCAST} ${WM_FONTCHANGE} 0 0 /TIMEOUT=5000    
+
+  StrCpy $FONT_DIR $FONTS
+  !insertmacro InstallTTFFont "${MEDIAPORTAL.BASE}\skin\Titan\Fonts\TitanMedium.ttf"
+  SendMessage ${HWND_BROADCAST} ${WM_FONTCHANGE} 0 0 /TIMEOUT=5000    
+  
 SectionEnd
 !macro Remove_${SecCore}
   ${LOG_TEXT} "INFO" "Uninstalling MediaPortal core files..."
@@ -510,7 +553,17 @@ SectionEnd
   !insertmacro UnInstallLib REGDLL NOTSHARED REBOOT_NOTPROTECTED "$MPdir.Base\MPAudioSwitcher.ax"
   ; used for digital tv
   !insertmacro UnInstallLib REGDLL NOTSHARED REBOOT_NOTPROTECTED "$MPdir.Base\TsReader.ax"
-
+  ; used for Blu-ray
+  !insertmacro UnInstallLib REGDLL NOTSHARED REBOOT_NOTPROTECTED "$MPdir.Base\BDReader.ax"
+  !insertmacro UnInstallLib REGDLL NOTSHARED REBOOT_NOTPROTECTED "$MPdir.Base\DVBSub3.ax"
+  ; used for Mediaportal Audio Renderer
+  ${If} ${FileExists} "$MPdir.Base\mpaudiorenderer.ax"
+	${If} ${SSE2Supported} 
+		!insertmacro UnInstallLib REGDLL NOTSHARED REBOOT_NOTPROTECTED "$MPdir.Base\mpaudiorenderer.ax"
+	${Else}
+		Delete  "$MPdir.Base\mpaudiorenderer.ax"
+	${EndIf}
+  ${EndIf}
 
 ### AUTO-GENERATED   UNINSTALLATION CODE ###
   !include "${git_MP}\Setup\uninstall.nsh"
@@ -529,7 +582,10 @@ SectionEnd
   Delete "$MPdir.Config\Installer\cleanup.xml"
   RMDir "$MPdir.Config\Installer"
   Delete "$MPdir.Config\scripts\MovieInfo\IMDB.csscript"
+  Delete "$MPdir.Config\scripts\MovieInfo\IMDB_MP13x.csscript"
   RMDir "$MPdir.Config\scripts\MovieInfo"
+  Delete "$MPdir.Config\scripts\InternalActorMoviesGrabber.csscript"
+  Delete "$MPdir.Config\scripts\VDBParserStrings.xml"
   RMDir "$MPdir.Config\scripts"
 
 
@@ -539,6 +595,7 @@ SectionEnd
   ; Configuration
   Delete "$MPdir.Base\Configuration.exe"
   Delete "$MPdir.Base\Configuration.exe.config"
+  Delete "$MPdir.Base\WinCustomControls.dll"
   ; Core
   Delete "$MPdir.Base\Core.dll"
   Delete "$MPdir.Base\DirectShowLib.dll"
@@ -568,6 +625,8 @@ SectionEnd
   Delete "$MPdir.Base\MediaFoundation.dll"
   ; MP Tray
   Delete "$MPdir.Base\MPTray.exe"
+  ; TvLibrary for Genre
+  Delete "$MPdir.Base\TvLibrary.Interfaces.dll"
   ; Plugins
   Delete "$MPdir.Base\RemotePlugins.dll"
   Delete "$MPdir.Base\HcwHelper.exe"
@@ -589,35 +648,6 @@ SectionEnd
   ; Wizards
   RMDir /r "$MPdir.Base\Wizards"
 !macroend
-
-!ifndef HEISE_BUILD
-Section "-MPC-HC audio/video decoders" SecGabest
-  ${LOG_TEXT} "INFO" "Installing MPC-HC audio/video decoders..."
-
-  SetOutPath "$MPdir.Base"
-  ; register the default video and audio codecs from the MediaPlayer Classic Home Cinema Project
-  !insertmacro InstallLib REGDLL NOTSHARED NOREBOOT_NOTPROTECTED "${git_DirectShowFilters}\bin\Release\MpaDecFilter.ax"   "$MPdir.Base\MpaDecFilter.ax"   "$MPdir.Base"
-  !insertmacro InstallLib REGDLL NOTSHARED NOREBOOT_NOTPROTECTED "${git_DirectShowFilters}\bin\Release\Mpeg2DecFilter.ax" "$MPdir.Base\Mpeg2DecFilter.ax" "$MPdir.Base"
-  
-  ; adjust the merit of this directshow filter
-  SetOutPath "$MPdir.Base"
-  File "${git_ROOT}\Tools\Script & Batch tools\SetMerit\bin\Release\SetMerit.exe"
-
-  ${LOG_TEXT} "INFO" "set merit for MPA"
-  nsExec::ExecToLog '"$MPdir.Base\SetMerit.exe" {3D446B6F-71DE-4437-BE15-8CE47174340F} 00600000'
-  ${LOG_TEXT} "INFO" "set merit for MPV"
-  nsExec::ExecToLog '"$MPdir.Base\SetMerit.exe" {39F498AF-1A09-4275-B193-673B0BA3D478} 00600000'
-SectionEnd
-!macro Remove_${SecGabest}
-  ${LOG_TEXT} "INFO" "Uninstalling MPC-HC audio/video decoders..."
-
-  !insertmacro UnInstallLib REGDLL NOTSHARED REBOOT_NOTPROTECTED "$MPdir.Base\MpaDecFilter.ax"
-  !insertmacro UnInstallLib REGDLL NOTSHARED REBOOT_NOTPROTECTED "$MPdir.Base\Mpeg2DecFilter.ax"
-
-  ; remove the tool to adjust the merit
-  Delete "$MPdir.Base\SetMerit.exe"
-!macroend
-!endif
 
 Section "-Powerscheduler Client plugin" SecPowerScheduler
   ${LOG_TEXT} "INFO" "Installing Powerscheduler client plugin..."
@@ -754,7 +784,7 @@ Section -Post
   ; Write Uninstall Information
   WriteRegStr HKLM "${REG_UNINSTALL}" InstallPath        "$MPdir.Base"
   WriteRegStr HKLM "${REG_UNINSTALL}" DisplayName        "${PRODUCT_NAME}"
-  WriteRegStr HKLM "${REG_UNINSTALL}" DisplayVersion     "${VERSION}"
+  WriteRegStr HKLM "${REG_UNINSTALL}" DisplayVersion     "${VERSION_DISP}"
   WriteRegStr HKLM "${REG_UNINSTALL}" Publisher          "${PRODUCT_PUBLISHER}"
   WriteRegStr HKLM "${REG_UNINSTALL}" URLInfoAbout       "${PRODUCT_WEB_SITE}"
   WriteRegStr HKLM "${REG_UNINSTALL}" DisplayIcon        "$MPdir.Base\MediaPortal.exe,0"
@@ -869,13 +899,6 @@ Function LoadPreviousSettings
   ${MementoSectionRestore}
 
   !insertmacro UpdateBackupSections
-
-!ifndef HEISE_BUILD
-  ; update the component status -> commandline parameters have higher priority than registry values
-  ${If} $noGabest = 1
-    !insertmacro UnselectSection ${SecGabest}
-  ${EndIf}
-!endif
 
   ; update component selection, according to possible selections
   ;Call .onSelChange
@@ -1056,8 +1079,3 @@ FunctionEnd
 #---------------------------------------------------------------------------
 # SECTION DESCRIPTIONS
 #---------------------------------------------------------------------------
-!ifndef HEISE_BUILD
-!insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
-    !insertmacro MUI_DESCRIPTION_TEXT ${SecGabest}  $(DESC_SecGabest)
-!insertmacro MUI_FUNCTION_DESCRIPTION_END
-!endif

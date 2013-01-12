@@ -130,7 +130,7 @@ namespace TvPlugin
 
     public override bool Init()
     {
-      bool bResult = Load(GUIGraphicsContext.Skin + @"\myradiosearch.xml");
+      bool bResult = Load(GUIGraphicsContext.GetThemedSkinFile(@"\myradiosearch.xml"));
       LoadSettings();
       return bResult;
     }
@@ -541,7 +541,7 @@ namespace TvPlugin
           {
             IList<string> genres;
             TvBusinessLayer layer = new TvBusinessLayer();
-            genres = layer.GetGenres();
+            genres = layer.GetProgramGenres();
             foreach (string genre in genres)
             {
               GUIListItem item = new GUIListItem();

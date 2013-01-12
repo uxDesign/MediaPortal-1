@@ -1,5 +1,5 @@
-<?xml version="1.0" encoding="utf-8" standalone="yes"?>
-
+﻿<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<!--version="1.0" encoding="utf-8" standalone="yes"-->
 <window>
   <id>102</id>
   <defaultcontrol>10</defaultcontrol>
@@ -10,12 +10,12 @@
       <description>Play button</description>
       <type>button</type>
       <id>10</id>
-      <posX>379</posX>
-      <posY>332</posY>
-      <textXOff>27</textXOff>
-      <textYOff>6</textYOff>
-      <width>110</width>
-      <height>37</height>
+      <posX>506</posX>
+      <posY>415</posY>
+      <textXOff>36</textXOff>
+      <textYOff>8</textYOff>
+      <width>147</width>
+      <height>47</height>
       <textureFocus>button_focus.png</textureFocus>
       <textureNoFocus>button_nofocus.png</textureNoFocus>
       <label>2553</label>
@@ -23,19 +23,17 @@
       <onright>11</onright>
       <onup>10</onup>
       <ondown>10</ondown>
-      
-      
     </control>
     <control>
       <description>Stop button</description>
       <type>button</type>
       <id>11</id>
-      <posX>229</posX>
-      <posY>332</posY>
-      <textXOff>28</textXOff>
-      <textYOff>6</textYOff>
-      <width>110</width>
-      <height>37</height>
+      <posX>306</posX>
+      <posY>415</posY>
+      <textXOff>37</textXOff>
+      <textYOff>8</textYOff>
+      <width>147</width>
+      <height>47</height>
       <textureFocus>button_focus.png</textureFocus>
       <textureNoFocus>button_nofocus.png</textureNoFocus>
       <label>2552</label>
@@ -43,8 +41,6 @@
       <onright>10</onright>
       <onup>11</onup>
       <ondown>11</ondown>
-      
-      
     </control>
   </controls>
 </window>

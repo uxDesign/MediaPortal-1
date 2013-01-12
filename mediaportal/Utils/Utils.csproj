@@ -100,7 +100,6 @@
     <Reference Include="log4net">
       <HintPath>..\MediaPortal.Base\log4net.dll</HintPath>
     </Reference>
-    <Reference Include="Microsoft.mshtml, Version=7.0.3300.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a" />
     <Reference Include="System">
       <Name>System</Name>
     </Reference>
@@ -153,6 +152,7 @@
     <Compile Include="ServiceImplementations\LogImpl.cs" />
     <Compile Include="Services\GlobalServiceProvider.cs" />
     <Compile Include="Services\ILog.cs" />
+    <Compile Include="Services\ISelectBDHandler.cs" />
     <Compile Include="Services\ISelectDVDHandler.cs" />
     <Compile Include="Services\IVideoThumbBlacklist.cs" />
     <Compile Include="Services\Level.cs" />

@@ -92,6 +92,9 @@ namespace MediaPortal.DeployTool.Sections
       {
         rbUpdate.Enabled = true;
         bUpdate.Enabled = true;
+
+        // Set the default option to upgrade, if possible
+        SelectUpdate();
       }
 
       var strMPDisplayVer = MpDisplayVer;
@@ -131,7 +134,7 @@ namespace MediaPortal.DeployTool.Sections
       if (!String.IsNullOrEmpty(MpBuild))
       {
         labelSectionHeader.Text = !Utils.IsOfficialBuild(MpBuild)
-                                    ? String.Format(Localizer.GetBestTranslation("Upgrade_labelSectionHeader_SVN"),
+                                    ? String.Format(Localizer.GetBestTranslation("Upgrade_labelSectionHeader_GIT"),
                                                     strMPDisplayVer, MpBuild)
                                     : String.Format(Localizer.GetBestTranslation("Upgrade_labelSectionHeader"),
                                                     strMPDisplayVer);
@@ -139,7 +142,7 @@ namespace MediaPortal.DeployTool.Sections
       else
       {
         labelSectionHeader.Text = !Utils.IsOfficialBuild(Tv3Build)
-                                    ? String.Format(Localizer.GetBestTranslation("Upgrade_labelSectionHeader_SVN"),
+                                    ? String.Format(Localizer.GetBestTranslation("Upgrade_labelSectionHeader_GIT"),
                                                     strTVDisplayVer, Tv3Build)
                                     : String.Format(Localizer.GetBestTranslation("Upgrade_labelSectionHeader"),
                                                     strTVDisplayVer);
@@ -158,7 +161,13 @@ namespace MediaPortal.DeployTool.Sections
         return DialogFlowHandler.Instance.GetDialogInstance(DialogType.WatchTV);
       }
       // Direct to upgrade
+      if (InstallationProperties.Instance.Get("InstallType") != "tvserver_master")
+      {  // install includes MP so check skin choice
+        return DialogFlowHandler.Instance.GetDialogInstance(DialogType.SkinChoice);
+      }
+      // tv server only install so no need for skin choice
       return DialogFlowHandler.Instance.GetDialogInstance(DialogType.Installation);
+
     }
 
     public override bool SettingsValid()
@@ -169,6 +178,16 @@ namespace MediaPortal.DeployTool.Sections
     #endregion
 
     private void bUpdate_Click(object sender, EventArgs e)
+    {
+      SelectUpdate();
+    }
+
+    private void bFresh_Click(object sender, EventArgs e)
+    {
+      SelectFresh();
+    }
+
+    private void SelectUpdate()
     {
       bUpdate.Image = Images.Choose_button_on;
       bFresh.Image = Images.Choose_button_off;
@@ -187,7 +206,7 @@ namespace MediaPortal.DeployTool.Sections
       if (TvServer && TvClient) InstallationProperties.Instance.Set("InstallType", "singleseat");
     }
 
-    private void bFresh_Click(object sender, EventArgs e)
+    private void SelectFresh()
     {
       bUpdate.Image = Images.Choose_button_off;
       bFresh.Image = Images.Choose_button_on;

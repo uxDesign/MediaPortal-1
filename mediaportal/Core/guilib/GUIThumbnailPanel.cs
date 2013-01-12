@@ -134,6 +134,8 @@ namespace MediaPortal.GUI.Library
 
     [XMLSkinElement("textureMask")] protected string _textureMask = "";
 
+    [XMLSkinElement("bdDvdDirectoryColor")] protected long _bdDvdDirectoryColor = 0xFFFFFFFF;
+
     #endregion
 
     protected int _lowItemHeight;
@@ -430,6 +432,12 @@ namespace MediaPortal.GUI.Library
           dwColor = _downloadColor;
         }
       }
+
+      if (pItem.IsBdDvdFolder)
+      {
+        dwColor = _bdDvdDirectoryColor;
+      }
+
       if (!Focus)
       {
         dwColor &= DimColor;
@@ -2863,7 +2871,7 @@ namespace MediaPortal.GUI.Library
       _listItems.Add(item);
       int iItemsPerPage = _rowCount * _columnCount;
       int iPages = iItemsPerPage == 0 ? 0 : _listItems.Count / iItemsPerPage;
-      if ((_listItems.Count % iItemsPerPage) != 0)
+      if (iItemsPerPage != 0 && (_listItems.Count % iItemsPerPage) != 0)
       {
         iPages++;
       }

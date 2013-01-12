@@ -21,6 +21,7 @@
 using System;
 using System.Collections.Generic;
 using TvLibrary.Interfaces;
+using TvLibrary.Epg;
 using TvLibrary.Streaming;
 
 namespace TvControl
@@ -373,6 +374,24 @@ namespace TvControl
     /// </summary>
     /// <value>The server ip adresses.</value>
     List<string> ServerIpAdresses { get; }
+
+    /// <summary>
+    /// Returns an ordered, distict list of all program genres.  Maintained for backward compatibility.
+    /// </summary>
+    /// <returns></returns>
+    List<string> GetGenres();
+
+    /// <summary>
+    /// Returns an ordered, distict list of all program genres.
+    /// </summary>
+    /// <returns></returns>
+    List<string> GetProgramGenres();
+
+    /// <summary>
+    /// Returns a list of all MediaPortal genre objects.
+    /// </summary>
+    /// <returns></returns>
+    List<MpGenre> GetMpGenres();
 
     #endregion
 
@@ -810,11 +829,9 @@ namespace TvControl
     /// Starts recording.
     /// </summary>
     /// <param name="user">The user.</param>
-    /// <param name="fileName">Name of the recording file.</param>
-    /// <param name="contentRecording">not used</param>
-    /// <param name="startTime">not used</param>
+    /// <param name="fileName">Name of the recording file.</param>    
     /// <returns>true if success otherwise false</returns>
-    TvResult StartRecording(ref IUser user, ref string fileName, bool contentRecording, long startTime);
+    TvResult StartRecording(ref IUser user, ref string fileName);
 
     /// <summary>
     /// Stops recording.
@@ -832,14 +849,36 @@ namespace TvControl
     /// <returns>true if succeeded</returns>
     TvResult Scan(ref IUser user, IChannel channel, int idChannel);
 
+
     /// <summary>
-    /// Tune the specified card to the channel.
+    /// Tunes the the specified card to the channel.
     /// </summary>
     /// <param name="user">The user.</param>
     /// <param name="channel">The channel.</param>
     /// <param name="idChannel">The id channel.</param>
     /// <returns>true if succeeded</returns>
     TvResult Tune(ref IUser user, IChannel channel, int idChannel);
+
+    /// <summary>
+    /// Tunes the the specified card to the channel.
+    /// </summary>
+    /// <param name="user">The user.</param>
+    /// <param name="channel">The channel.</param>
+    /// <param name="idChannel">The id channel.</param>
+    /// <param name="ticket">card reservation ticket</param>    
+    /// <returns>true if succeeded</returns>
+    TvResult Tune(ref IUser user, IChannel channel, int idChannel, object ticket);
+
+    /// <summary>
+    /// Tune the specified card to the channel.
+    /// </summary>
+    /// <param name="user">The user.</param>
+    /// <param name="channel">The channel.</param>
+    /// <param name="idChannel">The id channel.</param>
+    /// <param name="ticket">reservation ticket</param>
+    /// <param name="cardResImpl">card reservation impl.</param>
+    /// <returns>true if succeeded</returns>
+    TvResult Tune(ref IUser user, IChannel channel, int idChannel, object ticket, object cardResImpl);
 
     /// <summary>
     /// Determines whether the card is currently tuned to the transponder
@@ -1054,5 +1093,10 @@ namespace TvControl
     void GetStreamQualityCounters(IUser user, out int totalTSpackets, out int discontinuityCounter);
 
     #endregion
+
+    /// <summary>
+    /// Returns a dictionary of channels that are timeshfiting and recording.
+    /// </summary>
+    Dictionary<int, ChannelState> GetAllTimeshiftingAndRecordingChannels();
   }
 }

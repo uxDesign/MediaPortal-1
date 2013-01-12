@@ -272,6 +272,7 @@ namespace MediaPortal.Configuration.Sections
       {
         string strFileName = _listView1.SelectedItems[0].Text;
         string strMovieName = string.Empty;
+        
         if (Util.Utils.IsDVD(strFileName))
         {
           // DVD
@@ -284,32 +285,40 @@ namespace MediaPortal.Configuration.Sections
           string dvdFolder = strFileName.Substring(0, strFileName.ToUpper().IndexOf(@"\VIDEO_TS\VIDEO_TS.IFO"));
           strMovieName = Path.GetFileName(dvdFolder);
         }
+        else if (strFileName.ToUpper().IndexOf(@"\BDMV\INDEX.BDMV") >= 0)
+        {
+          // BD folder
+          string bdFolder = strFileName.Substring(0, strFileName.ToUpper().IndexOf(@"\BDMV\INDEX.BDMV"));
+          strMovieName = Path.GetFileName(bdFolder);
+        }
         else
         {
           // Movie - Movie folder title + remove CD from title
-          using (Settings xmlreader = new MPSettings())
+          string dir = Path.GetDirectoryName(strFileName);
+          bool foldercheck = Util.Utils.IsFolderDedicatedMovieFolder(dir);
+          
+          if (foldercheck)
           {
-            bool foldercheck = xmlreader.GetValueAsBool("moviedatabase", "usefolderastitle", false);
-            if (foldercheck)
+            strMovieName = Path.GetFileName(Path.GetDirectoryName(strFileName));
+          }
+          else
+          {
+            strMovieName = Path.GetFileNameWithoutExtension(strFileName);
+          }
+
+          // Test pattern (CD, DISK, Part, X-Y...) and remove it from filename
+          var pattern = Util.Utils.StackExpression();
+          
+          for (int i = 0; i < pattern.Length; i++)
+          {
+            if (foldercheck == false && pattern[i].IsMatch(strMovieName))
             {
-              strMovieName = Path.GetFileName(Path.GetDirectoryName(strFileName));
-            }
-            else
-            {
-              strMovieName = Path.GetFileNameWithoutExtension(strFileName);
-            }
-            // Test pattern (CD, DISK, Part, X-Y...) and remove it from filename
-            var pattern = Util.Utils.StackExpression();
-            for (int i = 0; i < pattern.Length; i++)
-            {
-              if (foldercheck == false && pattern[i].IsMatch(strMovieName))
-              {
-                strMovieName = pattern[i].Replace(strMovieName, "");
-              }
+              strMovieName = pattern[i].Replace(strMovieName, "");
             }
           }
         }
 
+        Util.Utils.RemoveStackEndings(ref strMovieName);
         _textBoxTitle.Text = strMovieName;
       }
       else
@@ -410,6 +419,16 @@ namespace MediaPortal.Configuration.Sections
     public bool OnActorsStarting(IMDBFetcher fetcher)
     {
       _progressDialog.ResetProgress();
+      _progressDialog.SetHeading("Downloading Actors and roles...");
+      _progressDialog.SetLine1("Downloading Actors and Roles...");
+      _progressDialog.SetLine2(fetcher.MovieName);
+      _progressDialog.Instance = fetcher;
+      return true;
+    }
+
+    public bool OnActorInfoStarting(IMDBFetcher fetcher)
+    {
+      _progressDialog.ResetProgress();
       _progressDialog.SetHeading("Downloading Actor info...");
       _progressDialog.SetLine1("Downloading Actor info...");
       _progressDialog.SetLine2(fetcher.MovieName);
@@ -472,6 +491,12 @@ namespace MediaPortal.Configuration.Sections
         _newMovieToFind = dlg.NewTitleToFind;
         selectedMovie = -1;
       }
+      return true;
+    }
+
+    public bool OnSelectActor(IMDBFetcher fetcher, out int selectedActor)
+    {
+      selectedActor= -1;
       return true;
     }
 

@@ -476,7 +476,7 @@ Flytta mappen till din HTPC. Starta installationen genom att köra "MediaPortal.
   <data name="Upgrade_labelSectionHeader" xml:space="preserve">
     <value>MediaPortal {0} upptäckt.</value>
   </data>
-  <data name="Upgrade_labelSectionHeader_SVN" xml:space="preserve">
+  <data name="Upgrade_labelSectionHeader_GIT" xml:space="preserve">
     <value>MediaPortal {0} (version {1}) upptäckt.</value>
   </data>
   <data name="Upgrade_no" xml:space="preserve">
@@ -486,7 +486,7 @@ Flytta mappen till din HTPC. Starta installationen genom att köra "MediaPortal.
     <value>Uppgradera aktuell installation till {0}</value>
   </data>
   <data name="Upgrade_note" xml:space="preserve">
-    <value>OBS: Du kan inte uppgradera en SVN-version, 
+    <value>OBS: Du kan inte uppgradera en GIT-version, 
        dessa är endast till för testning.</value>
   </data>
   <data name="Install_actionUpgradeInstall" xml:space="preserve">
@@ -506,5 +506,11 @@ Genom att använda AERO minskas även CPU belastningen vilket kan leda till att 
   <data name="Reboot_Required" xml:space="preserve">
     <value>En omstart av datorn krävs av en Microsoft-komponent.
 Innan du fortsätter med installationen av MediaPortal måste du starta om datorn.</value>
+  </data>
+  <data name="SkinChoice_labelExistingSkin" xml:space="preserve">
+    <value>Använd ditt aktuella Skin (detta kommer att kompatibilitetstestas)</value>
+  </data>
+  <data name="SkinChoice_labelSectionHeader" xml:space="preserve">
+    <value>Välj Skin</value>
   </data>
 </root>

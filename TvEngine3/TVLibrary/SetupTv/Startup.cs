@@ -159,11 +159,6 @@ namespace SetupTv
       FileVersionInfo versionInfo = FileVersionInfo.GetVersionInfo(Application.ExecutablePath);
 
       Log.Info("---- SetupTv v" + versionInfo.FileVersion + " is starting up on " + OSInfo.OSInfo.GetOSDisplayVersion());
-#if DEBUG
-      Log.Info("Debug build: " + Application.ProductVersion);
-#else
-      Log.Info("Build: " + Application.ProductVersion);
-#endif
 
       //Check for unsupported operating systems
       OSPrerequisites.OSPrerequisites.OsCheck(true);
@@ -179,7 +174,19 @@ namespace SetupTv
 
       if (startupMode == StartupMode.DeployMode)
       {
-        if (String.IsNullOrEmpty(DeploySql) || String.IsNullOrEmpty(DeployPwd))
+        if (DeploySql == "dbalreadyinstalled")
+        {
+          Log.Info("---- ask user for connection details ----");
+          if (dlg.ShowDialog() != DialogResult.OK || startupMode != StartupMode.DeployMode)
+            return; // close the application without restart here.
+          
+          dlg.CheckServiceName();
+          if (startupMode == StartupMode.DeployMode)
+          {
+            dlg.SaveGentleConfig();
+          }
+        }
+        else if (String.IsNullOrEmpty(DeploySql) || String.IsNullOrEmpty(DeployPwd))
         {
           dlg.LoadConnectionDetailsFromConfig(true);
         }

@@ -47,6 +47,7 @@ namespace TvPlugin
     // Private Variables
     // Protected Variables
     protected bool _conflictingEpisodes;
+    protected bool _conflictingRecording;
     // Public Variables
 
     #endregion
@@ -66,6 +67,12 @@ namespace TvPlugin
     {
       get { return _conflictingEpisodes; }
       set { _conflictingEpisodes = value; }
+    }
+
+    public bool ConflictingRecording
+    {
+      get { return _conflictingRecording; }
+      set { _conflictingRecording = value; }
     }
 
     #endregion
@@ -123,7 +130,7 @@ namespace TvPlugin
 
     public override bool Init()
     {
-      return Load(GUIGraphicsContext.Skin + @"\DialogTVConflict.xml");
+      return Load(GUIGraphicsContext.GetThemedSkinFile(@"\DialogTVConflict.xml"));
     }
 
     public override void Reset()
@@ -177,6 +184,15 @@ namespace TvPlugin
       else
       {
         HideControl(GetID, (int)Controls.BUTTON_CONFLICT_EPISODE);
+      }
+
+      if (_conflictingRecording)
+      {
+        ShowControl(GetID, (int)Controls.BUTTON_CONFLICT_REC);
+      }
+      else
+      {
+        HideControl(GetID, (int)Controls.BUTTON_CONFLICT_REC);
       }
 
       base.DoModal(ParentID);

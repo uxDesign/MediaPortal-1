@@ -32,6 +32,7 @@ using MediaPortal.GUI.Library;
 using MediaPortal.Playlists;
 using MediaPortal.Profile;
 using MediaPortal.Subtitle;
+using MediaPortal.Util;
 using MediaPortal.Visualization;
 using Un4seen.Bass;
 using Un4seen.Bass.AddOn.Cd;
@@ -49,6 +50,7 @@ namespace MediaPortal.Player
       Video,
       TV,
       Radio,
+      RadioRecording,
       Music,
       Recording,
       Unknown
@@ -89,6 +91,8 @@ namespace MediaPortal.Player
     private static bool driveSpeedReduced = false;
     private static bool driveSpeedControlEnabled = false;
     private static string _currentTitle = ""; //actual program metadata - usefull for tv - avoids extra DB lookups
+    private static bool _pictureSlideShow = false;
+    private static bool _picturePlaylist = false;
 
     private static string _currentDescription = "";
     //actual program metadata - usefull for tv - avoids extra DB Lookups. 
@@ -99,6 +103,8 @@ namespace MediaPortal.Player
     private static double[] _jumpPoints = null;
     private static bool _autoComSkip = false;
     private static bool _loadAutoComSkipSetting = true;
+
+    private static string _externalPlayerExtensions = string.Empty;
 
     #endregion
 
@@ -592,6 +598,8 @@ namespace MediaPortal.Player
       {
         Log.Debug("g_Player.doStop() keepTimeShifting = {0} keepExclusiveModeOn = {1}", keepTimeShifting,
                   keepExclusiveModeOn);
+        // Get playing file for unmount handling
+        string currentFile = g_Player.currentFileName;
         OnStopped();
 
         //since plugins could stop playback, we need to make sure that _player is not null.
@@ -635,9 +643,36 @@ namespace MediaPortal.Player
           RefreshRateChanger.AdaptRefreshRate();
         }
 
-        if (!String.IsNullOrEmpty(Util.DaemonTools.GetVirtualDrive()))
-          Util.DaemonTools.UnMount();
+        // No unmount for other ISO (avi-mkv ISO-crash in playlist after)
+        Util.Utils.IsDVDImage(currentFile, ref currentFile);
+        if (Util.Utils.IsISOImage(currentFile))
+        {
+          if (!String.IsNullOrEmpty(DaemonTools.GetVirtualDrive()) &&
+              IsBDDirectory(DaemonTools.GetVirtualDrive()) ||
+              IsDvdDirectory(DaemonTools.GetVirtualDrive()))
+          {
+            DaemonTools.UnMount();
+          }
+        }
       }
+    }
+    
+    public static bool IsBDDirectory(string path)
+    {
+      if (File.Exists(path + @"\BDMV\index.bdmv"))
+      {
+        return true;
+      }
+      return false;
+    }
+
+    public static bool IsDvdDirectory(string path)
+    {
+      if (File.Exists(path + @"\VIDEO_TS\VIDEO_TS.IFO"))
+      {
+        return true;
+      }
+      return false;
     }
 
     public static void StopAndKeepTimeShifting()
@@ -713,7 +748,7 @@ namespace MediaPortal.Player
     {
       if (_player != null)
       {
-        if (!_player.IsDVD && _chapters != null)
+        if (!_player.IsDVD && Chapters != null)
         {
           switch (action.wID)
           {
@@ -766,6 +801,18 @@ namespace MediaPortal.Player
       }
     }
 
+    public static MenuItems ShowMenuItems
+    {
+      get
+      {
+        if (_player == null)
+        {
+          return MenuItems.All;
+        }
+        return _player.ShowMenuItems;
+      }
+    }
+
     public static bool HasChapters
     {
       get
@@ -774,7 +821,7 @@ namespace MediaPortal.Player
         {
           return false;
         }
-        if (_chapters == null)
+        if (Chapters == null)
         {
           return false;
         }
@@ -843,6 +890,11 @@ namespace MediaPortal.Player
     }
 
     public static bool PlayDVD(string strPath)
+    {
+      return Play(strPath, MediaType.Video);
+    }
+
+    public static bool PlayBD(string strPath)
     {
       return Play(strPath, MediaType.Video);
     }
@@ -1187,18 +1239,18 @@ namespace MediaPortal.Player
 
     public static bool Play(string strFile, MediaType type)
     {
-      return Play(strFile, type, (TextReader)null);
+      return Play(strFile, type, (TextReader)null, false);
     }
 
     public static bool Play(string strFile, MediaType type, string chapters)
     {
       using (var stream = String.IsNullOrEmpty(chapters) ? null : new StringReader(chapters))
       {
-        return Play(strFile, type, stream);
+        return Play(strFile, type, stream, false);
       }
     }
 
-    public static bool Play(string strFile, MediaType type, TextReader chapters)
+    public static bool Play(string strFile, MediaType type, TextReader chapters, bool fromPictures)
     {
       try
       {
@@ -1208,35 +1260,44 @@ namespace MediaPortal.Player
           return false;
         }
 
-        string extension = Path.GetExtension(strFile).ToLower();
-        bool isImageFile = Util.VirtualDirectory.IsImageFile(extension);
+        IsPicture = false;
+        bool playingRemoteUrl = Util.Utils.IsRemoteUrl(strFile);
+        string extension = Util.Utils.GetFileExtension(strFile).ToLower();
+        bool isImageFile = !playingRemoteUrl && Util.VirtualDirectory.IsImageFile(extension);
         if (isImageFile)
         {
           if (!File.Exists(Util.DaemonTools.GetVirtualDrive() + @"\VIDEO_TS\VIDEO_TS.IFO"))
-          {
-            _currentFilePlaying = strFile;
-            MediaPortal.Ripper.AutoPlay.ExamineCD(Util.DaemonTools.GetVirtualDrive(), true);
-            return true;
-          }
+            if (!File.Exists(Util.DaemonTools.GetVirtualDrive() + @"\BDMV\index.bdmv"))
+            {
+              _currentFilePlaying = strFile;
+              MediaPortal.Ripper.AutoPlay.ExamineCD(Util.DaemonTools.GetVirtualDrive(), true);
+              return true;
+            }
         }
 
-        if (Util.Utils.IsDVD(strFile))
+        if (!playingRemoteUrl && Util.Utils.IsDVD(strFile))
         {
           ChangeDriveSpeed(strFile, DriveType.CD);
         }
 
-        _mediaInfo = new MediaInfoWrapper(strFile);
-        Starting = true;
+        if (!playingRemoteUrl) // MediaInfo can only be used on files (local or SMB)
+        {
+          _mediaInfo = new MediaInfoWrapper(strFile);
+        }
 
-        if (Util.Utils.IsVideo(strFile) || Util.Utils.IsLiveTv(strFile)) //video, tv, rtsp
+        if ((!playingRemoteUrl && Util.Utils.IsVideo(strFile)) || Util.Utils.IsLiveTv(strFile)) //local video, tv, rtsp
         {
           if (type == MediaType.Unknown)
           {
             Log.Debug("g_Player.Play - Mediatype Unknown, forcing detection as Video");
             type = MediaType.Video;
           }
-          // refreshrate change done here.
-          RefreshRateChanger.AdaptRefreshRate(strFile, (RefreshRateChanger.MediaType)(int)type);
+
+          // Refreshrate change done here. Blu-ray player will handle the refresh rate changes by itself
+          if (strFile.ToUpper().IndexOf(@"\BDMV\INDEX.BDMV") == -1)
+          {
+            RefreshRateChanger.AdaptRefreshRate(strFile, (RefreshRateChanger.MediaType)(int)type);
+          }
 
           if (RefreshRateChanger.RefreshRateChangePending)
           {
@@ -1255,6 +1316,7 @@ namespace MediaPortal.Player
           }
         }
 
+        Starting = true;
         _currentStep = 0;
         _currentStepIndex = -1;
         _seekTimer = DateTime.MinValue;
@@ -1290,7 +1352,7 @@ namespace MediaPortal.Player
         }
 
         Log.Info("g_Player.Play({0} {1})", strFile, type);
-        if (!Util.Utils.IsAVStream(strFile) && Util.Utils.IsVideo(strFile))
+        if (!playingRemoteUrl && Util.Utils.IsVideo(strFile))
         {
           if (!Util.Utils.IsRTSP(strFile) && extension != ".ts") // do not play recorded tv with external player
           {
@@ -1298,13 +1360,35 @@ namespace MediaPortal.Player
             {
               bool bInternal = xmlreader.GetValueAsBool("movieplayer", "internal", true);
               bool bInternalDVD = xmlreader.GetValueAsBool("dvdplayer", "internal", true);
-
-              if ((!bInternalDVD && (extension == ".ifo" || extension == ".vob" || isImageFile)) ||
-                  (!bInternal && (extension != ".ifo" && extension != ".vob" && !isImageFile))) // external player used
+              
+              // External player extension filter
+              _externalPlayerExtensions = xmlreader.GetValueAsString("movieplayer", "extensions", "");
+              if (!bInternal && !string.IsNullOrEmpty(_externalPlayerExtensions) && 
+                  extension != ".ifo" && extension != ".vob" && !Util.Utils.IsDVDImage(strFile))
+              {
+                // Do not use external player if file ext is not in the extension list
+                if (!CheckExtension(strFile))
+                  bInternal = true;
+              }
+              
+              if ((!bInternalDVD && !isImageFile && (extension == ".ifo" || extension == ".vob")) ||
+                  (!bInternalDVD && isImageFile && Util.Utils.IsDVDImage(strFile)) ||
+                  // No image and no DVD folder rips
+                  (!bInternal && !isImageFile && extension != ".ifo" && extension != ".vob") ||
+                  // BluRay image
+                  (!bInternal && isImageFile && Util.Utils.IsBDImage(strFile))) // external player used
               {
                 if (isImageFile)
                 {
+                  // Check for DVD ISO
                   strFile = Util.DaemonTools.GetVirtualDrive() + @"\VIDEO_TS\VIDEO_TS.IFO";
+                  if (!File.Exists(strFile))
+                  {
+                    // Check for BluRayISO
+                    strFile = Util.DaemonTools.GetVirtualDrive() + (@"\BDMV\index.bdmv");
+                    if (!File.Exists(strFile))
+                      return false;
+                  }
                 }
                 if (Util.Utils.PlayMovie(strFile))
                 {
@@ -1319,9 +1403,12 @@ namespace MediaPortal.Player
             }
           }
         }
+        // Still for BDISO strFile = ISO filename, convert it
+        if (!playingRemoteUrl) Util.Utils.IsBDImage(strFile, ref strFile);
 
+        _currentFileName = strFile;
         _player = _factory.Create(strFile, type);
-
+        
         if (_player != null)
         {
           if (chapters != null)
@@ -1330,7 +1417,7 @@ namespace MediaPortal.Player
           }
           else
           {
-            LoadChapters(strFile);
+            if (!playingRemoteUrl) LoadChapters(strFile);
           }
           _player = CachePreviousPlayer(_player);
           bool bResult = _player.Play(strFile);
@@ -1346,16 +1433,23 @@ namespace MediaPortal.Player
           {
             _isInitialized = false;
             _currentFilePlaying = _player.CurrentFile;
-            if (_chapters == null)
-            {
-              _chapters = _player.Chapters;
-            }
+            //if (_chapters == null)
+            //{
+            //  _chapters = _player.Chapters;
+            //}
             if (_chaptersname == null)
             {
               _chaptersname = _player.ChaptersName;
             }
             OnStarted();
           }
+
+          // Set bool to know if video if played from MyPictures
+          if (fromPictures)
+          {
+            IsPicture = true;
+          }
+
           return bResult;
         }
       }
@@ -1400,6 +1494,30 @@ namespace MediaPortal.Player
           return false;
         }
         return (_currentMedia == MediaType.Music);
+      }
+    }
+
+    public static bool IsPicture
+    {
+      get
+      {
+        return _pictureSlideShow;
+      }
+      set
+      {
+        _pictureSlideShow = value;
+      }
+    }
+
+    public static bool IsPicturePlaylist
+    {
+      get
+      {
+        return _picturePlaylist;
+      }
+      set
+      {
+        _picturePlaylist = value;
       }
     }
 
@@ -1693,11 +1811,18 @@ namespace MediaPortal.Player
     {
       get
       {
-        if (_player == null)
+        if (_player == null && _chapters == null)
         {
           return null;
         }
-        return _chapters;
+        if (_chapters != null)
+        {
+          return _chapters;
+        }
+        else
+        {
+          return _player.Chapters;
+        }
       }
     }
 
@@ -1709,7 +1834,16 @@ namespace MediaPortal.Player
         {
           return null;
         }
+        _chaptersname = _player.ChaptersName;
         return _chaptersname;
+      }
+    }
+    
+    public static double[] JumpPoints
+    {
+      get
+      {
+        return _jumpPoints;
       }
     }
 
@@ -2115,10 +2249,10 @@ namespace MediaPortal.Player
             StepNow();
           }
         }
-        else if (_autoComSkip && _jumpPoints != null && _player.Speed == 1)
+        else if (_autoComSkip && JumpPoints != null && _player.Speed == 1)
         {
           double currentPos = _player.CurrentPosition;
-          foreach (double jumpFrom in _jumpPoints)
+          foreach (double jumpFrom in JumpPoints)
           {
             if (jumpFrom != 0 && currentPos <= jumpFrom + 1.0 && currentPos >= jumpFrom - 0.1)
             {
@@ -2243,6 +2377,72 @@ namespace MediaPortal.Player
       }
 
       string stream = _player.EditionType(iStream);
+      return stream;
+    }
+
+    #endregion
+
+    #region Video selection
+
+    /// <summary>
+    /// Property which returns the total number of video streams available
+    /// </summary>
+    public static int VideoStreams
+    {
+      get
+      {
+        if (_player == null)
+        {
+          return 0;
+        }
+        return _player.VideoStreams;
+      }
+    }
+
+    /// <summary>
+    /// Property to get/set the current video stream
+    /// </summary>
+    public static int CurrentVideoStream
+    {
+      get
+      {
+        if (_player == null)
+        {
+          return 0;
+        }
+        return _player.CurrentVideoStream;
+      }
+      set
+      {
+        if (_player != null)
+        {
+          _player.CurrentVideoStream = value;
+        }
+      }
+    }
+
+    public static string VideoLanguage(int iStream)
+    {
+      if (_player == null)
+      {
+        return Strings.Unknown;
+      }
+
+      string stream = _player.VideoLanguage(iStream);
+      return Util.Utils.TranslateLanguageString(stream);
+    }
+
+    /// <summary>
+    /// Property to get the type of an edition stream
+    /// </summary>
+    public static string VideoType(int iStream)
+    {
+      if (_player == null)
+      {
+        return Strings.Unknown;
+      }
+
+      string stream = _player.VideoType(iStream);
       return stream;
     }
 
@@ -2447,7 +2647,7 @@ namespace MediaPortal.Player
     {
       get
       {
-        if (IsDVD || IsTV)
+        if (IsDVD || IsTV || IsVideo)
         {
           if (_player is DVDPlayer)
           {
@@ -2729,6 +2929,46 @@ namespace MediaPortal.Player
       }
     }
 
+    /// <summary>
+    /// Switches to the next video stream.
+    /// 
+    /// Calls are directly pushed to the embedded player. And care 
+    /// is taken not to do multiple calls to the player.
+    /// </summary>
+    public static void SwitchToNextVideo()
+    {
+      if (_player != null)
+      {
+        // take current stream and number of
+        int streams = _player.VideoStreams;
+        int current = _player.CurrentVideoStream;
+        int next = current;
+        bool success = false;
+        // Loop over the stream, so we skip the disabled streams
+        // stops if the loop is over the current stream again.
+        do
+        {
+          // if next stream is greater then the amount of stream
+          // take first
+          if (++next >= streams)
+          {
+            next = 0;
+          }
+          // set the next stream
+          _player.CurrentVideoStream = next;
+          // if the stream is set in, stop the loop
+          if (next == _player.CurrentVideoStream)
+          {
+            success = true;
+          }
+        } while ((next != current) && (success == false));
+        if (success == false)
+        {
+          Log.Info("g_Player: Failed to switch to next Videostream.");
+        }
+      }
+    }
+
     private static bool IsFileUsedbyAnotherProcess(string file)
     {
       try
@@ -2858,13 +3098,13 @@ namespace MediaPortal.Player
 
     private static double NextChapterTime(double currentPos)
     {
-      if (_chapters != null)
+      if (Chapters != null)
       {
-        for (int index = 0; index < _chapters.Length; index++)
+        for (int index = 0; index < Chapters.Length; index++)
         {
-          if (currentPos < _chapters[index])
+          if (currentPos < Chapters[index])
           {
-            return _chapters[index];
+            return Chapters[index];
           }
         }
       }
@@ -2874,13 +3114,13 @@ namespace MediaPortal.Player
 
     private static double PreviousChapterTime(double currentPos)
     {
-      if (_chapters != null)
+      if (Chapters != null)
       {
-        for (int index = _chapters.Length - 1; index >= 0; index--)
+        for (int index = Chapters.Length - 1; index >= 0; index--)
         {
-          if (_chapters[index] < currentPos - 5.0)
+          if (Chapters[index] < currentPos - 5.0)
           {
-            return _chapters[index];
+            return Chapters[index];
           }
         }
       }
@@ -2932,22 +3172,40 @@ namespace MediaPortal.Player
     {
       try
       {
-        _mediaInfo = new MediaInfoWrapper(FileName);
+        bool playingRemoteUrl = Util.Utils.IsRemoteUrl(FileName);
+        if (_mediaInfo == null && !playingRemoteUrl)
+          _mediaInfo = new MediaInfoWrapper(FileName);
 
         GUIMessage msg = new GUIMessage(GUIMessage.MessageType.GUI_MSG_CODEC_MISSING, 0, 0, 0, 0, 0, null);
-        msg.Label = string.Format("{0}: {1}", GUILocalizeStrings.Get(1451), Path.GetFileName(FileName));
-        msg.Label2 = string.IsNullOrEmpty(_mediaInfo.VideoCodec)
+        msg.Label = string.Format("{0}: {1}", GUILocalizeStrings.Get(1451), Util.Utils.GetFilename(FileName));
+        msg.Label2 = _mediaInfo == null || string.IsNullOrEmpty(_mediaInfo.VideoCodec)
                        ? string.Empty
                        : string.Format("Video codec: {0}", _mediaInfo.VideoCodec);
-        msg.Label3 = string.IsNullOrEmpty(_mediaInfo.AudioCodec)
+        msg.Label3 = _mediaInfo == null || string.IsNullOrEmpty(_mediaInfo.AudioCodec)
                        ? string.Empty
                        : string.Format("Audio codec: {0}", _mediaInfo.AudioCodec);
         GUIGraphicsContext.SendMessage(msg);
+        _mediaInfo = null;
       }
       catch (Exception ex)
       {
         Log.Error("g_player: Error notifying user about unsuccessful playback of {0} - {1}", FileName, ex.ToString());
       }
+    }
+
+    private static bool CheckExtension(string filename)
+    {
+      char[] splitter = { ';' };
+      string[] extensions = _externalPlayerExtensions.Split(splitter);
+
+      foreach (string extension in extensions)
+      {
+        if (extension.Trim().Equals(Path.GetExtension(filename),StringComparison.OrdinalIgnoreCase))
+        {
+          return true;
+        }
+      }
+      return false;
     }
 
     #endregion

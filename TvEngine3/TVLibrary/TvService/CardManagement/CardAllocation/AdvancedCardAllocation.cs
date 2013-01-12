@@ -26,6 +26,8 @@ using System.Diagnostics;
 using System.Linq;
 using TvControl;
 using TvDatabase;
+using TvLibrary.Channels;
+using TvLibrary.Implementations;
 using TvLibrary.Interfaces;
 using TvLibrary.Log;
 
@@ -37,8 +39,9 @@ namespace TvService
   {
     #region private members   
 
-    public AdvancedCardAllocation(TvBusinessLayer businessLayer, TVController controller)
-      : base(businessLayer, controller) {}
+    public AdvancedCardAllocation(TvBusinessLayer businessLayer, TVController controller) : base(businessLayer, controller)
+    {
+    }
 
     private static bool IsCardEnabled(ITvCardHandler cardHandler)
     {
@@ -50,7 +53,7 @@ namespace TvService
       bool isCardPresent = false;
       try
       {
-        if (Controller.CardPresent(cardId))
+        if (_controller.CardPresent(cardId))
         {
           isCardPresent = true;
         }
@@ -62,8 +65,7 @@ namespace TvService
       return isCardPresent;
     }
 
-
-    private static int NumberOfOtherUsersOnCard(ITvCardHandler card, IUser user)
+    protected virtual int NumberOfOtherUsersOnCurrentCard(ITvCardHandler card, IUser user)
     {
       //determine how many other users are using this card
       int nrOfOtherUsers = 0;
@@ -72,19 +74,36 @@ namespace TvService
       {
         nrOfOtherUsers = users.Count(t => t.Name != user.Name && !t.Name.Equals("epg"));
       }
+
+      if (LogEnabled)
+      {
+        Log.Info("Controller:    card:{0} type:{1} users: {2}", card.DataBaseCard.IdCard, card.Type, nrOfOtherUsers);
+      }
+
       return nrOfOtherUsers;
-    }
+    }           
 
     #endregion
-
     #region ICardAllocation Members
+
+     /// <summary>
+    /// Gets a list of all free cards which can receive the channel specified
+    /// List is sorted.
+    /// </summary>
+    /// <returns>list containg all free cards which can receive the channel</returns>
+    public List<CardDetail> GetFreeCardsForChannel(IDictionary<int, ITvCardHandler> cards, Channel dbChannel,
+                                                   ref IUser user)
+     {
+       TvResult result;
+       return GetFreeCardsForChannel(cards, dbChannel, ref user, out result);
+     }
 
     /// <summary>
     /// Gets a list of all free cards which can receive the channel specified
     /// List is sorted.
     /// </summary>
     /// <returns>list containg all free cards which can receive the channel</returns>
-    public List<CardDetail> GetFreeCardsForChannel(Dictionary<int, ITvCardHandler> cards, Channel dbChannel,
+    public List<CardDetail> GetFreeCardsForChannel(IDictionary<int, ITvCardHandler> cards, Channel dbChannel,
                                                    ref IUser user, out TvResult result)
     {
       Stopwatch stopwatch = Stopwatch.StartNew();
@@ -98,22 +117,20 @@ namespace TvService
         }
         var cardsAvailable = new List<CardDetail>();
 
-
-        Dictionary<int, TvResult> cardsUnAvailable;
+        IDictionary<int, TvResult> cardsUnAvailable;
         List<CardDetail> cardDetails = GetAvailableCardsForChannel(cards, dbChannel, ref user, out cardsUnAvailable);
         foreach (CardDetail cardDetail in cardDetails)
         {
-          bool checkTransponder = CheckTransponder(user, cards[cardDetail.Card.IdCard], cardDetail.Card.DecryptLimit,
-                                                   cardDetail.Card.IdCard, cardDetail.TuningDetail);
+          ITvCardHandler tvCardHandler = cards[cardDetail.Card.IdCard];
+          bool checkTransponder = CheckTransponder(user, tvCardHandler, cardDetail.TuningDetail);
           if (checkTransponder)
           {
             cardsAvailable.Add(cardDetail);
           }
         }
 
-
         //sort cards
-        cardsAvailable.Sort();
+        cardsAvailable.SortStable();
 
         if (cardsAvailable.Count > 0)
         {
@@ -144,10 +161,11 @@ namespace TvService
       }
     }
 
-    private static TvResult GetResultNoCards(Dictionary<int, TvResult> cardsUnAvailable) 
+    private static TvResult GetResultNoCards(IDictionary<int, TvResult> cardsUnAvailable) 
     {
       TvResult resultNoCards = TvResult.ChannelNotMappedToAnyCard;
-      Dictionary<int, TvResult>.ValueCollection values = cardsUnAvailable.Values;
+      //Dictionary<int, TvResult>.ValueCollection values = cardsUnAvailable.Values;
+      ICollection<TvResult> values = cardsUnAvailable.Values;
 
       if (values.Any(tvResult => tvResult == TvResult.ChannelIsScrambled)) 
       {
@@ -161,10 +179,10 @@ namespace TvService
     /// List is sorted.
     /// </summary>
     /// <returns>list containg all cards which can receive the channel</returns>
-    public List<CardDetail> GetAvailableCardsForChannel(Dictionary<int, ITvCardHandler> cards, Channel dbChannel,
+    public List<CardDetail> GetAvailableCardsForChannel(IDictionary<int, ITvCardHandler> cards, Channel dbChannel,
                                                         ref IUser user)
     {
-      Dictionary<int, TvResult> cardsUnAvailable;
+      IDictionary<int, TvResult> cardsUnAvailable;
       return GetAvailableCardsForChannel(cards, dbChannel, ref user, out cardsUnAvailable);
     }
 
@@ -173,7 +191,7 @@ namespace TvService
     /// List is sorted.
     /// </summary>
     /// <returns>list containg all cards which can receive the channel</returns>
-    public List<CardDetail> GetAvailableCardsForChannel(Dictionary<int, ITvCardHandler> cards, Channel dbChannel, ref IUser user, out Dictionary<int, TvResult> cardsUnAvailable)
+    public List<CardDetail> GetAvailableCardsForChannel(IDictionary<int, ITvCardHandler> cards, Channel dbChannel, ref IUser user, out IDictionary<int, TvResult> cardsUnAvailable)
     {      
       Stopwatch stopwatch = Stopwatch.StartNew();
       cardsUnAvailable = new Dictionary<int, TvResult>();
@@ -187,8 +205,7 @@ namespace TvService
           Log.Info("Controller: find card for channel {0}", dbChannel.DisplayName);
         }
         //get the tuning details for the channel
-        List<IChannel> tuningDetails = _businessLayer.GetTuningChannelsByDbChannel(dbChannel);
-
+        ICollection<IChannel> tuningDetails = CardAllocationCache.GetTuningDetailsByChannelId(dbChannel);// _businessLayer.GetTuningChannelsByDbChannel(dbChannel);
         bool isValidTuningDetails = IsValidTuningDetails(tuningDetails);
         if (!isValidTuningDetails)
         {
@@ -204,8 +221,8 @@ namespace TvService
         {
           Log.Info("Controller:   got {0} tuning details for {1}", tuningDetails.Count, dbChannel.DisplayName);
         }
-        int number = 0;
-        Dictionary<int, ITvCardHandler>.ValueCollection cardHandlers = cards.Values;
+        int number = 0;        
+        ICollection<ITvCardHandler> cardHandlers = cards.Values;
 
         foreach (IChannel tuningDetail in tuningDetails)
         {
@@ -244,13 +261,10 @@ namespace TvService
             if (LogEnabled)
             {
               Log.Info("Controller:    card:{0} type:{1} can tune to channel", cardId, cardHandler.Type);
-            }
-            int nrOfOtherUsers = NumberOfOtherUsersOnCard(cardHandler, user);
-            if (LogEnabled)
-            {
-              Log.Info("Controller:    card:{0} type:{1} users: {2}", cardId, cardHandler.Type, nrOfOtherUsers);
-            }
-            CardDetail cardInfo = new CardDetail(cardId, cardHandler.DataBaseCard, tuningDetail, isSameTransponder,
+            }            
+            int nrOfOtherUsers = NumberOfOtherUsersOnCurrentCard(cardHandler, user);
+            long? channelTimeshiftingOnOtherMux;
+            var cardInfo = new CardDetail(cardId, cardHandler.DataBaseCard, tuningDetail, isSameTransponder,
                                                  nrOfOtherUsers);
             cardsAvailable.Add(cardInfo);
           }
@@ -258,7 +272,7 @@ namespace TvService
 
 
         //sort cards
-        cardsAvailable.Sort();
+        cardsAvailable.SortStable();
         if (LogEnabled)
         {
           Log.Info("Controller: found {0} card(s) for channel", cardsAvailable.Count);
@@ -290,7 +304,7 @@ namespace TvService
       return canCardDecodeChannel;
     }
 
-    private bool CanCardTuneChannel(ITvCardHandler cardHandler, Channel dbChannel, IChannel tuningDetail)
+    protected virtual bool CanCardTuneChannel(ITvCardHandler cardHandler, Channel dbChannel, IChannel tuningDetail)
     {
       int cardId = cardHandler.DataBaseCard.IdCard;
       bool isCardEnabled = IsCardEnabled(cardHandler);
@@ -323,7 +337,7 @@ namespace TvService
       }
 
       //check if channel is mapped to this card and that the mapping is not for "Epg Only"
-      bool isChannelMappedToCard = IsChannelMappedToCard(dbChannel, cardHandler.DataBaseCard);
+      bool isChannelMappedToCard = CardAllocationCache.IsChannelMappedToCard(dbChannel, cardHandler.DataBaseCard);
       if (!isChannelMappedToCard)
       {
         if (LogEnabled)
@@ -335,7 +349,7 @@ namespace TvService
       return true;
     }
 
-    private static void AddCardUnAvailable(ref Dictionary<int, TvResult> cardsUnAvailable, int cardId, TvResult tvResult)
+    private static void AddCardUnAvailable(ref IDictionary<int, TvResult> cardsUnAvailable, int cardId, TvResult tvResult)
     {
       if (!cardsUnAvailable.ContainsKey(cardId))
       {

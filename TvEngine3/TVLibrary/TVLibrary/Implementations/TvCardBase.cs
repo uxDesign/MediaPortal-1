@@ -20,6 +20,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using DirectShowLib;
 using TvLibrary.Interfaces;
 using TvLibrary.Implementations.DVB;
@@ -615,11 +616,10 @@ namespace TvLibrary.Implementations
 
     ///<summary>
     /// Checks if the tuner is locked in and a sginal is present
-    ///</summary>
-    ///<returns>true, when the tuner is locked and a signal is present</returns>
-    public virtual bool LockedInOnSignal()
+    ///</summary>    
+    public virtual void LockInOnSignal()
     {
-      return false;
+      
     }
 
     #endregion
@@ -671,41 +671,10 @@ namespace TvLibrary.Implementations
     /// <summary>
     /// Frees the sub channel.
     /// </summary>
-    /// <param name="id">The id.</param>
-    /// <param name="subchannelBusy">is the subcannel busy with other users.</param>
-    public virtual void FreeSubChannelContinueGraph(int id, bool subchannelBusy)
-    {
-      FreeSubChannel(id, true);
-    }
-
-    /// <summary>
-    /// Frees the sub channel. but keeps the graph running.
-    /// </summary>
-    /// <param name="id">Handle to the subchannel.</param>
-    public virtual void FreeSubChannelContinueGraph(int id)
-    {
-      // this method is overriden in tvcardbase      
-      FreeSubChannel(id, true);
-    }
-
-    /// <summary>
-    /// Frees the sub channel.
-    /// </summary>
     /// <param name="id">Handle to the subchannel.</param>
     public virtual void FreeSubChannel(int id)
     {
-      FreeSubChannel(id, false);
-    }
-
-    /// <summary>
-    /// Frees the sub channel.
-    /// </summary>
-    /// <param name="id">Handle to the subchannel.</param>
-    /// <param name="continueGraph">Indicates, if the graph should be continued or stopped</param>
-    private void FreeSubChannel(int id, bool continueGraph)
-    {
-      Log.Log.Info("tvcard:FreeSubChannel: subchannels count {0} subch#{1} keep graph={2}", _mapSubChannels.Count, id,
-                   continueGraph);
+      Log.Log.Info("tvcard:FreeSubChannel: subchannels count {0} subch#{1}", _mapSubChannels.Count, id);
       if (_mapSubChannels.ContainsKey(id))
       {
         if (_mapSubChannels[id].IsTimeShifting)
@@ -743,22 +712,17 @@ namespace TvLibrary.Implementations
       if (_mapSubChannels.Count == 0)
       {
         _subChannelId = 0;
-        if (!continueGraph)
+     
+        Log.Log.Info("tvcard:FreeSubChannel : no subchannels present, pausing graph");          
+        if (SupportsPauseGraph)
         {
-          Log.Log.Info("tvcard:FreeSubChannel : no subchannels present, pausing graph");
-          if (SupportsPauseGraph)
-          {
-            PauseGraph();
-          }
-          else
-          {
-            StopGraph();
-          }
+          PauseGraph();  
         }
         else
         {
-          Log.Log.Info("tvcard:FreeSubChannel : no subchannels present, continueing graph");
-        }
+          StopGraph();  
+        }          
+        
       }
       else
       {
@@ -779,6 +743,20 @@ namespace TvLibrary.Implementations
       }
       _mapSubChannels.Clear();
       _subChannelId = 0;
+    }
+
+    /// <summary>
+    /// Gets the first sub channel.
+    /// </summary>
+    /// <returns></returns>
+    public ITvSubChannel GetFirstSubChannel()
+    {
+      ITvSubChannel subChannel = null;
+      if (_mapSubChannels.Count > 0)
+      {
+        subChannel = _mapSubChannels.FirstOrDefault().Value;
+      }
+      return subChannel;
     }
 
     /// <summary>

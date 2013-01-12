@@ -30,6 +30,17 @@ namespace MediaPortal.GUI.Library
 {
   public class GUIExpressionManager
   {
+    #region enums
+
+    // A bitmap of available options for ExpressionManager.
+    public enum ExpressionOptions
+    {
+      NONE = 0,
+      EVALUATE_ALWAYS = 1   // Evaluate the expression always (even if it's valid)
+    }
+
+    #endregion
+
     #region classes
 
     protected class FunctionDefinition
@@ -88,7 +99,7 @@ namespace MediaPortal.GUI.Library
         }
       }
 
-      public abstract object Evaluate();
+      public abstract object Evaluate(ExpressionOptions options);
 
       public virtual void Invalidate()
       {
@@ -114,8 +125,9 @@ namespace MediaPortal.GUI.Library
         _value = value;
       }
 
-      public override object Evaluate()
+      public override object Evaluate(ExpressionOptions options)
       {
+        // Options not used for literal expressions.
         return _value;
       }
     }
@@ -131,9 +143,10 @@ namespace MediaPortal.GUI.Library
         _value = string.Empty;
       }
 
-      public override object Evaluate()
+      public override object Evaluate(ExpressionOptions options)
       {
-        if (!IsValid)
+        // Evaluate if required or if the expression is invalid
+        if ((options & ExpressionOptions.EVALUATE_ALWAYS) > 0 || !IsValid)
         {
           _value = GUIPropertyManager.GetProperty(_propertyName);
           IsValid = true;
@@ -158,16 +171,16 @@ namespace MediaPortal.GUI.Library
         }
       }
 
-      public override object Evaluate()
+      public override object Evaluate(ExpressionOptions options)
       {
-        if (!IsValid)
+        // Evaluate if required or if the expression is invalid
+        if ((options & ExpressionOptions.EVALUATE_ALWAYS) > 0 || !IsValid)
         {
           int paramCount = _parameters.Length;
           object[] paramValues = new object[paramCount];
           for (int i = 0; i < paramCount; i++)
           {
-            // We may have to convert the parameters to the requested type
-            paramValues[i] = _parameters[i].Evaluate();
+            paramValues[i] = _parameters[i].Evaluate(options);
           }
           _value = _func.Invoke(paramValues);
           IsValid = true;
@@ -291,8 +304,12 @@ namespace MediaPortal.GUI.Library
         _expressions.Clear();
       }
     }
-
     public static string Parse(string line)
+    {
+      return Parse(line, ExpressionOptions.NONE);
+    }
+
+    public static string Parse(string line, ExpressionOptions options)
     {
       if (line.IndexOf("#(") > -1)
       {
@@ -303,7 +320,7 @@ namespace MediaPortal.GUI.Library
           string result;
           try
           {
-            result = ParseExpression(match).Evaluate().ToString();
+            result = ParseExpression(match).Evaluate(options).ToString();
           }
           catch (TargetInvocationException ex)
           {
@@ -323,11 +340,16 @@ namespace MediaPortal.GUI.Library
 
     public static object ParseExpression(string expressionText)
     {
+      return ParseExpression(expressionText, ExpressionOptions.NONE);
+    }
+
+    public static object ParseExpression(string expressionText, ExpressionOptions options)
+    {
       //Match match = _functionRegEx.Match(expressionText);
       Match match = _expressionRegEx.Match(expressionText);
       if (match != null)
       {
-        return ParseExpression(match).Evaluate();
+        return ParseExpression(match).Evaluate(options);
       }
       return null;
     }
@@ -369,7 +391,7 @@ namespace MediaPortal.GUI.Library
         FunctionDefinition function;
         if (!_registeredFunctions.TryGetValue(functionName, out function))
         {
-          Log.Error("Undefined funtion '{0}' in expression '{1}'", functionName, match.Value);
+          Log.Error("Undefined function '{0}' in expression '{1}'", functionName, match.Value);
           expression = new LiteralExpression(match.Value);
         }
         else

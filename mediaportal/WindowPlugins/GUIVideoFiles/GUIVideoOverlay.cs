@@ -22,10 +22,13 @@ using System;
 using System.IO;
 using MediaPortal.GUI.Library;
 using MediaPortal.Player;
+using MediaPortal.Services;
 using MediaPortal.Util;
 using MediaPortal.Video.Database;
 using MediaPortal.ExtensionMethods;
 using Action = MediaPortal.GUI.Library.Action;
+
+using System.Collections.Generic;
 
 namespace MediaPortal.GUI.Video
 {
@@ -64,7 +67,7 @@ namespace MediaPortal.GUI.Video
 
     public override bool Init()
     {
-      bool result = Load(GUIGraphicsContext.Skin + @"\videoOverlay.xml");
+      bool result = Load(GUIGraphicsContext.GetThemedSkinFile(@"\videoOverlay.xml"));
       GetID = (int)Window.WINDOW_VIDEO_OVERLAY;
       GUILayerManager.RegisterLayer(this, GUILayerManager.LayerType.VideoOverlay);
       return result;
@@ -260,8 +263,8 @@ namespace MediaPortal.GUI.Video
     {
       GUIPropertyManager.RemovePlayerProperties();
       GUIPropertyManager.SetProperty("#Play.Current.Title", Util.Utils.GetFilename(fileName));
-      GUIPropertyManager.SetProperty("#Play.Current.File", Path.GetFileName(fileName));
-      GUIPropertyManager.SetProperty("#Play.Current.Thumb", "");
+      GUIPropertyManager.SetProperty("#Play.Current.File", Util.Utils.GetFileNameWithExtension(fileName));
+      GUIPropertyManager.SetProperty("#Play.Current.Thumb", string.Empty);
       GUIPropertyManager.SetProperty("#Play.Current.VideoCodec.Texture", string.Empty);
       GUIPropertyManager.SetProperty("#Play.Current.VideoResolution", string.Empty);
       GUIPropertyManager.SetProperty("#Play.Current.AudioCodec.Texture", string.Empty);
@@ -303,6 +306,20 @@ namespace MediaPortal.GUI.Video
           {
             strName = fileName.Substring(pos + 1);
           }
+
+          // get the name when play DVD directly from Drive letter
+          List<GUIListItem> rootDrives = VirtualDirectories.Instance.Movies.GetRootExt();
+          for (int i = rootDrives.Count - 1; i >= 0; i--)
+          {
+            GUIListItem itemDVDroot = (GUIListItem)rootDrives[i];
+            string itemDVD = Path.GetPathRoot(itemDVDroot.Path);
+            itemDVD = Util.Utils.RemoveTrailingSlash(itemDVD);
+            if (itemDVD == strName && !String.IsNullOrEmpty(itemDVDroot.DVDLabel)) //cd or dvd drive
+            {
+              strName = itemDVDroot.DVDLabel;
+            }
+          }
+
           GUIPropertyManager.SetProperty("#Play.Current.Title", strName);
           GUIPropertyManager.SetProperty("#Play.Current.File", strName);
 
@@ -312,7 +329,7 @@ namespace MediaPortal.GUI.Video
       }
 
       bool isLive = g_Player.IsTimeShifting;
-      string extension = Path.GetExtension(fileName).ToLower();
+      string extension = Util.Utils.GetFileExtension(fileName).ToLower();
       if (extension.Equals(".sbe") || extension.Equals(".dvr-ms") ||
           (extension.Equals(".ts") && !isLive || g_Player.IsTVRecording))
       {
@@ -337,9 +354,27 @@ namespace MediaPortal.GUI.Video
 
       IMDBMovie movieDetails = new IMDBMovie();
       bool bMovieInfoFound = false;
-
-      if (!g_Player.IsTVRecording)
+      
+      ISelectBDHandler selectBdHandler;
+      if (GlobalServiceProvider.IsRegistered<ISelectBDHandler>())
       {
+        selectBdHandler = GlobalServiceProvider.Get<ISelectBDHandler>();
+      }
+      else
+      {
+        selectBdHandler = new SelectBDHandler();
+        GlobalServiceProvider.Add<ISelectBDHandler>(selectBdHandler);
+      }
+      
+      bool playingRemoteUrl = Util.Utils.IsRemoteUrl(fileName);
+      if (!g_Player.IsTVRecording && !playingRemoteUrl)
+      {
+        // Check if we play image file to search db with the proper filename
+        if (Util.Utils.IsISOImage(fileName))
+        {
+          fileName = DaemonTools.MountedIsoFile;
+        }
+
         if (VideoDatabase.HasMovieInfo(fileName))
         {
           VideoDatabase.GetMovieInfo(fileName, ref movieDetails);
@@ -361,9 +396,36 @@ namespace MediaPortal.GUI.Video
           _thumbLogo = logo;
           bMovieInfoFound = true;
         }
+        else // Nfo support
+        {
+          string path = string.Empty;
+          int pathIndex = 0;
+          
+          if (fileName.ToUpperInvariant().Contains(@"\BDMV"))
+          {
+            pathIndex = fileName.ToUpperInvariant().LastIndexOf(@"\BDMV");
+            path = fileName.Remove(pathIndex);
+          }
+          else if (fileName.ToUpperInvariant().Contains(@"\VIDEO_TS\"))
+          {
+            pathIndex = fileName.ToUpperInvariant().LastIndexOf(@"\VIDEO_TS\");
+            path = fileName.Remove(pathIndex);
+          }
+          else
+          {
+            path = Path.GetDirectoryName(fileName);
+          }
+          
+          IMDBMovie.FetchMovieNfo(path, fileName, ref movieDetails);
+
+          if (!movieDetails.IsEmpty)
+          {
+            bMovieInfoFound = true;
+          }
+        }
         if (bMovieInfoFound)
         {
-          movieDetails.SetPlayProperties();
+          movieDetails.SetPlayProperties(true);
         }
         else
         {
@@ -372,6 +434,71 @@ namespace MediaPortal.GUI.Video
           item.Path = fileName;
           Util.Utils.SetThumbnails(ref item);
           GUIPropertyManager.SetProperty("#Play.Current.Thumb", item.ThumbnailImage);
+
+          // Image file check to set title for OSD (non db)
+          if (VirtualDirectory.IsImageFile(Path.GetExtension(fileName)))
+          {
+            string title = Util.Utils.GetFilename(fileName, true);
+            GUIPropertyManager.SetProperty("#Play.Current.Title", title);
+          }
+          else if (fileName.ToLower().Contains("index.bdmv")) // BD folder title check
+          {
+            string title = selectBdHandler.GetBDFolderName(fileName);
+            // get the name when play BD directly from Drive letter
+            if (String.IsNullOrEmpty(title))
+            {
+              List<GUIListItem> rootDrives = VirtualDirectories.Instance.Movies.GetRootExt();
+              title = Path.GetPathRoot(fileName);
+              title = Util.Utils.RemoveTrailingSlash(title);
+
+              for (int i = rootDrives.Count - 1; i >= 0; i--)
+              {
+                GUIListItem itemBDroot = (GUIListItem)rootDrives[i];
+                string itemBD = Path.GetPathRoot(itemBDroot.Path);
+                itemBD = Util.Utils.RemoveTrailingSlash(itemBD);
+                if (itemBD == title && !String.IsNullOrEmpty(itemBDroot.DVDLabel)) //cd or dvd drive
+                {
+                  title = itemBDroot.DVDLabel;
+                }
+              }
+            }
+            GUIPropertyManager.SetProperty("#Play.Current.Title", title);
+          }
+          else if (fileName.ToLower().Contains(".mpls")) // BD folder title check (playlist)
+          {
+            // Check if index.bdmv is in the VDB
+            int index = fileName.ToLower().LastIndexOf(@"\playlist");
+            string name = fileName.Remove(index);
+            name = name + @"\index.bdmv";
+            if (VideoDatabase.HasMovieInfo(name))
+            {
+              VideoDatabase.GetMovieInfo(name, ref movieDetails);
+              movieDetails.SetPlayProperties();
+            }
+            else
+            {
+              string title = selectBdHandler.GetBDFolderName(fileName);
+              // get the name when play BD directly from Drive letter
+              if (String.IsNullOrEmpty(title))
+              {
+                List<GUIListItem> rootDrives = VirtualDirectories.Instance.Movies.GetRootExt();
+                title = Path.GetPathRoot(fileName);
+                title = Util.Utils.RemoveTrailingSlash(title);
+
+                for (int i = rootDrives.Count - 1; i >= 0; i--)
+                {
+                  GUIListItem itemBDroot = (GUIListItem)rootDrives[i];
+                  string itemBD = Path.GetPathRoot(itemBDroot.Path);
+                  itemBD = Util.Utils.RemoveTrailingSlash(itemBD);
+                  if (itemBD == title && !String.IsNullOrEmpty(itemBDroot.DVDLabel)) //cd or dvd drive
+                  {
+                    title = itemBDroot.DVDLabel;
+                  }
+                }
+              }
+              GUIPropertyManager.SetProperty("#Play.Current.Title", title);
+            }
+          }
         }
       }
       else if (g_Player.IsTV && g_Player.IsTimeShifting)

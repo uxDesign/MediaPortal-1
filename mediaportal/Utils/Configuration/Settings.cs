@@ -19,11 +19,9 @@
 #endregion
 
 using System;
-using System.Collections;
 using System.IO;
 using System.Collections.Generic;
-
-//using MediaPortal.GUI.Library;
+using MediaPortal.Configuration;
 
 namespace MediaPortal.Profile
 {
@@ -41,7 +39,7 @@ namespace MediaPortal.Profile
       {
         if (string.IsNullOrEmpty(_configPathName))
         {
-          _configPathName = Configuration.Config.GetFile(Configuration.Config.Dir.Config, "MediaPortal.xml");
+          _configPathName = Config.GetFile(Config.Dir.Config, "MediaPortal.xml");
         }
         return _configPathName;
       }
@@ -52,7 +50,7 @@ namespace MediaPortal.Profile
           _configPathName = value;
           if (!Path.IsPathRooted(_configPathName))
           {
-            _configPathName = Configuration.Config.GetFile(Configuration.Config.Dir.Config, _configPathName);
+            _configPathName = Config.GetFile(Config.Dir.Config, _configPathName);
           }
         }
         else
@@ -76,6 +74,45 @@ namespace MediaPortal.Profile
   }
 
   /// <summary>
+  /// SKSettings allows to read and write SkinSetting.xml configuration file.  Each skin can have its own file (same filename different path).
+  /// (wrapper class to unify path handling)
+  /// </summary>
+  public class SKSettings : Settings
+  {
+    private static string _configPathName;
+
+    public static string ConfigPathName
+    {
+      get
+      {
+        // Always form the path since switching between skins will cause different files to be returned.
+        _configPathName = Config.GetFile(Config.Dir.Skin, Config.SkinName, "SkinSettings.xml");
+        return _configPathName;
+      }
+      set
+      {
+        _configPathName = value;
+        if (!Path.IsPathRooted(_configPathName))
+        {
+          _configPathName = Config.GetFile(Config.Dir.Skin, Config.SkinName, _configPathName);
+        }
+      }
+    }
+
+    private static SKSettings _instance;
+
+    public static SKSettings Instance
+    {
+      get { return _instance ?? (_instance = new SKSettings()); }
+    }
+
+    // public constructor should be made/private protected, we should encourage the usage of Instance
+
+    public SKSettings()
+      : base(ConfigPathName) { }
+  }
+
+  /// <summary>
   /// Settings allows to read and write any xml configuration file
   /// </summary>
   public class Settings : IDisposable
@@ -85,7 +122,8 @@ namespace MediaPortal.Profile
 
     public Settings(string fileName, bool isCached)
     {
-      xmlFileName = Path.GetFileName(fileName).ToLowerInvariant();
+      // Each skin may have its own SkinSettings.xml file so we need to use the entire path to detect a cache hit.
+      xmlFileName = Path.GetFullPath(fileName).ToLowerInvariant();
 
       _isCached = isCached;
 
@@ -99,6 +137,16 @@ namespace MediaPortal.Profile
         if (_isCached)
           xmlCache.Add(xmlFileName, xmlDoc);
       }
+    }
+
+    public bool HasSection<T>(string section)
+    {
+      return xmlDoc.HasSection<T>(section);
+    }
+
+    public IDictionary<string, T> GetSection<T>(string section)
+    {
+      return xmlDoc.GetSection<T>(section);
     }
 
     public string GetValue(string section, string entry)

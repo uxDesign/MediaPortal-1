@@ -203,7 +203,7 @@ UninstPage custom un.UninstallModePage un.UninstallModePageLeave
 # INSTALLER ATTRIBUTES
 #---------------------------------------------------------------------------
 Name          "${PRODUCT_NAME}"
-BrandingText  "${PRODUCT_NAME} ${VERSION} by ${PRODUCT_PUBLISHER}"
+BrandingText  "${PRODUCT_NAME} ${VERSION_DISP} by ${PRODUCT_PUBLISHER}"
 !if ${VER_BUILD} == 0       # it's an official release
   OutFile "${git_OUT}\package-tvengine.exe"
 !else                       # it's a git release
@@ -216,11 +216,11 @@ RequestExecutionLevel admin
 ShowInstDetails show
 VIProductVersion "${VER_MAJOR}.${VER_MINOR}.${VER_REVISION}.${VER_BUILD}"
 VIAddVersionKey /LANG=${LANG_ENGLISH} ProductName       "MediaPortal TV Server"
-VIAddVersionKey /LANG=${LANG_ENGLISH} ProductVersion    "${VERSION}"
+VIAddVersionKey /LANG=${LANG_ENGLISH} ProductVersion    "${VERSION_DISP}"
 VIAddVersionKey /LANG=${LANG_ENGLISH} CompanyName       "${PRODUCT_PUBLISHER}"
 VIAddVersionKey /LANG=${LANG_ENGLISH} CompanyWebsite    "${PRODUCT_WEB_SITE}"
 VIAddVersionKey /LANG=${LANG_ENGLISH} FileVersion       "${VERSION}"
-VIAddVersionKey /LANG=${LANG_ENGLISH} FileDescription   "${PRODUCT_NAME} installation ${VERSION}"
+VIAddVersionKey /LANG=${LANG_ENGLISH} FileDescription   "${PRODUCT_NAME} installation ${VERSION_DISP}"
 VIAddVersionKey /LANG=${LANG_ENGLISH} LegalCopyright    "Copyright © 2005-2011 ${PRODUCT_PUBLISHER}"
 ShowUninstDetails show
 
@@ -420,7 +420,7 @@ ${MementoSection} "MediaPortal TV Server" SecServer
   File "${git_TVServer}\TvService\bin\${BUILD_TYPE}\TvService.exe.config"
   File "${git_TVServer}\SetupControls\bin\${BUILD_TYPE}\SetupControls.dll"
   File "${git_TVServer}\TVLibrary.Utils\bin\${BUILD_TYPE}\TVLibrary.Utils.dll"
-  File "${git_TVServer}\TVLibrary.Utils\bin\${BUILD_TYPE}\Interop.SHDocVw.dll"
+  ;File "${git_TVServer}\TVLibrary.Utils\bin\${BUILD_TYPE}\Interop.SHDocVw.dll"
 
   ; 3rd party assemblys
   File "${TVSERVER.BASE}\hauppauge.dll"
@@ -588,7 +588,7 @@ ${MementoSectionEnd}
   Delete "$INSTDIR\ttdvbacc.dll"
   Delete "$INSTDIR\tevii.dll"
   Delete "$INSTDIR\Ionic.Zip.dll"
-  Delete "$INSTDIR\Interop.SHDocVw.dll"
+  ;Delete "$INSTDIR\Interop.SHDocVw.dll"
 
   ; remove Start Menu shortcuts
   Delete "${STARTMENU_GROUP}\TV-Server Configuration.lnk"
@@ -640,7 +640,7 @@ ${MementoSection} "MediaPortal TV Client plugin" SecClient
   # FILTER REGISTRATION       for TVClient
   #               for more information see:           http://nsis.sourceforge.net/Docs/AppendixB.html
   #---------------------------------------------------------------------------
-  !insertmacro InstallLib REGDLL NOTSHARED NOREBOOT_NOTPROTECTED "${git_DirectShowFilters}\DVBSubtitle2\bin\${BUILD_TYPE}\DVBSub2.ax" "$MPdir.Base\DVBSub2.ax"  "$MPdir.Base"
+  !insertmacro InstallLib REGDLL NOTSHARED NOREBOOT_NOTPROTECTED "${git_DirectShowFilters}\DVBSubtitle3\bin\${BUILD_TYPE}\DVBSub3.ax" "$MPdir.Base\DVBSub3.ax"  "$MPdir.Base"
   !insertmacro InstallLib REGDLL NOTSHARED NOREBOOT_NOTPROTECTED "${git_DirectShowFilters}\bin\Release\mmaacd.ax"                     "$MPdir.Base\mmaacd.ax"   "$MPdir.Base"
 ${MementoSectionEnd}
 !macro Remove_${SecClient}
@@ -668,7 +668,7 @@ ${MementoSectionEnd}
   # FILTER UNREGISTRATION     for TVClient
   #               for more information see:           http://nsis.sourceforge.net/Docs/AppendixB.html
   #---------------------------------------------------------------------------
-  !insertmacro UnInstallLib REGDLL NOTSHARED REBOOT_NOTPROTECTED "$MPdir.Base\DVBSub2.ax"
+  !insertmacro UnInstallLib REGDLL NOTSHARED REBOOT_NOTPROTECTED "$MPdir.Base\DVBSub3.ax"
   !insertmacro UnInstallLib REGDLL NOTSHARED REBOOT_NOTPROTECTED "$MPdir.Base\mmaacd.ax"
 
   ; The Plugins
@@ -754,7 +754,7 @@ Section -Post
   ; Write Uninstall Information
   WriteRegStr HKLM "${REG_UNINSTALL}" InstallPath        $INSTDIR
   WriteRegStr HKLM "${REG_UNINSTALL}" DisplayName        "${PRODUCT_NAME}"
-  WriteRegStr HKLM "${REG_UNINSTALL}" DisplayVersion     "${VERSION}"
+  WriteRegStr HKLM "${REG_UNINSTALL}" DisplayVersion     "${VERSION_DISP}"
   WriteRegStr HKLM "${REG_UNINSTALL}" Publisher          "${PRODUCT_PUBLISHER}"
   WriteRegStr HKLM "${REG_UNINSTALL}" URLInfoAbout       "${PRODUCT_WEB_SITE}"
   WriteRegStr HKLM "${REG_UNINSTALL}" DisplayIcon        "$INSTDIR\SetupTv.exe,0"
@@ -773,7 +773,7 @@ Section -Post
   ;if TV Server was installed exec SetupTv with correct parameters    
   ${If} $noServer == 0
 	  ${If} $DeploySql != ""
-	  ${AndIf} $DeployPwd != ""
+	  ;${AndIf} $DeployPwd != ""
 	            StrCpy $R0 "--DeployMode --DeploySql:$DeploySql --DeployPwd:$DeployPwd"
 	  ${Else}
 	            StrCpy $R0 "--DeployMode"
@@ -897,9 +897,9 @@ Function .onInit
   ;${ReadCommandlineParameter} "noStartMenuSC"
   ${ReadCommandlineParameter} "DeployMode"
   ClearErrors
-  ${GetOptions} $R0 "/DeploySql:" $DeploySql
+  ${GetOptions} $R0 "--DeploySql:" $DeploySql
   ClearErrors
-  ${GetOptions} $R0 "/DeployPwd:" $DeployPwd
+  ${GetOptions} $R0 "--DeployPwd:" $DeployPwd
 
   ClearErrors
   ${GetOptions} $R0 "/UpdateMode" $R1

@@ -19,11 +19,11 @@
 #endregion
 
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Windows.Forms;
-using MediaPortal.Configuration;
 using MediaPortal.Dialogs;
 using MediaPortal.GUI.Library;
 using MediaPortal.GUI.View;
@@ -43,6 +43,13 @@ namespace MediaPortal.GUI.Video
   /// </summary>
   public abstract class GUIVideoBaseWindow : WindowPluginBase
   {
+    public enum MediaTypes
+    {
+      DVD = 0,
+      BD = 1,
+      ISO = 2,
+    }
+
     #region Base variables
 
     protected VideoSort.SortMethod currentSortMethod = VideoSort.SortMethod.Name;
@@ -53,12 +60,14 @@ namespace MediaPortal.GUI.Video
     protected string _lastFolder = string.Empty;
     protected bool m_bPlaylistsLayout = false;
     protected PlayListPlayer playlistPlayer;
+    protected VideoDatabase m_database;
 
     #endregion
 
     #region SkinControls
 
     [SkinControl(6)] protected GUIButtonControl btnPlayDVD = null;
+    [SkinControl(7)] protected GUIButtonControl btnScanNew = null;
     [SkinControl(8)] protected GUIButtonControl btnTrailers = null;
     [SkinControl(9)] protected GUIButtonControl btnSavedPlaylists = null;
 
@@ -73,6 +82,11 @@ namespace MediaPortal.GUI.Video
       if (handler == null)
       {
         handler = new VideoViewHandler();
+      }
+
+      if (m_database == null)
+      {
+        m_database = VideoDatabase.Instance;
       }
 
       GUIWindowManager.OnNewAction += new OnActionHandler(OnNewAction);
@@ -112,20 +126,26 @@ namespace MediaPortal.GUI.Video
     {
       switch (s.Trim().ToLower())
       {
-        case "modified":
-          return VideoSort.SortMethod.Modified;
-        case "date":
-          return VideoSort.SortMethod.Date;
-        case "label":
-          return VideoSort.SortMethod.Label;
         case "name":
           return VideoSort.SortMethod.Name;
-        case "rating":
-          return VideoSort.SortMethod.Rating;
+        case "nameall":
+          return VideoSort.SortMethod.NameAll;
+        case "date":
+          return VideoSort.SortMethod.Date;
         case "size":
           return VideoSort.SortMethod.Size;
+        case "modified":
+          return VideoSort.SortMethod.Modified;
+        case "created":
+          return VideoSort.SortMethod.Created;
+        case "label":
+          return VideoSort.SortMethod.Label;
+        case "rating":
+          return VideoSort.SortMethod.Rating;
         case "year":
           return VideoSort.SortMethod.Year;
+        case "watched":
+          return VideoSort.SortMethod.Watched;
       }
       if (!string.IsNullOrEmpty(s))
       {
@@ -139,7 +159,7 @@ namespace MediaPortal.GUI.Video
       base.SaveSettings();
       using (Profile.Settings xmlwriter = new Profile.MPSettings())
       {
-        xmlwriter.SetValue(SerializeName, "sortmethod", (int)currentSortMethod);
+        xmlwriter.SetValue(SerializeName, "sortmethod", (int)CurrentSortMethod);
         xmlwriter.SetValue(SerializeName, "sortmethodroot", (int)currentSortMethodRoot);
       }
     }
@@ -228,6 +248,21 @@ namespace MediaPortal.GUI.Video
         }
         return;
       }
+
+      if (control == btnScanNew)
+      {
+        // Check Internet connection
+        if (!Win32API.IsConnectedToInternet())
+        {
+          GUIDialogOK dlgOk = (GUIDialogOK)GUIWindowManager.GetWindow((int)Window.WINDOW_DIALOG_OK);
+          dlgOk.SetHeading(257);
+          dlgOk.SetLine(1, GUILocalizeStrings.Get(703));
+          dlgOk.DoModal(GUIWindowManager.ActiveWindow);
+          return;
+        }
+
+        OnSearchNew();
+      }
     }
 
     protected void OnShowSavedPlaylists(string _directory)
@@ -298,11 +333,11 @@ namespace MediaPortal.GUI.Video
         case VideoSort.SortMethod.Name:
           strLine = GUILocalizeStrings.Get(365);
           break;
-        case VideoSort.SortMethod.Modified:
-          strLine = GUILocalizeStrings.Get(1221);
+        case VideoSort.SortMethod.NameAll:
+          strLine = GUILocalizeStrings.Get(1309);
           break;
         case VideoSort.SortMethod.Date:
-          strLine = GUILocalizeStrings.Get(1220);
+          strLine = GUILocalizeStrings.Get(104);
           break;
         case VideoSort.SortMethod.Size:
           strLine = GUILocalizeStrings.Get(105);
@@ -316,20 +351,27 @@ namespace MediaPortal.GUI.Video
         case VideoSort.SortMethod.Label:
           strLine = GUILocalizeStrings.Get(430);
           break;
-        case VideoSort.SortMethod.Unwatched:
+        case VideoSort.SortMethod.Watched:
           strLine = GUILocalizeStrings.Get(527);
+          break;
+        case VideoSort.SortMethod.Created:
+          strLine = GUILocalizeStrings.Get(1220);
+          break;
+        case VideoSort.SortMethod.Modified:
+          strLine = GUILocalizeStrings.Get(1221);
           break;
       }
 
       if (btnSortBy != null)
       {
-        btnSortBy.Label = strLine;
+        btnSortBy.Label = GUILocalizeStrings.Get(96) + strLine;
       }
 
       if (null != facadeLayout)
         facadeLayout.EnableScrollLabel = CurrentSortMethod == VideoSort.SortMethod.Label ||
                                          CurrentSortMethod == VideoSort.SortMethod.Year ||
-                                         CurrentSortMethod == VideoSort.SortMethod.Name
+                                         CurrentSortMethod == VideoSort.SortMethod.Name ||
+                                         CurrentSortMethod == VideoSort.SortMethod.NameAll
           ;
     }
 
@@ -362,8 +404,12 @@ namespace MediaPortal.GUI.Video
       // Save view
       using (Profile.Settings xmlwriter = new Profile.MPSettings())
       {
-        xmlwriter.SetValue("movies", "startWindow", VideoState.StartWindow.ToString());
-        xmlwriter.SetValue("movies", "startview", VideoState.View);
+        // Save only MyVideos window views
+        if (GUIVideoFiles.IsVideoWindow(VideoState.StartWindow))
+        {
+          xmlwriter.SetValue("movies", "startWindow", VideoState.StartWindow.ToString());
+          xmlwriter.SetValue("movies", "startview", VideoState.View);
+        }
       }
 
       m_bPlaylistsLayout = false;
@@ -385,16 +431,52 @@ namespace MediaPortal.GUI.Video
 
     protected virtual void SetLabels()
     {
+      bool isShareView = false;
+      
+      if(GUIWindowManager.ActiveWindow == (int)Window.WINDOW_VIDEOS)
+      {
+        isShareView = true;
+      }
+
       for (int i = 0; i < facadeLayout.Count; ++i)
       {
         GUIListItem item = facadeLayout[i];
         IMDBMovie movie = item.AlbumInfoTag as IMDBMovie;
 
-        if (movie != null && movie.ID > 0 && !item.IsFolder)
+        if (movie != null && movie.ID > 0  && !isShareView && 
+            (!item.IsFolder || CurrentSortMethod == VideoSort.SortMethod.NameAll ))
         {
-          if (CurrentSortMethod == VideoSort.SortMethod.Name)
+          if (CurrentSortMethod == VideoSort.SortMethod.Name || CurrentSortMethod == VideoSort.SortMethod.NameAll)
           {
-            item.Label2 = Util.Utils.SecondsToHMString(movie.RunTime * 60);
+            if (item.IsFolder)
+            {
+              item.Label2 = string.Empty;
+            }
+            else
+            {
+              // Show real movie duration (from video file)
+              int mDuration = VideoDatabase.GetMovieDuration(movie.ID);
+
+              if (mDuration <= 0)
+              {
+                ArrayList mFiles = new ArrayList();
+                VideoDatabase.GetFilesForMovie(movie.ID, ref mFiles);
+                mDuration = GUIVideoFiles.MovieDuration(mFiles, true);
+
+                if (mDuration <= 0)
+                {
+                  item.Label2 = Util.Utils.SecondsToHMString(movie.RunTime * 60);
+                }
+                else
+                {
+                  item.Label2 = Util.Utils.SecondsToHMString(mDuration);
+                }
+              }
+              else
+              {
+                item.Label2 = Util.Utils.SecondsToHMString(mDuration);
+              }
+            }
           }
           else if (CurrentSortMethod == VideoSort.SortMethod.Year)
           {
@@ -423,6 +505,7 @@ namespace MediaPortal.GUI.Video
         else
         {
           string strSize1 = string.Empty, strDate = string.Empty;
+          
           if (item.FileInfo != null && !item.IsFolder)
           {
             strSize1 = Util.Utils.GetSize(item.FileInfo.Length);
@@ -436,17 +519,31 @@ namespace MediaPortal.GUI.Video
               strDate = item.FileInfo.CreationTime.ToShortDateString() + " " +
                         item.FileInfo.CreationTime.ToString("t", CultureInfo.CurrentCulture.DateTimeFormat);
           }
-          if (CurrentSortMethod == VideoSort.SortMethod.Name)
+          if (CurrentSortMethod == VideoSort.SortMethod.Name || CurrentSortMethod == VideoSort.SortMethod.NameAll)
           {
-            item.Label2 = strSize1;
+            if (item.IsFolder)
+            {
+              item.Label2 = string.Empty;
+            }
+            else
+            {
+              item.Label2 = strSize1;
+            }
           }
-          else if (CurrentSortMethod == VideoSort.SortMethod.Modified || CurrentSortMethod == VideoSort.SortMethod.Date)
+          else if (CurrentSortMethod == VideoSort.SortMethod.Created || CurrentSortMethod == VideoSort.SortMethod.Date || CurrentSortMethod == VideoSort.SortMethod.Modified)
           {
             item.Label2 = strDate;
           }
           else
           {
-            item.Label2 = strSize1;
+            if (item.IsFolder)
+            {
+              item.Label2 = string.Empty;
+            }
+            else
+            {
+              item.Label2 = strSize1;
+            }
           }
         }
       }
@@ -459,20 +556,62 @@ namespace MediaPortal.GUI.Video
       {
         return;
       }
+
+      // Sorry for all the fuss with dlg selected index but there is a huge problem with it beacuse
+      // sort methods are in enums and they are not separate per view. Because some sort methods are not
+      // valid for share view we have problem with enums and dlg item index. I sorted out this by two
+      // variables maxCommonSortIndex and dbSortCount but they are need to implement manually on every new
+      // sort added. If there is a better way to handle this (with not meesing too much in code :)) I will
+      // appreciate fix.
+      
       dlg.Reset();
       dlg.SetHeading(495); // Sort options
+      int maxCommonSortIndex = -1; // Inrease by 1 when adding new common sort label(sort valid in share and db views))
+      int dbSortCount = 0; // increase by one when adding new database sort label
+      
+      // Watch for enums in VideoSort.cs - must be exactly as the enum order
 
-      dlg.AddLocalizedString(365); // name
-      dlg.AddLocalizedString(1220); // date created (date)
-      dlg.AddLocalizedString(1221); // date modified 
-      dlg.AddLocalizedString(105); // size
-      dlg.AddLocalizedString(366); // year
-      dlg.AddLocalizedString(367); // rating
-      dlg.AddLocalizedString(430); // label
-      dlg.AddLocalizedString(527); // unwatched
+      // Common sorts - group 1
+      dlg.AddLocalizedString(365); // 0 name
+      maxCommonSortIndex++;
+      dlg.AddLocalizedString(1309); // 1 nameall
+      maxCommonSortIndex++;
+      dlg.AddLocalizedString(104); // 2 date created (date)
+      maxCommonSortIndex++;
+      dlg.AddLocalizedString(105); // 3 size
+      maxCommonSortIndex++;
+      dlg.AddLocalizedString(527); // 4 watched
+      maxCommonSortIndex++;
+      
+      // Database sorts - group 2
+      if (GUIWindowManager.ActiveWindow == (int)Window.WINDOW_VIDEO_TITLE)
+      {
+        dlg.AddLocalizedString(366); // 5 year
+        dbSortCount++;
+        dlg.AddLocalizedString(367); // 6 rating
+        dbSortCount++;
+      }
 
+      // Share sorts - group 3
+      if (GUIWindowManager.ActiveWindow == (int)Window.WINDOW_VIDEOS)
+      {
+        dlg.AddLocalizedString(430);  // 7 CD label
+        dlg.AddLocalizedString(1221); // 8 date modified
+        dlg.AddLocalizedString(1220); // 9 date created
+      }
+      
       // set the focus to currently used sort method
-      dlg.SelectedLabel = (int)CurrentSortMethod;
+
+      // we need to correct index only if sort method enum is greater then max common sort index in share view
+      if (GUIWindowManager.ActiveWindow == (int)Window.WINDOW_VIDEOS  // must be share view
+          && (int)CurrentSortMethod > maxCommonSortIndex) 
+      {
+        dlg.SelectedLabel = (int)CurrentSortMethod - dbSortCount;
+      }
+      else
+      {
+        dlg.SelectedLabel = (int)CurrentSortMethod;
+      }
 
       // show dialog and wait for result
       dlg.DoModal(GetID);
@@ -487,12 +626,19 @@ namespace MediaPortal.GUI.Video
         case 365:
           CurrentSortMethod = VideoSort.SortMethod.Name;
           break;
+        case 1309:
+          CurrentSortMethod = VideoSort.SortMethod.NameAll;
+          break;
+        case 104:
+          CurrentSortMethod = VideoSort.SortMethod.Date;
+          CurrentSortAsc = false;
+          break;
         case 1221:
           CurrentSortMethod = VideoSort.SortMethod.Modified;
           CurrentSortAsc = false;
           break;
         case 1220:
-          CurrentSortMethod = VideoSort.SortMethod.Date;
+          CurrentSortMethod = VideoSort.SortMethod.Created;
           CurrentSortAsc = false;
           break;
         case 105:
@@ -508,7 +654,7 @@ namespace MediaPortal.GUI.Video
           CurrentSortMethod = VideoSort.SortMethod.Label;
           break;
         case 527:
-          CurrentSortMethod = VideoSort.SortMethod.Unwatched;
+          CurrentSortMethod = VideoSort.SortMethod.Watched;
           break;
         default:
           CurrentSortMethod = VideoSort.SortMethod.Name;
@@ -637,6 +783,21 @@ namespace MediaPortal.GUI.Video
         GlobalServiceProvider.Add<ISelectDVDHandler>(selectDVDHandler);
       }
       selectDVDHandler.OnPlayDVD(drive, GetID);
+    }
+
+    protected void OnPlayBD(String drive, int parentId)
+    {
+      ISelectBDHandler selectBDHandler;
+      if (GlobalServiceProvider.IsRegistered<ISelectBDHandler>())
+      {
+        selectBDHandler = GlobalServiceProvider.Get<ISelectBDHandler>();
+      }
+      else
+      {
+        selectBDHandler = new SelectBDHandler();
+        GlobalServiceProvider.Add<ISelectBDHandler>(selectBDHandler);
+      }
+      selectBDHandler.OnPlayBD(drive, GetID);
     }
 
     protected void OnPlayFiles(System.Collections.ArrayList filesList)

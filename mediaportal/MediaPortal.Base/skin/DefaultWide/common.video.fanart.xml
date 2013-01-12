@@ -29,57 +29,43 @@
       <description>FANART IMAGE 1</description>
       <id>0</id>
       <type>image</type>
-      <posx>0</posx>
-      <posy>0</posy>
+      <posX>0</posX>
+      <posY>0</posY>
       <width>1280</width>
       <height>720</height>
       <texture>#fanarthandler.movie.backdrop1.selected</texture>
       <colordiffuse>ffffffff</colordiffuse>
       <visible>control.isvisible(91919291)</visible>
       <animation effect="fade" time="300">visible</animation>
-      <animation effect="fade" time="300" delay="300">hidden</animation>
+      <animation effect="fade" time="300">hidden</animation>
     </control>
     <control>
       <description>FANART IMAGE 2</description>
       <id>0</id>
       <type>image</type>
-      <posx>0</posx>
-      <posy>0</posy>
+      <posX>0</posX>
+      <posY>0</posY>
       <width>1280</width>
       <height>720</height>
       <texture>#fanarthandler.movie.backdrop2.selected</texture>
       <colordiffuse>ffffffff</colordiffuse>
       <visible>control.isvisible(91919292)</visible>
       <animation effect="fade" time="300">visible</animation>
-      <animation effect="fade" time="300" delay="300">hidden</animation>
+      <animation effect="fade" time="300">hidden</animation>
     </control>
     <control>
-      <description>Overlay for FanArt</description>
+      <description>General Overlay</description>
       <id>0</id>
       <type>image</type>
-      <posx>0</posx>
-      <posy>0</posy>
+      <posX>0</posX>
+      <posY>30</posY>
       <width>1280</width>
       <height>720</height>
-      <texture>backgroundtop.png</texture>
-      <colordiffuse>ccffffff</colordiffuse>
-      <visible>control.isvisible(91919292)|control.isvisible(91919291)</visible>
-      <animation effect="fade" time="70">visible</animation>
-      <animation effect="fade" time="70" delay="300">hidden</animation>
+      <texture>general_overlay.png</texture>
+      <colordiffuse>99ffffff</colordiffuse>
+      <animation effect="fade" time="300">visible</animation>
+      <animation effect="fade" time="300">hidden</animation>
     </control>
-    <control>
-      <description>Overlay for FanArt</description>
-      <id>0</id>
-      <type>image</type>
-      <posx>0</posx>
-      <posy>0</posy>
-      <width>1280</width>
-      <height>720</height>
-      <texture>backgroundthumbsview.png</texture>
-      <colordiffuse>ffffffff</colordiffuse>
-      <visible>control.isvisible(91919292)|control.isvisible(91919291)</visible>
-      <animation effect="fade" time="70">visible</animation>
-      <animation effect="fade" time="70" delay="300">hidden</animation>
-    </control>
+    
   </controls>
 </window>

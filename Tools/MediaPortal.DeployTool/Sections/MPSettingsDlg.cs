@@ -51,7 +51,7 @@ namespace MediaPortal.DeployTool.Sections
       if (InstallationProperties.Instance["InstallType"] == "client" ||
           InstallationProperties.Instance["InstallType"] == "mp_only")
       {
-        return DialogFlowHandler.Instance.GetDialogInstance(DialogType.Installation);
+        return DialogFlowHandler.Instance.GetDialogInstance(DialogType.SkinChoice);
       }
       return DialogFlowHandler.Instance.GetDialogInstance(DialogType.TvServerSettings);
     }
@@ -92,5 +92,6 @@ namespace MediaPortal.DeployTool.Sections
     {
       installationPath = textBoxDir.Text;
     }
+
   }
 }

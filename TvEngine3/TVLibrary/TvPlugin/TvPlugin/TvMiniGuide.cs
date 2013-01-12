@@ -24,6 +24,7 @@ using System;
 using System.Collections.Generic;
 using System.Data.SqlTypes;
 using System.Diagnostics;
+using System.Linq;
 using System.Text;
 using MediaPortal.Configuration;
 using MediaPortal.Dialogs;
@@ -82,9 +83,9 @@ namespace TvPlugin
     private Dictionary<int, DateTime> _nextEPGupdate = new Dictionary<int, DateTime>();
     private Dictionary<int, Dictionary<int, NowAndNext>> _listNowNext = new Dictionary<int, Dictionary<int, NowAndNext>>();
 
-    private readonly string PathIconNoTune = GUIGraphicsContext.Skin + @"\Media\remote_blue.png";
-    private readonly string PathIconTimeshift = GUIGraphicsContext.Skin + @"\Media\remote_yellow.png";
-    private readonly string PathIconRecord = GUIGraphicsContext.Skin + @"\Media\remote_red.png";
+    private readonly string PathIconNoTune = GUIGraphicsContext.GetThemedSkinFile(@"\Media\remote_blue.png");
+    private readonly string PathIconTimeshift = GUIGraphicsContext.GetThemedSkinFile(@"\Media\remote_yellow.png");
+    private readonly string PathIconRecord = GUIGraphicsContext.GetThemedSkinFile(@"\Media\remote_red.png");
     // fetch localized ID's only once from XML file
     private readonly string local736 = GUILocalizeStrings.Get(736); // No data available
     private readonly string local789 = GUILocalizeStrings.Get(789); // Now:
@@ -167,7 +168,7 @@ namespace TvPlugin
     /// <returns></returns>
     public override bool Init()
     {
-      bool bResult = Load(GUIGraphicsContext.Skin + @"\TVMiniGuide.xml");
+      bool bResult = Load(GUIGraphicsContext.GetThemedSkinFile(@"\TVMiniGuide.xml"));
 
       GetID = (int)Window.WINDOW_MINI_GUIDE;
       //GUILayerManager.RegisterLayer(this, GUILayerManager.LayerType.MiniEPG);
@@ -215,7 +216,7 @@ namespace TvPlugin
         if (_channelList.Count == 0)
         {
           Channel newChannel = new Channel(false, true, 0, DateTime.MinValue, false,
-                                           DateTime.MinValue, 0, true, "", GUILocalizeStrings.Get(911));
+                                           DateTime.MinValue, 0, true, "", GUILocalizeStrings.Get(911), 0);
           for (int i = 0; i < 10; ++i)
           {
             _channelList.Add(newChannel);
@@ -668,10 +669,7 @@ namespace TvPlugin
             sb.Append(" - ");
             if (!_byIndex)
             {
-              foreach (TuningDetail detail in tvChannelList[i].ReferringTuningDetail())
-              {
-                sb.Append(detail.ChannelNumber);
-              }
+              sb.Append(tvChannelList[i].ChannelNumber);
             }
             else
             {
@@ -738,9 +736,9 @@ namespace TvPlugin
 
     private Dictionary<int, NowAndNext> GetNowAndNext(List<Channel> tvChannelList, DateTime nextEPGupdate)
     {
+      Dictionary<int, NowAndNext> getNowAndNextSegment = new Dictionary<int, NowAndNext>();
       Dictionary<int, NowAndNext> getNowAndNext = new Dictionary<int, NowAndNext>();
       int idGroup = TVHome.Navigator.CurrentGroup.IdGroup;
-
 
       TvBusinessLayer layer = new TvBusinessLayer();
       if (_listNowNext.TryGetValue(idGroup, out getNowAndNext))
@@ -748,16 +746,38 @@ namespace TvPlugin
         bool updateNow = (DateTime.Now >= nextEPGupdate);
         if (updateNow)
         {
-          getNowAndNext = layer.GetNowAndNext(tvChannelList);
+          getNowAndNext = new Dictionary<int, NowAndNext>();
+          List<List<Channel>> tvChannelListSegments = SplitChannelList(tvChannelList, 100);
+          foreach (List<Channel> tvChannelListSegment in tvChannelListSegments)
+          {
+            getNowAndNextSegment = layer.GetNowAndNext(tvChannelListSegment);
+            getNowAndNext = getNowAndNext.Concat(getNowAndNextSegment).ToDictionary(x => x.Key, x => x.Value);
+          }
+
           _listNowNext[idGroup] = getNowAndNext;
         }
       }
       else
       {
-        getNowAndNext = layer.GetNowAndNext(tvChannelList);
+        getNowAndNext = new Dictionary<int, NowAndNext>();
+        List<List<Channel>> tvChannelListSegments = SplitChannelList(tvChannelList, 100);
+        foreach (List<Channel> tvChannelListSegment in tvChannelListSegments)
+        {
+          getNowAndNextSegment = layer.GetNowAndNext(tvChannelListSegment);
+          getNowAndNext = getNowAndNext.Concat(getNowAndNextSegment).ToDictionary(x => x.Key, x => x.Value);
+        }
         _listNowNext.Add(idGroup, getNowAndNext);
       }
       return getNowAndNext;
+    }
+
+    public static List<List<Channel>> SplitChannelList(List<Channel> source, int maxListSize)
+    {
+      return source
+          .Select((x, i) => new { Index = i, Value = x })
+          .GroupBy(x => x.Index / maxListSize)
+          .Select(x => x.Select(v => v.Value).ToList())
+          .ToList();
     }
 
     private void SetNextEpgUpdate(DateTime nextEPGupdate)

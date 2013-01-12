@@ -479,7 +479,7 @@ Proseguire l'installazione è un vostro rischio.</value>
   <data name="Upgrade_labelSectionHeader" xml:space="preserve">
     <value>Trovato MediaPortal {0}.</value>
   </data>
-  <data name="Upgrade_labelSectionHeader_SVN" xml:space="preserve">
+  <data name="Upgrade_labelSectionHeader_GIT" xml:space="preserve">
     <value>Trovato MediaPortal {0} (build {1}).</value>
   </data>
   <data name="Upgrade_no" xml:space="preserve">
@@ -489,7 +489,7 @@ Proseguire l'installazione è un vostro rischio.</value>
     <value>Aggiorna l'attuale installazione alla versione {0}</value>
   </data>
   <data name="Upgrade_note" xml:space="preserve">
-    <value>NOTA: Non si può aggiornare da una build SVN esistente,
+    <value>NOTA: Non si può aggiornare da una build GIT esistente,
             quest'ultima è intesa solo a scopo di test.</value>
   </data>
   <data name="Install_actionUpgradeInstall" xml:space="preserve">
@@ -509,5 +509,11 @@ Abilitando AERO si ridurrà anche l'uso della CPU, e il vostro HTPC sarà silenz
   <data name="Reboot_Required" xml:space="preserve">
     <value>E' richiesto un riavvio da un componente Microsoft.
 Procedere con tale operazione prima di continuare l'installazione di MediaPortal.</value>
+  </data>
+  <data name="SkinChoice_labelExistingSkin" xml:space="preserve">
+    <value>Usa Skin esistente (ne sarà verificata la compatibilità)</value>
+  </data>
+  <data name="SkinChoice_labelSectionHeader" xml:space="preserve">
+    <value>Scegli una Skin</value>
   </data>
 </root>

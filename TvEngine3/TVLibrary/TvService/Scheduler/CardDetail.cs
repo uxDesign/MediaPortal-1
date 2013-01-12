@@ -19,11 +19,32 @@
 #endregion
 
 using System;
+using System.Collections.Generic;
+using System.Linq;
+using TvLibrary.Channels;
+using TvLibrary.Implementations;
 using TvLibrary.Interfaces;
 using TvDatabase;
 
 namespace TvService
 {
+  public static class IComparableExtensions
+  {
+    public static void SortStable<T>(this List<T> list) where T : IComparable<T>
+    {
+      var listStableOrdered = list.OrderBy<T, T>(x => x, new ComparableComparer<T>()).ToList();
+      list.Clear();
+      list.AddRange(listStableOrdered);
+    }
+
+    private class ComparableComparer<T> : IComparer<T> where T : IComparable<T>
+    {
+      public int Compare(T x, T y)
+      {
+        return x.CompareTo(y);
+      }
+    }
+  }
   /// <summary>
   /// Class which can be used to sort Cards bases on priority
   /// </summary>
@@ -32,9 +53,11 @@ namespace TvService
     private readonly int _cardId;
     private readonly Card _card;
     private readonly IChannel _detail;
-    private int _priority;
+    private readonly int _priority;
     private bool _sameTransponder;
     private int _numberOfOtherUsers;
+    private long? _channelTimeshiftingOnOtherMux;
+    private readonly long _frequency = -1;
 
     /// <summary>
     /// ctor
@@ -43,6 +66,8 @@ namespace TvService
     /// <param name="card">card dataaccess object</param>
     /// <param name="detail">tuning detail</param>
     /// <param name="sameTransponder">indicates whether it is the same transponder</param>
+    /// <param name="numberOfOtherUsers"></param>
+    /// <param name="isChannelTimeshiftingOnOtherMux"> </param>
     public CardDetail(int id, Card card, IChannel detail, bool sameTransponder, int numberOfOtherUsers)
     {
       _sameTransponder = sameTransponder;
@@ -51,6 +76,20 @@ namespace TvService
       _detail = detail;
       _priority = _card.Priority;
       _numberOfOtherUsers = numberOfOtherUsers;
+
+      var dvbTuningDetail = detail as DVBBaseChannel;
+      if (dvbTuningDetail != null)
+      {
+        _frequency = dvbTuningDetail.Frequency;
+      }
+      else
+      {
+        var analogTuningDetail = detail as AnalogChannel;
+        if (analogTuningDetail != null)
+        {
+          _frequency = analogTuningDetail.Frequency;
+        }
+      }
     }
 
     /// <summary>
@@ -92,6 +131,7 @@ namespace TvService
     public bool SameTransponder
     {
       get { return _sameTransponder; }
+      set { _sameTransponder = value; }
     }
 
     /// <summary>
@@ -100,6 +140,12 @@ namespace TvService
     public int NumberOfOtherUsers
     {
       get { return _numberOfOtherUsers; }
+      set { _numberOfOtherUsers = value; }
+    }
+
+    public long Frequency
+    {
+      get { return _frequency; }
     }
 
     #region IComparable<CardInfo> Members
@@ -112,21 +158,31 @@ namespace TvService
         if (!SameTransponder && (NumberOfOtherUsers != other.NumberOfOtherUsers))
         {
           if (NumberOfOtherUsers > other.NumberOfOtherUsers)
+          {
             return 1;
+          }
           if (NumberOfOtherUsers < other.NumberOfOtherUsers)
+          {
             return -1;
+          }
           return 0;
         }
 
         if (Priority > other.Priority)
+        {
           return -1;
+        }
         if (Priority < other.Priority)
+        {
           return 1;
+        }
         return 0;
       }
 
       if (SameTransponder)
+      {
         return -1;
+      }
       return 1;
     }
 
