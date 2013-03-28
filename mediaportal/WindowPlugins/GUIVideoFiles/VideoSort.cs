@@ -111,6 +111,10 @@ namespace MediaPortal.GUI.Video
           {
             if (SortAscending)
             {
+              if (item1.IsFolder && item2.IsFolder)
+              {
+                return String.Compare(item1.Label, item2.Label, true);
+              }
               if (item1.Year > item2.Year)
               {
                 return 1;
@@ -122,6 +126,10 @@ namespace MediaPortal.GUI.Video
             }
             else
             {
+              if (item1.IsFolder && item2.IsFolder)
+              {
+                return String.Compare(item2.Label, item1.Label, true);
+              }
               if (item1.Year > item2.Year)
               {
                 return -1;
@@ -418,9 +426,9 @@ namespace MediaPortal.GUI.Video
         if (movie1 != null && movie1.ID > 0)
         {
           item.FileInfo = new Util.FileInformation();
-          DateTime dateAdded;
-          DateTime.TryParseExact(movie1.DateAdded, "yyyy-MM-dd HH:mm:ss", CultureInfo.CurrentCulture, DateTimeStyles.None, out dateAdded);
-          item.FileInfo.CreationTime = dateAdded;
+          DateTime dateAddedWatched;
+          DateTime.TryParseExact(item.Label2, "yyyy-MM-dd HH:mm:ss", CultureInfo.CurrentCulture, DateTimeStyles.None, out dateAddedWatched);
+          item.FileInfo.CreationTime = dateAddedWatched;
         }
       }
       catch (Exception exp)
