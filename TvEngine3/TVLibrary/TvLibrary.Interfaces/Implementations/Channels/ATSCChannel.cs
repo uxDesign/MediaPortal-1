@@ -179,16 +179,19 @@ namespace TvLibrary.Channels
       }
 
       // ATSC (over-the-air digital television).
+      // Here we are comparing physical channel numbers that are mapped
+      // to frequencies by the network provider.
       if (_modulation == ModulationType.Mod8Vsb || _modulation == ModulationType.Mod16Vsb)
       {
         return atscChannel.PhysicalChannel != _physicalChannel;
       }
-      // QAM (cable television).
+      // Clear QAM (unencrypted digital cable television).
       else if (_modulation != ModulationType.ModNotSet)
       {
         return atscChannel.Frequency != Frequency;
       }
-      // Encrypted digital cable - CableCARD.
+      // CableCARD (encrypted digital cable television).
+      // Here we are comparing virtual (ie. logical) channel numbers.
       return atscChannel.PhysicalChannel != _physicalChannel;
     }
   }
