@@ -15,7 +15,8 @@
     <OldToolsVersion>3.5</OldToolsVersion>
     <UpgradeBackupLocation>
     </UpgradeBackupLocation>
-    <TargetFrameworkVersion>v3.5</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.0</TargetFrameworkVersion>
+    <TargetFrameworkProfile />
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -80,6 +81,9 @@
     <Reference Include="System.Management" />
     <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Xml" />
+    <Reference Include="UPnP">
+      <HintPath>..\..\..\..\MediaPortal-2\MediaPortal\Source\Core\UPnP\bin\x86\Debug\UPnP.dll</HintPath>
+    </Reference>
   </ItemGroup>
   <ItemGroup>
     <Compile Include="..\..\..\Common-MP-TVE3\SolutionInfo.cs">
@@ -161,7 +165,7 @@
     <Compile Include="Implementations\Hybrid\HybridCard.cs" />
     <Compile Include="Implementations\RadioWebStream\RadioWebStreamCard.cs" />
     <Compile Include="Implementations\TvCardBase.cs" />
-    <Compile Include="Implementations\TvCardCollection.cs" />
+    <Compile Include="Implementations\DeviceDetector.cs" />
     <Compile Include="Interfaces\Analyzer\IDVBNetworkProvider.cs" />
     <Compile Include="Interfaces\Analyzer\ITsCaGrabber.cs" />
     <Compile Include="Interfaces\Analyzer\IMPRecord.cs">

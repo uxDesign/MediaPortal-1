@@ -257,7 +257,7 @@ namespace TvLibrary.Implementations.DVB
     /// </summary>
     protected bool matchDevicePath;
 
-    private readonly TimeShiftingEPGGrabber _timeshiftingEPGGrabber;
+    private TimeShiftingEPGGrabber _timeshiftingEPGGrabber;
     private WinTvCiModule winTvCiHandler;
 
     /// <summary>
@@ -274,14 +274,13 @@ namespace TvLibrary.Implementations.DVB
     /// <summary>
     /// Initializes a new instance of the <see cref="TvCardDvbBase"/> class.
     /// </summary>
-    public TvCardDvbBase(IEpgEvents epgEvents, DsDevice device)
+    public TvCardDvbBase(DsDevice device)
       : base(device)
     {
       matchDevicePath = true;
       _lastSignalUpdate = DateTime.MinValue;
       _mapSubChannels = new Dictionary<int, BaseSubChannel>();
       _parameters = new ScanParameters();
-      _timeshiftingEPGGrabber = new TimeShiftingEPGGrabber(epgEvents, (ITVCard)this);
       _minChannel = -1;
       _maxChannel = -1;
       _supportsSubChannels = true;
@@ -1011,8 +1010,8 @@ namespace TvLibrary.Implementations.DVB
         _filterNetworkProvider = FilterGraphTools.AddFilterFromClsid(_graphBuilder, internalNetworkProviderClsId,
                                                                      networkProviderName);
         _interfaceNetworkProvider = (IDvbNetworkProvider)_filterNetworkProvider;
-        string hash = TvCardCollection.GetHash(DevicePath);
-        _interfaceNetworkProvider.ConfigureLogging(TvCardCollection.GetFileName(DevicePath), hash,
+        string hash = DeviceDetector.GetHash(DevicePath);
+        _interfaceNetworkProvider.ConfigureLogging(DeviceDetector.GetFileName(DevicePath), hash,
                                                    LogLevelOption.Debug);
         return;
       }
@@ -2365,6 +2364,15 @@ namespace TvLibrary.Implementations.DVB
     #endregion
 
     #region epg & scanning
+
+    /// <summary>
+    /// Register to receive EPG related events.
+    /// </summary>
+    /// <param name="eventListener">The event listener.</param>
+    public override void RegisterEpgEventListener(IEpgEvents eventListener)
+    {
+      _timeshiftingEPGGrabber = new TimeShiftingEPGGrabber(eventListener, this);
+    }
 
     /// <summary>
     /// checks if a received EPGChannel should be filtered from the resultlist

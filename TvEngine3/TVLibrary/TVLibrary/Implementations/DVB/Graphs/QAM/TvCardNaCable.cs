@@ -26,6 +26,8 @@ using TvLibrary.Channels;
 using TvLibrary.Implementations.Helper;
 using TvDatabase;
 using TvLibrary.Epg;
+using UPnP.Infrastructure.CP.Description;
+using System.Xml.XPath;
 
 namespace TvLibrary.Implementations.DVB
 {
@@ -38,17 +40,42 @@ namespace TvLibrary.Implementations.DVB
 
     private IBaseFilter _pbdaFilter = null;
     private IBDA_ConditionalAccess _bdaCa = null;
+    private DeviceDescriptor _descriptor = null;
 
     #endregion
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TvCardNaCable"/> class.
     /// </summary>
-    /// <param name="epgEvents">The EPG events interface.</param>
     /// <param name="device">The device.</param>
-    public TvCardNaCable(IEpgEvents epgEvents, DsDevice device)
-      : base(epgEvents, device)
+    public TvCardNaCable(DsDevice device)
+      : base(device)
     {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="TvCardNaCable"/> class.
+    /// </summary>
+    /// <param name="descriptor">The device description. Essentially an XML document.</param>
+    public TvCardNaCable(DeviceDescriptor descriptor)
+      : base(null)
+    {
+      _descriptor = descriptor;
+      _name = descriptor.FriendlyName;
+
+      // unique device name is as good as a device path for a unique identifier
+      _devicePath = descriptor.DeviceUDN;
+
+      GetPreloadBitAndCardId();
+      GetSupportsPauseGraph();
+
+      String urlBase = String.Empty;
+      XPathNavigator navigator = descriptor.RootDescriptor.DeviceDescription.CreateNavigator();
+      if (navigator.MoveToChild("URLBase", "urn:schemas-upnp-org:device-1-0"))
+      {
+        urlBase = navigator.Value;
+        Log.Log.Debug("debug: found URL base {0}", urlBase);
+      }
     }
 
     #region graphbuilding
