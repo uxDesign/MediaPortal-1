@@ -19,6 +19,8 @@
  *
  */
 #pragma warning(disable : 4995)
+#pragma warning(disable : 4996)
+#include "process.h"
 #include <windows.h>
 #include <commdlg.h>
 #include <bdatypes.h>
@@ -27,26 +29,11 @@
 #include <initguid.h>
 #include <shlobj.h>
 #include <tchar.h>
+#include <queue>
 #include "TsWriter.h"
 #include "..\..\shared\tsheader.h"
 #include "..\..\shared\DebugSettings.h"
 
-static wchar_t logFile[MAX_PATH];
-static WORD logFileParsed = -1;
-
-void GetLogFile(wchar_t *pLog)
-{
-  SYSTEMTIME systemTime;
-  GetLocalTime(&systemTime);
-  if(logFileParsed != systemTime.wDay)
-  {
-    wchar_t folder[MAX_PATH];
-    ::SHGetSpecialFolderPathW(NULL,folder,CSIDL_COMMON_APPDATA,FALSE);
-    swprintf_s(logFile,L"%s\\Team MediaPortal\\MediaPortal TV Server\\log\\TsWriter-%04.4d-%02.2d-%02.2d.Log",folder, systemTime.wYear, systemTime.wMonth, systemTime.wDay);
-    logFileParsed=systemTime.wDay; // rec
-  }
-  wcscpy(pLog, &logFile[0]);
-}
 
 // Setup data
 const AMOVIESETUP_MEDIATYPE sudPinTypes =
@@ -88,33 +75,155 @@ void DumpTs(byte* tspacket)
 DEFINE_TVE_DEBUG_SETTING(DisableCRCCheck)
 DEFINE_TVE_DEBUG_SETTING(DumpRawTS)
 
+//-------------------- Async logging methods -------------------------------------------------
+
 static char logbuffer[2000]; 
 static wchar_t logbufferw[2000];
-void LogDebug(const wchar_t *fmt, ...)
+static WORD logFileParsed = -1;
+
+CCritSec m_qLock;
+CCritSec m_logFileLock;
+std::queue<std::wstring> m_logQueue;
+BOOL m_bLoggerRunning = false;
+HANDLE m_hLogger = NULL;
+CAMEvent m_EndLoggingEvent;
+
+void LogPath(TCHAR* dest, TCHAR* name)
 {
-//#ifdef DEBUG
-	va_list ap;
-	va_start(ap,fmt);
+  TCHAR folder[MAX_PATH];
+  SHGetSpecialFolderPath(NULL,folder,CSIDL_COMMON_APPDATA,FALSE);
+  _stprintf(dest, _T("%s\\Team MediaPortal\\MediaPortal TV Server\\log\\TsWriter.%s"), folder, name);
+}
 
-	va_start(ap,fmt);
-	vswprintf_s(logbufferw, fmt, ap);
-	va_end(ap); 
 
-	wchar_t fileName[MAX_PATH];
-	GetLogFile(fileName);
-	FILE* fp = _wfopen(fileName,L"a+, ccs=UTF-8");
-	if (fp!=NULL)
-	{
-	SYSTEMTIME systemTime;
-	GetLocalTime(&systemTime);
-		fwprintf(fp,L"%02.2d-%02.2d-%04.4d %02.2d:%02.2d:%02.2d.%02.2d %s\n",
-			systemTime.wDay, systemTime.wMonth, systemTime.wYear,
-			systemTime.wHour,systemTime.wMinute,systemTime.wSecond,systemTime.wMilliseconds,
-			logbufferw);
-		fclose(fp);
-		//::OutputDebugStringW(logbufferw);::OutputDebugStringW(L"\n");
-	}
-//#endif
+void LogRotate()
+{   
+  CAutoLock lock(&m_logFileLock);
+    
+  TCHAR fileName[MAX_PATH];
+  LogPath(fileName, _T("log"));
+  TCHAR bakFileName[MAX_PATH];
+  LogPath(bakFileName, _T("bak"));
+  _tremove(bakFileName);
+  _trename(fileName, bakFileName);
+}
+
+
+wstring GetLogLine()
+{
+  CAutoLock lock(&m_qLock);
+  if ( m_logQueue.size() == 0 )
+  {
+    return L"";
+  }
+  wstring ret = m_logQueue.front();
+  m_logQueue.pop();
+  return ret;
+}
+
+
+UINT CALLBACK LogThread(void* param)
+{
+  TCHAR fileName[MAX_PATH];
+  LogPath(fileName, _T("log"));
+  while ( m_bLoggerRunning || (m_logQueue.size() > 0) ) 
+  {
+    if ( m_logQueue.size() > 0 ) 
+    {
+      SYSTEMTIME systemTime;
+      GetLocalTime(&systemTime);
+      if(logFileParsed != systemTime.wDay)
+      {
+        LogRotate();
+        logFileParsed=systemTime.wDay;
+        LogPath(fileName, _T("log"));
+      }
+      
+      CAutoLock lock(&m_logFileLock);
+      FILE* fp = _tfopen(fileName, _T("a+"));
+      if (fp!=NULL)
+      {
+        SYSTEMTIME systemTime;
+        GetLocalTime(&systemTime);
+        wstring line = GetLogLine();
+        while (!line.empty())
+        {
+          fwprintf_s(fp, L"%s", line.c_str());
+          line = GetLogLine();
+        }
+        fclose(fp);
+      }
+      else //discard data
+      {
+        wstring line = GetLogLine();
+        while (!line.empty())
+        {
+          line = GetLogLine();
+        }
+      }
+    }
+    if (m_bLoggerRunning)
+    {
+      m_EndLoggingEvent.Wait(1000); //Sleep for 1000ms, unless thread is ending
+    }
+    else
+    {
+      Sleep(1);
+    }
+  }
+  return 0;
+}
+
+
+void StartLogger()
+{
+  UINT id;
+  m_hLogger = (HANDLE)_beginthreadex(NULL, 0, LogThread, 0, 0, &id);
+  SetThreadPriority(m_hLogger, THREAD_PRIORITY_BELOW_NORMAL);
+}
+
+
+void StopLogger()
+{
+  if (m_hLogger)
+  {
+    m_bLoggerRunning = FALSE;
+    m_EndLoggingEvent.Set();
+    WaitForSingleObject(m_hLogger, INFINITE);	
+    m_EndLoggingEvent.Reset();
+    m_hLogger = NULL;
+  }
+}
+
+
+void LogDebug(const wchar_t *fmt, ...) 
+{
+  static CCritSec lock;
+  va_list ap;
+  va_start(ap,fmt);
+
+  CAutoLock logLock(&lock);
+  if (!m_hLogger) {
+    m_bLoggerRunning = true;
+    StartLogger();
+  }
+  wchar_t buffer[2000]; 
+  int tmp;
+  va_start(ap,fmt);
+  tmp = vswprintf_s(buffer, fmt, ap);
+  va_end(ap); 
+
+  SYSTEMTIME systemTime;
+  GetLocalTime(&systemTime);
+  wchar_t msg[5000];
+  swprintf_s(msg, 5000,L"%02.2d-%02.2d-%04.4d %02.2d:%02.2d:%02.2d.%03.3d [%x]%s\n",
+    systemTime.wDay, systemTime.wMonth, systemTime.wYear,
+    systemTime.wHour,systemTime.wMinute,systemTime.wSecond,
+    systemTime.wMilliseconds,
+    GetCurrentThreadId(),
+    buffer);
+  CAutoLock l(&m_qLock);
+  m_logQueue.push((wstring)msg);
 };
 
 void LogDebug(const char *fmt, ...)
@@ -123,12 +232,15 @@ void LogDebug(const char *fmt, ...)
 	va_start(ap,fmt);
 
 	va_start(ap,fmt);
-	vsprintf(logbuffer, fmt, ap);
+	vsprintf_s(logbuffer, fmt, ap);
 	va_end(ap); 
 
 	MultiByteToWideChar(CP_ACP, 0, logbuffer, -1,logbufferw, sizeof(logbuffer)/sizeof(wchar_t));
 	LogDebug(L"%s", logbufferw);
 };
+
+//------------------------------------------------------------------------------------
+
 
 //
 //  Object creation stuff
@@ -360,9 +472,9 @@ CMpTs::CMpTs(LPUNKNOWN pUnk, HRESULT *phr)
 :CUnknown(NAME("CMpTs"), pUnk),m_pFilter(NULL),m_pPin(NULL)
 {
   m_id=0;
-
+  
   LogDebug("CMpTs::ctor()");
-  LogDebug("--------------- BUG-3782 fix v2 -------------------");
+  LogDebug("--------------- EXP-TsWriter_async_logging -------------------");
 		
 	b_dumpRawPakets=false;
   m_pFilter = new CMpTsFilter(this, GetOwner(), &m_Lock, phr);
@@ -391,6 +503,7 @@ CMpTs::CMpTs(LPUNKNOWN pUnk, HRESULT *phr)
 // Destructor
 CMpTs::~CMpTs()
 {
+  LogDebug("CMpTs::dtor()");
   delete m_pPin;
   delete m_pFilter;
 	delete m_pChannelScanner;
@@ -403,6 +516,7 @@ CMpTs::~CMpTs()
     delete m_vecChannels[i];
   }
   m_vecChannels.clear();
+  StopLogger();
 }
 
 //
