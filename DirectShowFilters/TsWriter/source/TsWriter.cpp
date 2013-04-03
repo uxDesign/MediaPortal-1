@@ -77,12 +77,12 @@ DEFINE_TVE_DEBUG_SETTING(DumpRawTS)
 
 //-------------------- Async logging methods -------------------------------------------------
 
-static char logbuffer[2000]; 
-static wchar_t logbufferw[2000];
-static WORD logFileParsed = -1;
+WORD logFileParsed = -1;
+WORD logFileDate = -1;
+CMpTs* instanceID = 0;
 
 CCritSec m_qLock;
-CCritSec m_logFileLock;
+static CCritSec m_logFileLock;
 std::queue<std::wstring> m_logQueue;
 BOOL m_bLoggerRunning = false;
 HANDLE m_hLogger = NULL;
@@ -102,6 +102,26 @@ void LogRotate()
     
   TCHAR fileName[MAX_PATH];
   LogPath(fileName, _T("log"));
+
+  // Get the file creation date
+  WIN32_FILE_ATTRIBUTE_DATA fileInformation; 
+  if (GetFileAttributesEx(fileName, GetFileExInfoStandard, &fileInformation))
+  {  
+    // Convert the creation time to local time.
+    SYSTEMTIME fileTime;
+    FileTimeToSystemTime(&fileInformation.ftLastWriteTime, &fileTime);
+    
+    logFileDate = fileTime.wDay;
+  
+    SYSTEMTIME systemTime;
+    GetLocalTime(&systemTime);
+    if(fileTime.wDay == systemTime.wDay)
+    {
+      //log file date is today - no rotation needed
+      return;
+    }
+  }  
+
   TCHAR bakFileName[MAX_PATH];
   LogPath(bakFileName, _T("bak"));
   _tremove(bakFileName);
@@ -216,18 +236,25 @@ void LogDebug(const wchar_t *fmt, ...)
   SYSTEMTIME systemTime;
   GetLocalTime(&systemTime);
   wchar_t msg[5000];
-  swprintf_s(msg, 5000,L"%02.2d-%02.2d-%04.4d %02.2d:%02.2d:%02.2d.%03.3d [%x]%s\n",
+  swprintf_s(msg, 5000,L"%02.2d-%02.2d-%04.4d %02.2d:%02.2d:%02.2d.%03.3d [%x] [%x]%s\n",
     systemTime.wDay, systemTime.wMonth, systemTime.wYear,
     systemTime.wHour,systemTime.wMinute,systemTime.wSecond,
     systemTime.wMilliseconds,
+    instanceID,
     GetCurrentThreadId(),
     buffer);
   CAutoLock l(&m_qLock);
-  m_logQueue.push((wstring)msg);
+  if (m_logQueue.size() < 2000) 
+  {
+    m_logQueue.push((wstring)msg);
+  }
 };
 
 void LogDebug(const char *fmt, ...)
 {
+  char logbuffer[2000]; 
+  wchar_t logbufferw[2000];
+
 	va_list ap;
 	va_start(ap,fmt);
 
@@ -472,10 +499,14 @@ CMpTs::CMpTs(LPUNKNOWN pUnk, HRESULT *phr)
 :CUnknown(NAME("CMpTs"), pUnk),m_pFilter(NULL),m_pPin(NULL)
 {
   m_id=0;
+  instanceID = this;
   
+  LogDebug("============================================================");
   LogDebug("CMpTs::ctor()");
-  LogDebug("--------------- EXP-TsWriter_async_logging -------------------");
-		
+  LogDebug("--------- EXP-TsWriter_async_logging -------- instance 0x%x", this);
+  LogDebug("---- Logging format: Date Time [InstanceID] [ThreadID] Message...");
+  
+  		
 	b_dumpRawPakets=false;
   m_pFilter = new CMpTsFilter(this, GetOwner(), &m_Lock, phr);
   if (m_pFilter == NULL) 
