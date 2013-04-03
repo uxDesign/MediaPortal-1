@@ -80,6 +80,7 @@ DEFINE_TVE_DEBUG_SETTING(DumpRawTS)
 WORD logFileParsed = -1;
 WORD logFileDate = -1;
 CMpTs* instanceID = 0;
+int instCount = 0;
 
 CCritSec m_qLock;
 static CCritSec m_logFileLock;
@@ -500,9 +501,10 @@ CMpTs::CMpTs(LPUNKNOWN pUnk, HRESULT *phr)
 {
   m_id=0;
   instanceID = this;
+  instCount++;
   
   LogDebug("============================================================");
-  LogDebug("CMpTs::ctor()");
+  LogDebug("CMpTs::ctor(), instCount = %d", instCount);
   LogDebug("--------- EXP-TsWriter_async_logging -------- instance 0x%x", this);
   LogDebug("---- Logging format: Date Time [InstanceID] [ThreadID] Message...");
   
