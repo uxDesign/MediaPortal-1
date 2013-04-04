@@ -59,7 +59,6 @@ namespace TvLibrary.Implementations.DVB
       : base(card)
     {
       _enableWaitForVCT = true;
-      _isDigitalCableScan = true;
     }
 
     /// <summary>
