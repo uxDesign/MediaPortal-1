@@ -29,7 +29,9 @@ using DirectShowLib.BDA;
 using Microsoft.Win32;
 using TvDatabase;
 using TvLibrary.Implementations.Analog;
+using TvLibrary.Implementations.Dri;
 using TvLibrary.Implementations.DVB;
+using TvLibrary.Implementations.Pbda;
 using TvLibrary.Implementations.RadioWebStream;
 using TvLibrary.Interfaces;
 using TvLibrary.Interfaces.Analyzer;
@@ -43,8 +45,11 @@ namespace TvLibrary.Implementations
   /// </summary>
   public class DeviceDetector : IDisposable
   {
-    // Used for detecting UPnP devices.
-    private readonly UPnPNetworkTracker _upnpAgent = new UPnPNetworkTracker(new CPData());
+    // Used for detecting and communicating with UPnP devices.
+    private CPData _upnpControlPointData = null;
+    private UPnPNetworkTracker _upnpAgent = null;
+    private UPnPControlPoint _upnpControlPoint = null;
+
     // Are we actively detecting devices?
     private volatile bool _detecting = false;
     // The thread responsible for actually detecting devices.
@@ -53,7 +58,6 @@ namespace TvLibrary.Implementations
     private IDeviceEventListener _deviceEventListener = null;
 
     // Network providers
-    private IBaseFilter _genericNp = null;
     private IBaseFilter _atscNp = null;
     private IBaseFilter _dvbcNp = null;
     private IBaseFilter _dvbsNp = null;
@@ -86,8 +90,13 @@ namespace TvLibrary.Implementations
       _detecting = true;
 
       // Start detecting UPnP devices.
+      // IMPORTANT: you should start the control point before the network tracker.
+      _upnpControlPointData = new CPData();
+      _upnpAgent = new UPnPNetworkTracker(_upnpControlPointData);
       _upnpAgent.RootDeviceAdded += UpnpRootDeviceAdded;
       _upnpAgent.RootDeviceRemoved += UpnpRootDeviceRemoved;
+      _upnpControlPoint = new UPnPControlPoint(_upnpAgent);
+      _upnpControlPoint.Start();
       _upnpAgent.Start();
 
       // Start detecting BDA/WDM devices.
@@ -106,6 +115,7 @@ namespace TvLibrary.Implementations
     {
       _detecting = false;
       _upnpAgent.Close();
+      _upnpControlPoint.Close();
 
       if (_detectThread != null && _detectThread.IsAlive)
       {
@@ -125,11 +135,6 @@ namespace TvLibrary.Implementations
         FilterGraphTools.RemoveAllFilters(_graphBuilder);
         Release.ComObject("device detection graph builder", _graphBuilder);
         _graphBuilder = null;
-      }
-      if (_genericNp != null)
-      {
-        Release.ComObject("device detection generic network provider", _genericNp);
-        _genericNp = null;
       }
       if (_atscNp != null)
       {
@@ -186,8 +191,8 @@ namespace TvLibrary.Implementations
         return;
       }
 
-      HashSet<String> previouslyKnownDevices = new HashSet<String>();
-      HashSet<String> knownDevices = new HashSet<String>();
+      HashSet<string> previouslyKnownDevices = new HashSet<string>();
+      HashSet<string> knownDevices = new HashSet<string>();
 
       // Always one RWS "tuner".
       RadioWebStreamCard rws = new RadioWebStreamCard();
@@ -196,7 +201,7 @@ namespace TvLibrary.Implementations
       while (_detecting)
       {
         previouslyKnownDevices = knownDevices;
-        knownDevices = new HashSet<String>();
+        knownDevices = new HashSet<string>();
         knownDevices.Add(rws.DevicePath);
 
         // Detect TechniSat SkyStar/AirStar/CableStar 2 & IP streaming devices.
@@ -212,7 +217,7 @@ namespace TvLibrary.Implementations
         DetectSupportedBdaSourceDevices(ref previouslyKnownDevices, ref knownDevices);
 
         // Remove the devices that are no longer connected.
-        foreach (String previouslyKnownDevice in previouslyKnownDevices)
+        foreach (string previouslyKnownDevice in previouslyKnownDevices)
         {
           if (!knownDevices.Contains(previouslyKnownDevice))
           {
@@ -320,15 +325,9 @@ namespace TvLibrary.Implementations
       locator.put_SymbolRate(-1);
       tuningSpace.put_DefaultLocator(locator);
       ((ITuner)_dvbtNp).put_TuningSpace(tuningSpace);
-
-      // MS generic, MCE 2005 roll-up 2 or better
-      if (FilterGraphTools.IsThisComObjectInstalled(typeof(NetworkProvider).GUID))
-      {
-        _genericNp = FilterGraphTools.AddFilterFromClsid(_graphBuilder, typeof(NetworkProvider).GUID, "Microsoft Network Provider");
-      }
     }
 
-    private void DetectSupportedLegacyAmFilterDevices(ref HashSet<String> previouslyKnownDevices, ref HashSet<String> knownDevices)
+    private void DetectSupportedLegacyAmFilterDevices(ref HashSet<string> previouslyKnownDevices, ref HashSet<string> knownDevices)
     {
       Log.Log.Debug("Detect legacy AM filter devices");
       TvBusinessLayer layer = new TvBusinessLayer();
@@ -338,9 +337,9 @@ namespace TvLibrary.Implementations
       DsDevice[] connectedDevices = DsDevice.GetDevicesOfCat(FilterCategory.LegacyAmFilterCategory);
       foreach (DsDevice connectedDevice in connectedDevices)
       {
-        String name = connectedDevice.Name;
-        String devicePath = connectedDevice.DevicePath;
-        if (String.IsNullOrEmpty(name) || String.IsNullOrEmpty(devicePath))
+        string name = connectedDevice.Name;
+        string devicePath = connectedDevice.DevicePath;
+        if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(devicePath))
         {
           continue;
         }
@@ -392,15 +391,15 @@ namespace TvLibrary.Implementations
       }
     }
 
-    private void DetectSupportedAmKsCrossbarDevices(ref HashSet<String> previouslyKnownDevices, ref HashSet<String> knownDevices)
+    private void DetectSupportedAmKsCrossbarDevices(ref HashSet<string> previouslyKnownDevices, ref HashSet<string> knownDevices)
     {
       Log.Log.WriteFile("Detect AM KS crossbar devices");
       DsDevice[] connectedDevices = DsDevice.GetDevicesOfCat(FilterCategory.AMKSCrossbar);
       foreach (DsDevice connectedDevice in connectedDevices)
       {
-        String name = connectedDevice.Name;
-        String devicePath = connectedDevice.DevicePath;
-        if (!String.IsNullOrEmpty(name) && !String.IsNullOrEmpty(devicePath) &&
+        string name = connectedDevice.Name;
+        string devicePath = connectedDevice.DevicePath;
+        if (!string.IsNullOrEmpty(name) && !string.IsNullOrEmpty(devicePath) &&
           (name.Equals("Hauppauge HD PVR Crossbar") || name.Contains("Hauppauge Colossus Crossbar"))
         )
         {
@@ -415,15 +414,15 @@ namespace TvLibrary.Implementations
       }
     }
 
-    private void DetectSupportedAmKsTvTunerDevices(ref HashSet<String> previouslyKnownDevices, ref HashSet<String> knownDevices)
+    private void DetectSupportedAmKsTvTunerDevices(ref HashSet<string> previouslyKnownDevices, ref HashSet<string> knownDevices)
     {
       Log.Log.Debug("Detect AM KS TV tuner devices");
       DsDevice[] connectedDevices = DsDevice.GetDevicesOfCat(FilterCategory.AMKSTVTuner);
       foreach (DsDevice connectedDevice in connectedDevices)
       {
-        String name = connectedDevice.Name;
-        String devicePath = connectedDevice.DevicePath;
-        if (!String.IsNullOrEmpty(name) && !String.IsNullOrEmpty(devicePath))
+        string name = connectedDevice.Name;
+        string devicePath = connectedDevice.DevicePath;
+        if (!string.IsNullOrEmpty(name) && !string.IsNullOrEmpty(devicePath))
         {
           knownDevices.Add(devicePath);
           if (!previouslyKnownDevices.Contains(devicePath))
@@ -436,15 +435,19 @@ namespace TvLibrary.Implementations
       }
     }
 
-    private void DetectSupportedBdaSourceDevices(ref HashSet<String> previouslyKnownDevices, ref HashSet<String> knownDevices)
+    private void DetectSupportedBdaSourceDevices(ref HashSet<string> previouslyKnownDevices, ref HashSet<string> knownDevices)
     {
       Log.Log.WriteFile("Detect BDA source devices");
+
+      // MS generic, MCE 2005 roll-up 2 or better
+      bool isMsGenericNpAvailable = FilterGraphTools.IsThisComObjectInstalled(typeof(NetworkProvider).GUID);
+
       DsDevice[] connectedDevices = DsDevice.GetDevicesOfCat(FilterCategory.BDASourceFiltersCategory);
       foreach (DsDevice connectedDevice in connectedDevices)
       {
-        String name = connectedDevice.Name;
-        String devicePath = connectedDevice.DevicePath;
-        if (String.IsNullOrEmpty(name) || String.IsNullOrEmpty(devicePath))
+        string name = connectedDevice.Name;
+        string devicePath = connectedDevice.DevicePath;
+        if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(devicePath))
         {
           continue;
         }
@@ -458,9 +461,9 @@ namespace TvLibrary.Implementations
         if (name.StartsWith("HDHomeRun Prime") || name.StartsWith("Ceton InfiniTV"))
         {
           Log.Log.WriteFile("Detected new PBDA CableCARD tuner device {0} {1}", name, devicePath);
-          TvCardNaCable cableTuner = new TvCardNaCable(connectedDevice);
+          TunerPbdaCableCard cableCardTuner = new TunerPbdaCableCard(connectedDevice);
           knownDevices.Add(devicePath);
-          _deviceEventListener.OnDeviceAdded(cableTuner);
+          _deviceEventListener.OnDeviceAdded(cableCardTuner);
           continue;
         }
 
@@ -493,7 +496,7 @@ namespace TvLibrary.Implementations
           {
             Log.Log.WriteFile("  check type with MP NP");
             IDvbNetworkProvider interfaceNetworkProvider = (IDvbNetworkProvider)_mpNp;
-            String hash = GetHash(devicePath);
+            string hash = GetHash(devicePath);
             interfaceNetworkProvider.ConfigureLogging(GetFileName(devicePath), hash, LogLevelOption.Debug);
             if (ConnectFilter(_graphBuilder, _mpNp, tmpDeviceFilter))
             {
@@ -528,48 +531,70 @@ namespace TvLibrary.Implementations
           }
           // Try the Microsoft network provider next if the MP NP
           // failed and the MS generic NP is available.
-          if (deviceToAdd == null && _genericNp != null)
+          if (deviceToAdd == null && isMsGenericNpAvailable)
           {
+            // Note: the MS NP must be added/removed to/from the graph for each
+            // device that is checked. If you don't do this, the networkTypes
+            // list gets longer and longer and longer.
             Log.Log.WriteFile("  check type with MS NP");
-            if (ConnectFilter(_graphBuilder, _genericNp, tmpDeviceFilter))
+            IBaseFilter genericNp = null;
+            try
             {
-              int networkTypesMax = 5;
-              int networkTypeCount;
-              Guid[] networkTypes = new Guid[networkTypesMax];
-              int hr = (_genericNp as ITunerCap).get_SupportedNetworkTypes(networkTypesMax, out networkTypeCount, networkTypes);
-              Log.Log.WriteFile("  network type count = {0}", networkTypeCount);
-              for (int n = 0; n < networkTypeCount; n++)
-              {
-                Log.Log.WriteFile("  network type {0} = {1}", n, networkTypes[n]);
-                if (networkTypes[n] == typeof(DVBTNetworkProvider).GUID && !isCablePreferred)
-                {
-                  deviceToAdd = new TvCardDVBT(connectedDevice);
-                }
-                else if (networkTypes[n] == typeof(DVBSNetworkProvider).GUID && !isCablePreferred)
-                {
-                  deviceToAdd = new TvCardDVBS(connectedDevice);
-                }
-                else if (networkTypes[n] == typeof(DVBCNetworkProvider).GUID)
-                {
-                  deviceToAdd = new TvCardDVBC(connectedDevice);
-                }
-                else if (networkTypes[n] == typeof(ATSCNetworkProvider).GUID)
-                {
-                  deviceToAdd = new TvCardATSC(connectedDevice);
-                }
-                if (deviceToAdd != null)
-                {
-                  break;
-                }
-                else if (n == (networkTypeCount - 1))
-                {
-                  Log.Log.WriteFile(" connected to MS NP but type not recognised");
-                }
-              }
+              genericNp = FilterGraphTools.AddFilterFromClsid(_graphBuilder, typeof(NetworkProvider).GUID, "Microsoft Network Provider");
+            }
+            catch
+            {
+              genericNp = null;
+            }
+            if (genericNp == null)
+            {
+              Log.Log.WriteFile(" failed to add MS NP to graph");
             }
             else
             {
-              Log.Log.WriteFile("  failed to connect to MS NP");
+              if (ConnectFilter(_graphBuilder, genericNp, tmpDeviceFilter))
+              {
+                int networkTypesMax = 5;
+                int networkTypeCount;
+                Guid[] networkTypes = new Guid[networkTypesMax];
+                int hr = (genericNp as ITunerCap).get_SupportedNetworkTypes(networkTypesMax, out networkTypeCount, networkTypes);
+                Log.Log.WriteFile("  network type count = {0}", networkTypeCount);
+                for (int n = 0; n < networkTypeCount; n++)
+                {
+                  Log.Log.WriteFile("  network type {0} = {1}", n, networkTypes[n]);
+                  if (networkTypes[n] == typeof(DVBTNetworkProvider).GUID && !isCablePreferred)
+                  {
+                    deviceToAdd = new TvCardDVBT(connectedDevice);
+                  }
+                  else if (networkTypes[n] == typeof(DVBSNetworkProvider).GUID && !isCablePreferred)
+                  {
+                    deviceToAdd = new TvCardDVBS(connectedDevice);
+                  }
+                  else if (networkTypes[n] == typeof(DVBCNetworkProvider).GUID)
+                  {
+                    deviceToAdd = new TvCardDVBC(connectedDevice);
+                  }
+                  else if (networkTypes[n] == typeof(ATSCNetworkProvider).GUID)
+                  {
+                    deviceToAdd = new TvCardATSC(connectedDevice);
+                  }
+                  if (deviceToAdd != null)
+                  {
+                    break;
+                  }
+                  else if (n == (networkTypeCount - 1))
+                  {
+                    Log.Log.WriteFile(" connected to MS NP but type not recognised");
+                  }
+                }
+              }
+              else
+              {
+                Log.Log.WriteFile("  failed to connect to MS NP");
+              }
+
+              Release.ComObject("device detection generic network provider", genericNp);
+              genericNp = null;
             }
           }
           // Last shot is the old style Microsoft network providers.
@@ -620,11 +645,11 @@ namespace TvLibrary.Implementations
     /// </summary>
     /// <param name="devicePath">Device Path of the card</param>
     /// <returns>Complete filename of the configuration file</returns>
-    public static String GetFileName(string devicePath)
+    public static string GetFileName(string devicePath)
     {
       string hash = GetHash(devicePath);
-      String pathName = PathManager.GetDataPath;
-      String fileName = String.Format(@"{0}\Log\NetworkProvider-{1}.log", pathName, hash);
+      string pathName = PathManager.GetDataPath;
+      string fileName = string.Format(@"{0}\Log\NetworkProvider-{1}.log", pathName, hash);
       Log.Log.WriteFile("NetworkProvider logfilename: " + fileName);
       Directory.CreateDirectory(Path.GetDirectoryName(fileName));
       return fileName;
@@ -669,7 +694,7 @@ namespace TvLibrary.Implementations
           else
           {
             Log.Log.WriteFile("  add {0} {1}", d.FriendlyName, d.DeviceUDN);
-            _deviceEventListener.OnDeviceAdded(new TvCardNaCable(d));
+            _deviceEventListener.OnDeviceAdded(new TunerDri(d, _upnpControlPoint));
           }
         }
       }
@@ -698,7 +723,7 @@ namespace TvLibrary.Implementations
 
     #region hardware specific functions
 
-    private String GetHdHomeRunSourceType(String tunerName)
+    private string GetHdHomeRunSourceType(string tunerName)
     {
       try
       {
@@ -711,10 +736,10 @@ namespace TvLibrary.Implementations
         //    "Digital Cable" [DVB-C, clear QAM]
         //    "Digital Antenna" [DVB-T, ATSC]
         //    "CableCARD" [North American encrypted cable television]
-        String serialNumber = tunerName.Replace("Silicondust HDHomeRun Tuner ", "");
+        string serialNumber = tunerName.Replace("Silicondust HDHomeRun Tuner ", "");
         using (
           RegistryKey registryKey =
-            Registry.LocalMachine.OpenSubKey(String.Format(@"SOFTWARE\Silicondust\HDHomeRun\Tuners\{0}", serialNumber)))
+            Registry.LocalMachine.OpenSubKey(string.Format(@"SOFTWARE\Silicondust\HDHomeRun\Tuners\{0}", serialNumber)))
         {
           if (registryKey != null)
           {

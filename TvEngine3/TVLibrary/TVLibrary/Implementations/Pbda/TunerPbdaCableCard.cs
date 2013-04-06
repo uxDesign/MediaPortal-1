@@ -21,61 +21,33 @@
 using System;
 using DirectShowLib;
 using DirectShowLib.BDA;
-using TvLibrary.Interfaces;
 using TvLibrary.Channels;
+using TvLibrary.Implementations.DVB;
 using TvLibrary.Implementations.Helper;
-using TvDatabase;
-using TvLibrary.Epg;
-using UPnP.Infrastructure.CP.Description;
-using System.Xml.XPath;
+using TvLibrary.Interfaces;
 
-namespace TvLibrary.Implementations.DVB
+namespace TvLibrary.Implementations.Pbda
 {
   /// <summary>
-  /// Implementation of <see cref="T:TvLibrary.Interfaces.ITVCard"/> which handles CableCARD digital cable tuners.
+  /// Implementation of <see cref="T:TvLibrary.Interfaces.ITVCard"/> which supports CableCARD
+  /// digital cable tuners using the Microsoft PBDA framework.
   /// </summary>
-  public class TvCardNaCable : TvCardATSC
+  public class TunerPbdaCableCard : TvCardATSC
   {
     #region variables
 
     private IBaseFilter _pbdaFilter = null;
     private IBDA_ConditionalAccess _bdaCa = null;
-    private DeviceDescriptor _descriptor = null;
 
     #endregion
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="TvCardNaCable"/> class.
+    /// Initialise a new instance of the <see cref="TunerPbdaCableCard"/> class.
     /// </summary>
     /// <param name="device">The device.</param>
-    public TvCardNaCable(DsDevice device)
+    public TunerPbdaCableCard(DsDevice device)
       : base(device)
     {
-    }
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="TvCardNaCable"/> class.
-    /// </summary>
-    /// <param name="descriptor">The device description. Essentially an XML document.</param>
-    public TvCardNaCable(DeviceDescriptor descriptor)
-      : base(null)
-    {
-      _descriptor = descriptor;
-      _name = descriptor.FriendlyName;
-
-      // unique device name is as good as a device path for a unique identifier
-      _devicePath = descriptor.DeviceUDN;
-
-      GetPreloadBitAndCardId();
-      GetSupportsPauseGraph();
-
-      String urlBase = String.Empty;
-      XPathNavigator navigator = descriptor.RootDescriptor.DeviceDescription.CreateNavigator();
-      if (navigator.MoveToChild("URLBase", "urn:schemas-upnp-org:device-1-0"))
-      {
-        urlBase = navigator.Value;
-        Log.Log.Debug("debug: found URL base {0}", urlBase);
-      }
     }
 
     #region graphbuilding
@@ -89,10 +61,10 @@ namespace TvLibrary.Implementations.DVB
       {
         if (_graphState != GraphState.Idle)
         {
-          Log.Log.Error("NA Cable: graph already built");
+          Log.Log.Error("PBDA CC: graph already built");
           throw new TvException("Graph already built");
         }
-        Log.Log.WriteFile("NA Cable: build graph");
+        Log.Log.WriteFile("PBDA CC: build graph");
         _graphBuilder = (IFilterGraph2)new FilterGraph();
         _capBuilder = (ICaptureGraphBuilder2)new CaptureGraphBuilder2();
         _capBuilder.SetFiltergraph(_graphBuilder);
@@ -108,13 +80,13 @@ namespace TvLibrary.Implementations.DVB
         _bdaCa = _filterTuner as IBDA_ConditionalAccess;
         if (_bdaCa == null)
         {
-          Log.Log.Debug("NA Cable: tuner filter does not implement required interface");
+          Log.Log.Debug("PBDA CC: tuner filter does not implement required interface");
           throw new TvExceptionGraphBuildingFailed("The tuner filter does not implement the required interface.");
         }
         AddPbdaFilter(ref lastFilter);
         CompleteGraph(ref lastFilter);
         bool connected = ConnectTsWriter(_filterTuner);
-        Log.Log.Debug("debug: connect OOB pin result = {0}", connected);
+        Log.Log.Debug("PBDA CC: connect OOB pin result = {0}", connected);
         CheckCableCardInfo();
         string graphName = _device.Name + " - NA Cable Graph.grf";
         FilterGraphTools.SaveGraphFile(_graphBuilder, graphName);
@@ -126,7 +98,7 @@ namespace TvLibrary.Implementations.DVB
         Log.Log.Write(ex);
         Dispose();
         _graphState = GraphState.Idle;
-        throw new TvExceptionGraphBuildingFailed("Graph building failed", ex);
+        throw new TvExceptionGraphBuildingFailed("Graph building failed.", ex);
       }
     }
 
@@ -143,7 +115,7 @@ namespace TvLibrary.Implementations.DVB
 
     private void AddPbdaFilter(ref IBaseFilter lastFilter)
     {
-      Log.Log.Debug("NA Cable: add PBDA filter");
+      Log.Log.Debug("PBDA CC: add PBDA filter");
 
       // PBDA PTFilter
       // {89C2E132-C29B-11DB-96FA-005056C00008}
@@ -152,14 +124,14 @@ namespace TvLibrary.Implementations.DVB
       _pbdaFilter = FilterGraphTools.AddFilterFromClsid(_graphBuilder, pbdaPtFilter, "PBDA PTFilter");
       if (_pbdaFilter == null)
       {
-        Log.Log.Debug("NA Cable: failed to add PBDA filter, filter is null - you must use Windows 7!");
+        Log.Log.Debug("PBDA CC: failed to add PBDA filter, filter is null - you must use Windows 7+!");
         throw new TvExceptionGraphBuildingFailed("Failed to add PBDA filter to graph.");
       }
 
       int hr = _capBuilder.RenderStream(null, null, lastFilter, null, _pbdaFilter);
       if (hr != 0)
       {
-        Log.Log.Debug("NA Cable: failed to connect PBDA filter into the graph, hr = 0x{0:x}", hr);
+        Log.Log.Debug("PBDA CC: failed to connect PBDA filter into the graph, hr = 0x{0:x}", hr);
         throw new TvExceptionGraphBuildingFailed("Failed to connect PBDA filter into graph.");
       }
       lastFilter = _pbdaFilter;
@@ -172,7 +144,7 @@ namespace TvLibrary.Implementations.DVB
         return;
       }
       RunGraph(-1);
-      Log.Log.Debug("NA Cable: check CableCARD info");
+      Log.Log.Debug("PBDA CC: check CableCARD info");
       int hr;
 
       // Smart card information.
@@ -188,7 +160,7 @@ namespace TvLibrary.Implementations.DVB
         hr = _bdaCa.get_SmartCardInfo(out cardName, out cardManufacturer, out isDaylightSavings, out ratingRegion, out timeOffset, out lang, out locationCode);
         if (hr == 0)
         {
-          Log.Log.Debug("NA Cable: got smart card info");
+          Log.Log.Debug("PBDA CC: got smart card info");
           Log.Log.Debug("  card name         = {0}", cardName);
           Log.Log.Debug("  card manufacturer = {0}", cardManufacturer);
           Log.Log.Debug("  is DS time        = {0}", isDaylightSavings);
@@ -203,12 +175,12 @@ namespace TvLibrary.Implementations.DVB
         }
         else
         {
-          Log.Log.Debug("NA Cable: failed to read smart card info, hr = 0x{0:x}", hr);
+          Log.Log.Debug("PBDA CC: failed to read smart card info, hr = 0x{0:x}", hr);
         }
       }
       catch (Exception ex)
       {
-        Log.Log.Debug("NA Cable: caught exception when attempting to read smart card info\r\n{0}", ex.ToString());
+        Log.Log.Debug("PBDA CC: caught exception when attempting to read smart card info\r\n{0}", ex.ToString());
       }
 
       // Smart card applications.
@@ -221,7 +193,7 @@ namespace TvLibrary.Implementations.DVB
         hr = _bdaCa.get_SmartCardStatus(out status, out association, out error, out isOutOfBandTunerLocked);
         if (hr == 0)
         {
-          Log.Log.Debug("NA Cable: got smart card status");
+          Log.Log.Debug("PBDA CC: got smart card status");
           Log.Log.Debug("  status      = {0}", status);
           Log.Log.Debug("  association = {0}", association);
           Log.Log.Debug("  OOB locked  = {0}", isOutOfBandTunerLocked);
@@ -229,12 +201,12 @@ namespace TvLibrary.Implementations.DVB
         }
         else
         {
-          Log.Log.Debug("NA Cable: failed to read smart card status, hr = 0x{0:x}", hr);
+          Log.Log.Debug("PBDA CC: failed to read smart card status, hr = 0x{0:x}", hr);
         }
       }
       catch (Exception ex)
       {
-        Log.Log.Debug("NA Cable: caught exception when attempting to read smart card status\r\n{0}", ex.ToString());
+        Log.Log.Debug("PBDA CC: caught exception when attempting to read smart card status\r\n{0}", ex.ToString());
       }
 
       // Smart card applications.
@@ -246,7 +218,7 @@ namespace TvLibrary.Implementations.DVB
         hr = _bdaCa.get_SmartCardApplications(ref scAppCount, maxAppCount, applicationDetails);
         if (hr == 0)
         {
-          Log.Log.Debug("NA Cable: got smart card application info, application count = {0}", scAppCount);
+          Log.Log.Debug("PBDA CC: got smart card application info, application count = {0}", scAppCount);
           for (int i = 0; i < scAppCount; i++)
           {
             Log.Log.Debug("  application #{0}", i + 1);
@@ -258,12 +230,12 @@ namespace TvLibrary.Implementations.DVB
         }
         else
         {
-          Log.Log.Debug("NA Cable: failed to read smart card application info, hr = 0x{0:x}", hr);
+          Log.Log.Debug("PBDA CC: failed to read smart card application info, hr = 0x{0:x}", hr);
         }
       }
       catch (Exception ex)
       {
-        Log.Log.Debug("NA Cable: caught exception when attempting to read smart card application info\r\n{0}", ex.ToString());
+        Log.Log.Debug("PBDA CC: caught exception when attempting to read smart card application info\r\n{0}", ex.ToString());
       }
     }
 
@@ -274,7 +246,7 @@ namespace TvLibrary.Implementations.DVB
     protected override ITvSubChannel SubmitTuneRequest(int subChannelId, IChannel channel, ITuneRequest tuneRequest,
                                               bool performTune)
     {
-      Log.Log.Info("NA Cable: tune channel \"{0}\", subChannel {1} ", channel.Name, subChannelId);
+      Log.Log.Info("PBDA CC: tune channel \"{0}\", subChannel {1} ", channel.Name, subChannelId);
       RunGraph(-1);
       bool newSubChannel = false;
       if (_mapSubChannels.ContainsKey(subChannelId) == false)
@@ -298,7 +270,7 @@ namespace TvLibrary.Implementations.DVB
         }
         if (performTune)
         {
-          Log.Log.WriteFile("NA Cable: tuning...");
+          Log.Log.WriteFile("PBDA CC: tuning...");
           int hr = _bdaCa.TuneByChannel((ushort)(channel as ATSCChannel).PhysicalChannel);
           if (hr != 0)
           {
@@ -308,7 +280,7 @@ namespace TvLibrary.Implementations.DVB
         }
         else
         {
-          Log.Log.WriteFile("NA Cable: already tuned");
+          Log.Log.WriteFile("PBDA CC: already tuned");
         }
         _lastSignalUpdate = DateTime.MinValue;
         _mapSubChannels[subChannelId].OnAfterTune();
@@ -317,11 +289,8 @@ namespace TvLibrary.Implementations.DVB
       {        
         if (newSubChannel)
         {
-          Log.Log.WriteFile("NA Cable: tuning failed, removing subchannel");
-          if (_mapSubChannels.ContainsKey(subChannelId))
-          {
-            _mapSubChannels.Remove(subChannelId);
-          }
+          Log.Log.WriteFile("PBDA CC: tuning failed, removing subchannel");
+          _mapSubChannels.Remove(subChannelId);
         }
         throw;
       }
@@ -358,7 +327,7 @@ namespace TvLibrary.Implementations.DVB
     /// <returns>true if succeeded else false</returns>
     public override ITvSubChannel Scan(int subChannelId, IChannel channel)
     {
-      Log.Log.WriteFile("NA Cable: scan");
+      Log.Log.WriteFile("PBDA CC: scan");
       try
       {
         if (_graphState == GraphState.Idle)
@@ -373,7 +342,7 @@ namespace TvLibrary.Implementations.DVB
         int hr = _bdaCa.get_SmartCardStatus(out status, out association, out error, out isOutOfBandTunerLocked);
         if (hr == 0)
         {
-          Log.Log.Debug("NA Cable: got smart card status");
+          Log.Log.Debug("PBDA CC: got smart card status");
           Log.Log.Debug("  status      = {0}", status);
           Log.Log.Debug("  association = {0}", association);
           Log.Log.Debug("  OOB locked  = {0}", isOutOfBandTunerLocked);
@@ -381,7 +350,7 @@ namespace TvLibrary.Implementations.DVB
         }
         else
         {
-          Log.Log.Debug("NA Cable: failed to read smart card status, hr = 0x{0:x}", hr);
+          Log.Log.Debug("PBDA CC: failed to read smart card status, hr = 0x{0:x}", hr);
         }
 
         if (hr != 0 || !isOutOfBandTunerLocked)
@@ -392,19 +361,19 @@ namespace TvLibrary.Implementations.DVB
         // Create a subchannel.
         if (_mapSubChannels.ContainsKey(subChannelId) == false)
         {
-          Log.Log.Info("NA Cable: creating new subchannel");
+          Log.Log.Info("PBDA CC: creating new subchannel");
           subChannelId = GetNewSubChannel(channel);
         }
         else
         {
-          Log.Log.Info("NA Cable: using existing subchannel");
+          Log.Log.Info("PBDA CC: using existing subchannel");
         }
         RunGraph(-1);
         return _mapSubChannels[subChannelId];
       }
       catch (Exception ex)
       {
-        Log.Log.Debug("NA Cable: caught exception when attempting to scan\r\n{0}", ex.ToString());
+        Log.Log.Debug("PBDA CC: caught exception when attempting to scan\r\n{0}", ex.ToString());
       }
       return null;
     }
@@ -414,7 +383,7 @@ namespace TvLibrary.Implementations.DVB
       ATSCChannel atscChannel = channel as ATSCChannel;
       if (atscChannel == null)
       {
-        Log.Log.WriteFile("NA Cable: channel is not a ATSC channel!!! {0}", channel.GetType().ToString());
+        Log.Log.WriteFile("PBDA CC: channel is not a ATSC channel!!! {0}", channel.GetType().ToString());
         return false;
       }
       if (_graphState == GraphState.Idle)
@@ -426,9 +395,6 @@ namespace TvLibrary.Implementations.DVB
 
     #endregion
 
-    /// <summary>
-    /// destroys the graph and cleans up any resources
-    /// </summary>
     protected void Decompose()
     {
       base.Decompose();
