@@ -35,6 +35,7 @@ using TvLibrary.Implementations.Pbda;
 using TvLibrary.Implementations.RadioWebStream;
 using TvLibrary.Interfaces;
 using TvLibrary.Interfaces.Analyzer;
+using UPnP.Infrastructure;
 using UPnP.Infrastructure.CP;
 using UPnP.Infrastructure.CP.Description;
 
@@ -57,7 +58,7 @@ namespace TvLibrary.Implementations
     // The listener that we notify when device events occur.
     private IDeviceEventListener _deviceEventListener = null;
 
-    // Network providers
+    // network providers
     private IBaseFilter _atscNp = null;
     private IBaseFilter _dvbcNp = null;
     private IBaseFilter _dvbsNp = null;
@@ -83,7 +84,7 @@ namespace TvLibrary.Implementations
       int delayDetect = Convert.ToInt32(setting.Value);
       if (delayDetect >= 1)
       {
-        Log.Log.WriteFile("Delaying device detection for {0} second(s)", delayDetect);
+        Log.Log.Info("Delaying device detection for {0} second(s)", delayDetect);
         Thread.Sleep(delayDetect * 1000);
       }
 
@@ -91,6 +92,7 @@ namespace TvLibrary.Implementations
 
       // Start detecting UPnP devices.
       // IMPORTANT: you should start the control point before the network tracker.
+      UPnPConfiguration.LOGGER = new Tve3Logger();
       _upnpControlPointData = new CPData();
       _upnpAgent = new UPnPNetworkTracker(_upnpControlPointData);
       _upnpAgent.RootDeviceAdded += UpnpRootDeviceAdded;
@@ -179,7 +181,7 @@ namespace TvLibrary.Implementations
     /// </summary>
     private void DetectDevices()
     {
-      Log.Log.WriteFile("Detecting BDA/WDM devices...");
+      Log.Log.Debug("Detecting BDA/WDM devices...");
 
       try
       {
@@ -221,7 +223,7 @@ namespace TvLibrary.Implementations
         {
           if (!knownDevices.Contains(previouslyKnownDevice))
           {
-            Log.Log.WriteFile("Device {0} removed", previouslyKnownDevice);
+            Log.Log.Info("Device {0} removed", previouslyKnownDevice);
             _deviceEventListener.OnDeviceRemoved(previouslyKnownDevice);
           }
         }
@@ -349,7 +351,7 @@ namespace TvLibrary.Implementations
           knownDevices.Add(devicePath);
           if (!previouslyKnownDevices.Contains(devicePath))
           {
-            Log.Log.WriteFile("Detected new TechniSat *Star 2 tuner root device");
+            Log.Log.Info("Detected new TechniSat *Star 2 tuner root device");
             TvCardDvbSS2 tuner = new TvCardDvbSS2(connectedDevice);
             _deviceEventListener.OnDeviceAdded(tuner);
           }
@@ -362,7 +364,7 @@ namespace TvLibrary.Implementations
             knownDevices.Add(iptvTuner.DevicePath);
             if (!previouslyKnownDevices.Contains(iptvTuner.DevicePath))
             {
-              Log.Log.WriteFile("Detected new Elecard IPTV tuner {0} {1}", iptvTuner.Name, iptvTuner.DevicePath);
+              Log.Log.Info("Detected new Elecard IPTV tuner {0} {1}", iptvTuner.Name, iptvTuner.DevicePath);
               _deviceEventListener.OnDeviceAdded(iptvTuner);
             }
             else
@@ -379,7 +381,7 @@ namespace TvLibrary.Implementations
             knownDevices.Add(iptvTuner.DevicePath);
             if (!previouslyKnownDevices.Contains(iptvTuner.DevicePath))
             {
-              Log.Log.WriteFile("Detected new MediaPortal IPTV tuner {0} {1}", iptvTuner.Name, iptvTuner.DevicePath);
+              Log.Log.Info("Detected new MediaPortal IPTV tuner {0} {1}", iptvTuner.Name, iptvTuner.DevicePath);
               _deviceEventListener.OnDeviceAdded(iptvTuner);
             }
             else
@@ -393,7 +395,7 @@ namespace TvLibrary.Implementations
 
     private void DetectSupportedAmKsCrossbarDevices(ref HashSet<string> previouslyKnownDevices, ref HashSet<string> knownDevices)
     {
-      Log.Log.WriteFile("Detect AM KS crossbar devices");
+      Log.Log.Debug("Detect AM KS crossbar devices");
       DsDevice[] connectedDevices = DsDevice.GetDevicesOfCat(FilterCategory.AMKSCrossbar);
       foreach (DsDevice connectedDevice in connectedDevices)
       {
@@ -406,7 +408,7 @@ namespace TvLibrary.Implementations
           knownDevices.Add(devicePath);
           if (!previouslyKnownDevices.Contains(devicePath))
           {
-            Log.Log.WriteFile("Detected new Hauppauge capture device {0} {1)", name, devicePath);
+            Log.Log.Info("Detected new Hauppauge capture device {0} {1)", name, devicePath);
             TvCardHDPVR captureDevice = new TvCardHDPVR(connectedDevice);
             _deviceEventListener.OnDeviceAdded(captureDevice);
           }
@@ -427,7 +429,7 @@ namespace TvLibrary.Implementations
           knownDevices.Add(devicePath);
           if (!previouslyKnownDevices.Contains(devicePath))
           {
-            Log.Log.WriteFile("Detected new analog tuner device {0} {1}", name, devicePath);
+            Log.Log.Info("Detected new analog tuner device {0} {1}", name, devicePath);
             TvCardAnalog analogTuner = new TvCardAnalog(connectedDevice);
             _deviceEventListener.OnDeviceAdded(analogTuner);
           }
@@ -437,7 +439,7 @@ namespace TvLibrary.Implementations
 
     private void DetectSupportedBdaSourceDevices(ref HashSet<string> previouslyKnownDevices, ref HashSet<string> knownDevices)
     {
-      Log.Log.WriteFile("Detect BDA source devices");
+      Log.Log.Debug("Detect BDA source devices");
 
       // MS generic, MCE 2005 roll-up 2 or better
       bool isMsGenericNpAvailable = FilterGraphTools.IsThisComObjectInstalled(typeof(NetworkProvider).GUID);
@@ -460,7 +462,7 @@ namespace TvLibrary.Implementations
         // North American CableCARD tuners [PBDA].
         if (name.StartsWith("HDHomeRun Prime") || name.StartsWith("Ceton InfiniTV"))
         {
-          Log.Log.WriteFile("Detected new PBDA CableCARD tuner device {0} {1}", name, devicePath);
+          Log.Log.Info("Detected new PBDA CableCARD tuner device {0} {1}", name, devicePath);
           TunerPbdaCableCard cableCardTuner = new TunerPbdaCableCard(connectedDevice);
           knownDevices.Add(devicePath);
           _deviceEventListener.OnDeviceAdded(cableCardTuner);
@@ -488,13 +490,13 @@ namespace TvLibrary.Implementations
             isCablePreferred = GetHdHomeRunSourceType(name).Equals("Digital Cable");
           }
 
-          Log.Log.WriteFile("Detected new digital BDA tuner device {0} {1}", name, devicePath);
+          Log.Log.Info("Detected new digital BDA tuner device {0} {1}", name, devicePath);
 
           // Try the MediaPortal network provider first.
           ITVCard deviceToAdd = null;
           if (_mpNp != null)
           {
-            Log.Log.WriteFile("  check type with MP NP");
+            Log.Log.Debug("  check type with MP NP");
             IDvbNetworkProvider interfaceNetworkProvider = (IDvbNetworkProvider)_mpNp;
             string hash = GetHash(devicePath);
             interfaceNetworkProvider.ConfigureLogging(GetFileName(devicePath), hash, LogLevelOption.Debug);
@@ -502,7 +504,7 @@ namespace TvLibrary.Implementations
             {
               TuningType tuningTypes;
               interfaceNetworkProvider.GetAvailableTuningTypes(out tuningTypes);
-              Log.Log.WriteFile("  tuning types = {0}, hash = {1}" + tuningTypes, hash);
+              Log.Log.Debug("  tuning types = {0}, hash = {1}" + tuningTypes, hash);
               if (tuningTypes.HasFlag(TuningType.DvbT) && !isCablePreferred)
               {
                 deviceToAdd = new TvCardDVBT(connectedDevice);
@@ -521,12 +523,12 @@ namespace TvLibrary.Implementations
               }
               else
               {
-                Log.Log.WriteFile("  connected to MP NP but type not recognised");
+                Log.Log.Debug("  connected to MP NP but type not recognised");
               }
             }
             else
             {
-              Log.Log.WriteFile("  failed to connect to MP NP");
+              Log.Log.Debug("  failed to connect to MP NP");
             }
           }
           // Try the Microsoft network provider next if the MP NP
@@ -536,7 +538,7 @@ namespace TvLibrary.Implementations
             // Note: the MS NP must be added/removed to/from the graph for each
             // device that is checked. If you don't do this, the networkTypes
             // list gets longer and longer and longer.
-            Log.Log.WriteFile("  check type with MS NP");
+            Log.Log.Debug("  check type with MS NP");
             IBaseFilter genericNp = null;
             try
             {
@@ -548,7 +550,7 @@ namespace TvLibrary.Implementations
             }
             if (genericNp == null)
             {
-              Log.Log.WriteFile(" failed to add MS NP to graph");
+              Log.Log.Error(" failed to add MS NP to graph");
             }
             else
             {
@@ -558,10 +560,10 @@ namespace TvLibrary.Implementations
                 int networkTypeCount;
                 Guid[] networkTypes = new Guid[networkTypesMax];
                 int hr = (genericNp as ITunerCap).get_SupportedNetworkTypes(networkTypesMax, out networkTypeCount, networkTypes);
-                Log.Log.WriteFile("  network type count = {0}", networkTypeCount);
+                Log.Log.Debug("  network type count = {0}", networkTypeCount);
                 for (int n = 0; n < networkTypeCount; n++)
                 {
-                  Log.Log.WriteFile("  network type {0} = {1}", n, networkTypes[n]);
+                  Log.Log.Debug("  network type {0} = {1}", n, networkTypes[n]);
                   if (networkTypes[n] == typeof(DVBTNetworkProvider).GUID && !isCablePreferred)
                   {
                     deviceToAdd = new TvCardDVBT(connectedDevice);
@@ -584,13 +586,13 @@ namespace TvLibrary.Implementations
                   }
                   else if (n == (networkTypeCount - 1))
                   {
-                    Log.Log.WriteFile(" connected to MS NP but type not recognised");
+                    Log.Log.Debug(" connected to MS NP but type not recognised");
                   }
                 }
               }
               else
               {
-                Log.Log.WriteFile("  failed to connect to MS NP");
+                Log.Log.Debug("  failed to connect to MS NP");
               }
 
               Release.ComObject("device detection generic network provider", genericNp);
@@ -600,7 +602,7 @@ namespace TvLibrary.Implementations
           // Last shot is the old style Microsoft network providers.
           if (deviceToAdd == null)
           {
-            Log.Log.WriteFile("  check type with specific NPs");
+            Log.Log.Debug("  check type with specific NPs");
             if (ConnectFilter(_graphBuilder, _dvbtNp, tmpDeviceFilter))
             {
               deviceToAdd = new TvCardDVBT(connectedDevice);
@@ -619,13 +621,13 @@ namespace TvLibrary.Implementations
             }
             else
             {
-              Log.Log.WriteFile("  failed to connect to specific NP");
+              Log.Log.Debug("  failed to connect to specific NP");
             }
           }
 
           if (deviceToAdd != null)
           {
-            Log.Log.WriteFile("  tuner type = {0}", deviceToAdd.CardType);
+            Log.Log.Info("  tuner type = {0}", deviceToAdd.CardType);
             knownDevices.Add(devicePath);
             _deviceEventListener.OnDeviceAdded(deviceToAdd);
           }
@@ -650,7 +652,7 @@ namespace TvLibrary.Implementations
       string hash = GetHash(devicePath);
       string pathName = PathManager.GetDataPath;
       string fileName = string.Format(@"{0}\Log\NetworkProvider-{1}.log", pathName, hash);
-      Log.Log.WriteFile("NetworkProvider logfilename: " + fileName);
+      Log.Log.Debug("NetworkProvider logfilename: " + fileName);
       Directory.CreateDirectory(Path.GetDirectoryName(fileName));
       return fileName;
     }
@@ -684,16 +686,16 @@ namespace TvLibrary.Implementations
         deviceDescriptor.FriendlyName.StartsWith("Ceton InfiniTV")
       )
       {
-        Log.Log.WriteFile("Detected new OCUR/DRI device {0}, sub-device count = {1}", deviceDescriptor.FriendlyName, deviceDescriptor.ChildDevices.Count);
+        Log.Log.Info("Detected new OCUR/DRI device {0}, sub-device count = {1}", deviceDescriptor.FriendlyName, deviceDescriptor.ChildDevices.Count);
         foreach (DeviceDescriptor d in deviceDescriptor.ChildDevices)
         {
           if (d.FriendlyName.Contains(" OCTA "))
           {
-            Log.Log.WriteFile("  skipping Ceton tuning adaptor device, not supported");
+            Log.Log.Debug("  skipping Ceton tuning adaptor device, not supported");
           }
           else
           {
-            Log.Log.WriteFile("  add {0} {1}", d.FriendlyName, d.DeviceUDN);
+            Log.Log.Info("  add {0} {1}", d.FriendlyName, d.DeviceUDN);
             _deviceEventListener.OnDeviceAdded(new TunerDri(d, _upnpControlPoint));
           }
         }
@@ -707,12 +709,12 @@ namespace TvLibrary.Implementations
         deviceDescriptor.FriendlyName.StartsWith("Ceton InfiniTV")
       )
       {
-        Log.Log.WriteFile("Device {0} removed, sub-device count = {1}", deviceDescriptor.FriendlyName, deviceDescriptor.ChildDevices.Count);
+        Log.Log.Info("Device {0} removed, sub-device count = {1}", deviceDescriptor.FriendlyName, deviceDescriptor.ChildDevices.Count);
         foreach (DeviceDescriptor d in deviceDescriptor.ChildDevices)
         {
           if (!d.FriendlyName.Contains(" OCTA "))
           {
-            Log.Log.WriteFile("  remove {0} {1}", d.FriendlyName, d.DeviceUDN);
+            Log.Log.Info("  remove {0} {1}", d.FriendlyName, d.DeviceUDN);
             _deviceEventListener.OnDeviceRemoved(d.DeviceUDN);
           }
         }

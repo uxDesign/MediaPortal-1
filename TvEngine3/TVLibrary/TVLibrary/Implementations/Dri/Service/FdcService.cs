@@ -29,32 +29,46 @@ namespace TvLibrary.Implementations.Dri
   {
     private CpDevice _device = null;
     private CpService _service = null;
+    private StateVariableChangedDlgt _stateVariableDelegate = null;
 
     private CpAction _getFdcStatusAction = null;
     private CpAction _requestTablesAction = null;
     private CpAction _addPidAction = null;
     private CpAction _removePidAction = null;
 
-    public FdcService(CpDevice device)
+    public FdcService(CpDevice device, StateVariableChangedDlgt svChangeDlg)
     {
       _device = device;
       if (!device.Services.TryGetValue("urn:opencable-com:serviceId:urn:schemas-opencable-com:service:FDC", out _service))
       {
         // FDC is a mandatory service, so this is an error.
-        Log.Log.Error("DRI: device {0} does not implement an FDC service", device.UDN);
-        return;
+        throw new NotImplementedException("DRI: device does not implement a FDC service");
       }
 
       _service.Actions.TryGetValue("GetFDCStatus", out _getFdcStatusAction);
       _service.Actions.TryGetValue("RequestTables", out _requestTablesAction);
       _service.Actions.TryGetValue("AddPid", out _addPidAction);
       _service.Actions.TryGetValue("RemovePid", out _removePidAction);
-      _service.SubscribeStateVariables();
+
+      if (svChangeDlg != null)
+      {
+        _stateVariableDelegate = svChangeDlg;
+        _service.StateVariableChanged += _stateVariableDelegate;
+        _service.SubscribeStateVariables();
+      }
     }
 
     public void Dispose()
     {
-      _service.UnsubscribeStateVariables();
+      if (_stateVariableDelegate != null && _service != null)
+      {
+        if (_service.IsStateVariablesSubscribed)
+        {
+          _service.UnsubscribeStateVariables();
+        }
+        _service.StateVariableChanged -= _stateVariableDelegate;
+        _stateVariableDelegate = null;
+      }
     }
 
     /// <summary>

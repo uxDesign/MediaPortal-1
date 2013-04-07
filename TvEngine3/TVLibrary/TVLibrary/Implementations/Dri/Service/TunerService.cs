@@ -80,32 +80,46 @@ namespace TvLibrary.Implementations.Dri
   {
     private CpDevice _device = null;
     private CpService _service = null;
+    private StateVariableChangedDlgt _stateVariableDelegate = null;
 
     private CpAction _setTunerParametersAction = null;
     private CpAction _getTunerParametersAction = null;
     private CpAction _seekSignalAction = null;
     private CpAction _seekCancelAction = null;
 
-    public TunerService(CpDevice device)
+    public TunerService(CpDevice device, StateVariableChangedDlgt svChangeDlg)
     {
       _device = device;
       if (!device.Services.TryGetValue("urn:opencable-com:serviceId:urn:schemas-opencable-com:service:Tuner", out _service))
       {
         // Tuner is a mandatory service, so this is an error.
-        Log.Log.Error("DRI: device {0} does not implement a Tuner service", device.UDN);
-        return;
+        throw new NotImplementedException("DRI: device does not implement a Tuner service");
       }
 
       _service.Actions.TryGetValue("SetTunerParameters", out _setTunerParametersAction);
       _service.Actions.TryGetValue("GetTunerParameters", out _getTunerParametersAction);
       _service.Actions.TryGetValue("SeekSignal", out _seekSignalAction);
       _service.Actions.TryGetValue("SeekCancel", out _seekCancelAction);
-      _service.SubscribeStateVariables();
+
+      if (svChangeDlg != null)
+      {
+        _stateVariableDelegate = svChangeDlg;
+        _service.StateVariableChanged += _stateVariableDelegate;
+        _service.SubscribeStateVariables();
+      }
     }
 
     public void Dispose()
     {
-      _service.UnsubscribeStateVariables();
+      if (_stateVariableDelegate != null && _service != null)
+      {
+        if (_service.IsStateVariablesSubscribed)
+        {
+          _service.UnsubscribeStateVariables();
+        }
+        _service.StateVariableChanged -= _stateVariableDelegate;
+        _stateVariableDelegate = null;
+      }
     }
 
     /// <summary>
@@ -164,13 +178,14 @@ namespace TvLibrary.Implementations.Dri
     /// <param name="increment">This argument sets the A_ARG_TYPE_Increment state variable.</param>
     /// <param name="seekUp">This argument sets the A_ARG_TYPE_SeekUp state variable.</param>
     /// <param name="timeToBlock">This argument sets the A_ARGTYPE_TimeToBlock state variable.</param>
-    public void SeekSignal(UInt32 startFrequency, UInt32 stopFrequency, List<DriTunerModulation> newModulationList,
+    /// <returns><c>true</c> if the action is executed, otherwise <c>false</c></returns>
+    public bool SeekSignal(UInt32 startFrequency, UInt32 stopFrequency, List<DriTunerModulation> newModulationList,
                             UInt32 increment, bool seekUp, UInt16 timeToBlock)
     {
       if (_seekSignalAction == null)
       {
         Log.Log.Debug("DRI: device {0} does not implement a Tuner SeekSignal action", _device.UDN);
-        return;
+        return false;
       }
 
       string newModulationListCsv = DriTunerModulation.All;
@@ -179,19 +194,22 @@ namespace TvLibrary.Implementations.Dri
         newModulationListCsv = string.Join(",", newModulationList);
       }
       _seekSignalAction.InvokeAction(new List<object> { startFrequency, stopFrequency, newModulationListCsv, increment, seekUp, timeToBlock });
+      return true;
     }
 
     /// <summary>
     /// Upon receipt of the SeekCancel action, the DRIT SHALL cancel any SeekSignal action in less than 1s.
     /// </summary>
-    public void SeekCancel()
+    /// <returns><c>true</c> if the action is executed, otherwise <c>false</c></returns>
+    public bool SeekCancel()
     {
       if (_seekCancelAction == null)
       {
         Log.Log.Debug("DRI: device {0} does not implement a Tuner SeekCancel action", _device.UDN);
-        return;
+        return false;
       }
       _seekCancelAction.InvokeAction(null);
+      return true;
     }
   }
 }

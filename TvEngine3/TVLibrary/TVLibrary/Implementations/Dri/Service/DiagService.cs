@@ -108,8 +108,7 @@ namespace TvLibrary.Implementations.Dri
       if (!device.Services.TryGetValue("urn:opencable-com:serviceId:urn:schemas-opencable-com:service:Diag", out _service))
       {
         // Diag is a mandatory service, so this is an error.
-        Log.Log.Error("DRI: device {0} does not implement a Diag service", device.UDN);
-        return;
+        throw new NotImplementedException("DRI: device does not implement a Diag service");
       }
 
       _service.Actions.TryGetValue("GetParameter", out _getParameterAction);

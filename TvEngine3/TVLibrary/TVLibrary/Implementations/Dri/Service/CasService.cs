@@ -203,6 +203,7 @@ namespace TvLibrary.Implementations.Dri
   {
     private CpDevice _device = null;
     private CpService _service = null;
+    private StateVariableChangedDlgt _stateVariableDelegate = null;
 
     private CpAction _getCardStatusAction = null;
     private CpAction _getEntitlementAction = null;
@@ -210,14 +211,13 @@ namespace TvLibrary.Implementations.Dri
     private CpAction _setChannelAction = null;
     private CpAction _setPreferredLanguageAction = null;
 
-    public CasService(CpDevice device)
+    public CasService(CpDevice device, StateVariableChangedDlgt svChangeDlg)
     {
       _device = device;
       if (!device.Services.TryGetValue("urn:opencable-com:serviceId:urn:schemas-opencable-com:service:CAS", out _service))
       {
         // CAS is a mandatory service, so this is an error.
-        Log.Log.Error("DRI: device {0} does not implement a CAS service", device.UDN);
-        return;
+        throw new NotImplementedException("DRI: device does not implement a CAS service");
       }
 
       _service.Actions.TryGetValue("GetCardStatus", out _getCardStatusAction);
@@ -225,12 +225,26 @@ namespace TvLibrary.Implementations.Dri
       _service.Actions.TryGetValue("NotifyMmiClose", out _notifyMmiCloseAction);
       _service.Actions.TryGetValue("SetChannel", out _setChannelAction);
       _service.Actions.TryGetValue("SetPreferredLanguage", out _setPreferredLanguageAction);
-      _service.SubscribeStateVariables();
+
+      if (svChangeDlg != null)
+      {
+        _stateVariableDelegate = svChangeDlg;
+        _service.StateVariableChanged += _stateVariableDelegate;
+        _service.SubscribeStateVariables();
+      }
     }
 
     public void Dispose()
     {
-      _service.UnsubscribeStateVariables();
+      if (_stateVariableDelegate != null && _service != null)
+      {
+        if (_service.IsStateVariablesSubscribed)
+        {
+          _service.UnsubscribeStateVariables();
+        }
+        _service.StateVariableChanged -= _stateVariableDelegate;
+        _stateVariableDelegate = null;
+      }
     }
 
     /// <summary>
@@ -274,7 +288,8 @@ namespace TvLibrary.Implementations.Dri
     /// <param name="newSourceId">This argument sets the VirtualChannelNumber state variable.</param>
     /// <param name="currentEntitlement">This argument provides the value of the DescramblingStatus state variable when the action response is created.</param>
     /// <param name="entitlementMessage">This argument provides the value of the DescramblingMessage state variable when the action response is created.</param>
-    public void GetEntitlement(UInt32 newChannelNumber, UInt32 newSourceId, out DriCasDescramblingStatus currentEntitlement,
+    /// <returns><c>true</c> if the action is executed, otherwise <c>false</c></returns>
+    public bool GetEntitlement(UInt32 newChannelNumber, UInt32 newSourceId, out DriCasDescramblingStatus currentEntitlement,
                                 out string entitlementMessage)
     {
       currentEntitlement = DriCasDescramblingStatus.Unknown;
@@ -282,12 +297,13 @@ namespace TvLibrary.Implementations.Dri
       if (_getEntitlementAction == null)
       {
         Log.Log.Debug("DRI: device {0} does not implement a CAS GetEntitlement action", _device.UDN);
-        return;
+        return false;
       }
 
       IList<object> outParams = _getEntitlementAction.InvokeAction(new List<object> { newChannelNumber, newSourceId });
       currentEntitlement = (DriCasDescramblingStatus)outParams[0];
       entitlementMessage = (string)outParams[1];
+      return true;
     }
 
     /// <summary>
@@ -327,15 +343,17 @@ namespace TvLibrary.Implementations.Dri
     /// Card with the language() parameter set to NewLanguage.
     /// </summary>
     /// <param name="newLanguage">This argument sets the Language state variable. The value should be an ISO639 code.</param>
-    public void SetPreferredLanguage(string newLanguage)
+    /// <returns><c>true</c> if the action is executed, otherwise <c>false</c></returns>
+    public bool SetPreferredLanguage(string newLanguage)
     {
       if (_setPreferredLanguageAction == null)
       {
         Log.Log.Debug("DRI: device {0} does not implement a CAS SetPreferredLanguage action", _device.UDN);
-        return;
+        return false;
       }
 
       _setPreferredLanguageAction.InvokeAction(new List<object> { newLanguage });
+      return true;
     }
   }
 }

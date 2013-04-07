@@ -28,26 +28,40 @@ namespace TvLibrary.Implementations.Dri
   {
     private CpDevice _device = null;
     private CpService _service = null;
+    private StateVariableChangedDlgt _stateVariableDelegate = null;
 
     private CpAction _setDrmAction = null;
 
-    public SecurityService(CpDevice device)
+    public SecurityService(CpDevice device, StateVariableChangedDlgt svChangeDlg)
     {
       _device = device;
       if (!device.Services.TryGetValue("urn:opencable-com:serviceId:urn:schemas-opencable-com:service:Security", out _service))
       {
         // Security is a mandatory service, so this is an error.
-        Log.Log.Error("DRI: device {0} does not implement a Security service", device.UDN);
-        return;
+        throw new NotImplementedException("DRI: device does not implement a Security service");
       }
 
       _service.Actions.TryGetValue("SetDRM", out _setDrmAction);
-      _service.SubscribeStateVariables();
+
+      if (svChangeDlg != null)
+      {
+        _stateVariableDelegate = svChangeDlg;
+        _service.StateVariableChanged += _stateVariableDelegate;
+        _service.SubscribeStateVariables();
+      }
     }
 
     public void Dispose()
     {
-      _service.UnsubscribeStateVariables();
+      if (_stateVariableDelegate != null && _service != null)
+      {
+        if (_service.IsStateVariablesSubscribed)
+        {
+          _service.UnsubscribeStateVariables();
+        }
+        _service.StateVariableChanged -= _stateVariableDelegate;
+        _stateVariableDelegate = null;
+      }
     }
 
     /// <summary>

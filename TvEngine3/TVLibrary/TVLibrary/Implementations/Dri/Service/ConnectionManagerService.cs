@@ -46,6 +46,7 @@ namespace TvLibrary.Implementations.Dri
   {
     private CpDevice _device = null;
     private CpService _service = null;
+    private StateVariableChangedDlgt _stateVariableDelegate = null;
 
     private CpAction _getProtocolInfoAction = null;
     private CpAction _prepareForConnectionAction = null;
@@ -53,14 +54,13 @@ namespace TvLibrary.Implementations.Dri
     private CpAction _getCurrentConnectionIdsAction = null;
     private CpAction _getCurrentConnectionInfoAction = null;
 
-    public ConnectionManagerService(CpDevice device)
+    public ConnectionManagerService(CpDevice device, StateVariableChangedDlgt svChangeDlg)
     {
       _device = device;
       if (!device.Services.TryGetValue("urn:upnp-org:serviceId:urn:schemas-upnp-org:service:ConnectionManager", out _service))
       {
         // ConnectionManager is a mandatory service, so this is an error.
-        Log.Log.Error("DRI: device {0} does not implement a ConnectionManager service", device.UDN);
-        return;
+        throw new NotImplementedException("DRI: device does not implement a ConnectionManager service");
       }
 
       _service.Actions.TryGetValue("GetProtocolInfo", out _getProtocolInfoAction);
@@ -68,12 +68,26 @@ namespace TvLibrary.Implementations.Dri
       _service.Actions.TryGetValue("ConnectionComplete", out _connectionCompleteAction);
       _service.Actions.TryGetValue("GetCurrentConnectionIDs", out _getCurrentConnectionIdsAction);
       _service.Actions.TryGetValue("GetCurrentConnectionInfo", out _getCurrentConnectionInfoAction);
-      _service.SubscribeStateVariables();
+
+      if (svChangeDlg != null)
+      {
+        _stateVariableDelegate = svChangeDlg;
+        _service.StateVariableChanged += _stateVariableDelegate;
+        _service.SubscribeStateVariables();
+      }
     }
 
     public void Dispose()
     {
-      _service.UnsubscribeStateVariables();
+      if (_stateVariableDelegate != null && _service != null)
+      {
+        if (_service.IsStateVariablesSubscribed)
+        {
+          _service.UnsubscribeStateVariables();
+        }
+        _service.StateVariableChanged -= _stateVariableDelegate;
+        _stateVariableDelegate = null;
+      }
     }
 
     public void GetProtocolInfo(out string source, out string sink)
@@ -84,7 +98,7 @@ namespace TvLibrary.Implementations.Dri
       sink = (string)outParams[1];
     }
 
-    public void PrepareForConnection(string remoteProtocolInfo, string peerConnectionManager, Int32 peerConnectionId,
+    public bool PrepareForConnection(string remoteProtocolInfo, string peerConnectionManager, Int32 peerConnectionId,
                                       UpnpConnectionDirection direction, out Int32 connectionId, out Int32 avTransportId,
                                       out Int32 rcsId)
     {
@@ -94,7 +108,7 @@ namespace TvLibrary.Implementations.Dri
       if (_prepareForConnectionAction == null)
       {
         Log.Log.Debug("DRI: device {0} does not implement a ConnectionManager PrepareForConnection action", _device.UDN);
-        return;
+        return false;
       }
 
       IList<object> outParams = _prepareForConnectionAction.InvokeAction(new List<object> {
@@ -103,16 +117,18 @@ namespace TvLibrary.Implementations.Dri
       connectionId = (int)outParams[0];
       avTransportId = (int)outParams[1];
       rcsId = (int)outParams[2];
+      return true;
     }
 
-    public void ConnectionComplete(Int32 connectionId)
+    public bool ConnectionComplete(Int32 connectionId)
     {
       if (_connectionCompleteAction == null)
       {
         Log.Log.Debug("DRI: device {0} does not implement a ConnectionManager ConnectionComplete action", _device.UDN);
-        return;
+        return false;
       }
       _connectionCompleteAction.InvokeAction(new List<object> { connectionId });
+      return true;
     }
 
     public void GetCurrentConnectionIds(out IList<UInt32> currentConnectionIds)

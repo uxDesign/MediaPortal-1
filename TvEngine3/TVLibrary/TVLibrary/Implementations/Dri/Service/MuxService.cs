@@ -40,8 +40,7 @@ namespace TvLibrary.Implementations.Dri
       if (!device.Services.TryGetValue("urn:opencable-com:serviceId:urn:schemas-opencable-com:service:Mux", out _service))
       {
         // Mux is a mandatory service, so this is an error.
-        Log.Log.Error("DRI: device {0} does not implement a Mux service", device.UDN);
-        return;
+        throw new NotImplementedException("DRI: device does not implement a Mux service");
       }
 
       _service.Actions.TryGetValue("SetProgram", out _setProgramAction);

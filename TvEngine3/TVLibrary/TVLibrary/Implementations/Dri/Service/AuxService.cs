@@ -119,28 +119,43 @@ namespace TvLibrary.Implementations.Dri
   {
     private CpDevice _device = null;
     private CpService _service = null;
+    private StateVariableChangedDlgt _stateVariableDelegate = null;
 
     private CpAction _getAuxCapabilitiesAction = null;
     private CpAction _setAuxParametersAction = null;
 
-    public AuxService(CpDevice device)
+    public AuxService(CpDevice device, StateVariableChangedDlgt svChangeDlg)
     {
       _device = device;
       if (!device.Services.TryGetValue("urn:opencable-com:serviceId:urn:schemas-opencable-com:service:Aux", out _service))
       {
         // Aux is an optional service.
-        Log.Log.Debug("DRI: device {0} does not implement a Aux service", device.UDN);
+        Log.Log.Debug("DRI: device {0} does not implement an Aux service", device.UDN);
         return;
       }
 
       _service.Actions.TryGetValue("GetAuxCapabilities", out _getAuxCapabilitiesAction);
       _service.Actions.TryGetValue("SetAuxParameters", out _setAuxParametersAction);
-      _service.SubscribeStateVariables();
+
+      if (svChangeDlg != null)
+      {
+        _stateVariableDelegate = svChangeDlg;
+        _service.StateVariableChanged += _stateVariableDelegate;
+        _service.SubscribeStateVariables();
+      }
     }
 
     public void Dispose()
     {
-      _service.UnsubscribeStateVariables();
+      if (_stateVariableDelegate != null && _service != null)
+      {
+        if (_service.IsStateVariablesSubscribed)
+        {
+          _service.UnsubscribeStateVariables();
+        }
+        _service.StateVariableChanged -= _stateVariableDelegate;
+        _stateVariableDelegate = null;
+      }
     }
 
     /// <summary>
@@ -150,21 +165,23 @@ namespace TvLibrary.Implementations.Dri
     /// <param name="supportedFormat">This argument provides the value of the FormatList state variable when the action response is created.</param>
     /// <param name="svideoNbr">This argument provides the value of the SVideoInputs state variable when the action response is created.</param>
     /// <param name="videoNbr">This argument provides the value of the VideoInputs state variable when the action response is created.</param>
-    public void GetAuxCapabilities(out IList<DriAuxFormat> supportedFormat, out byte svideoNbr, out byte videoNbr)
+    /// <returns><c>true</c> if the action is executed, otherwise <c>false</c></returns>
+    public bool GetAuxCapabilities(out IList<DriAuxFormat> supportedFormat, out byte svideoNbr, out byte videoNbr)
     {
       supportedFormat = new List<DriAuxFormat>();
       svideoNbr = 0;
       videoNbr = 0;
       if (_service == null)
       {
-        Log.Log.Debug("DRI: device {0} does not implement a Aux service", _device.UDN);
-        return;
+        Log.Log.Debug("DRI: device {0} does not implement an Aux service", _device.UDN);
+        return false;
       }
 
       IList<object> outParams = _getAuxCapabilitiesAction.InvokeAction(null);
       supportedFormat = (IList<DriAuxFormat>)outParams[0].ToString().Split(',').Select(x => (DriAuxFormat)x);
       svideoNbr = (byte)outParams[1];
       videoNbr = (byte)outParams[2];
+      return true;
     }
 
     /// <summary>
@@ -175,15 +192,16 @@ namespace TvLibrary.Implementations.Dri
     /// <param name="selectFormat">This argument sets the Format state variable.</param>
     /// <param name="actualFormat">This argument reflects the value of the Format state variable.</param>
     /// <param name="currentGenLock">This argument provides the value of the GenLock state variable when the action response is created.</param>
-    public void SetAuxParameters(DriInputType selectType, byte selectInput, DriAuxFormat selectFormat,
+    /// <returns><c>true</c> if the action is executed, otherwise <c>false</c></returns>
+    public bool SetAuxParameters(DriInputType selectType, byte selectInput, DriAuxFormat selectFormat,
                                 out DriAuxFormat actualFormat, out bool currentGenLock)
     {
       actualFormat = DriAuxFormat.Unknown;
       currentGenLock = false;
       if (_service == null)
       {
-        Log.Log.Debug("DRI: device {0} does not implement a Aux service", _device.UDN);
-        return;
+        Log.Log.Debug("DRI: device {0} does not implement an Aux service", _device.UDN);
+        return false;
       }
 
       IList<object> outParams = _setAuxParametersAction.InvokeAction(new List<object> {
@@ -191,6 +209,7 @@ namespace TvLibrary.Implementations.Dri
       });
       actualFormat = (DriAuxFormat)outParams[0];
       currentGenLock = (bool)outParams[1];
+      return true;
     }
   }
 }

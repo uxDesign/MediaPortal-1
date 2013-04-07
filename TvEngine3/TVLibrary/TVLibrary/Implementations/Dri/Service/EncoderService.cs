@@ -104,18 +104,44 @@ namespace TvLibrary.Implementations.Dri
   {
     private CpDevice _device = null;
     private CpService _service = null;
+    private StateVariableChangedDlgt _stateVariableDelegate = null;
 
     private CpAction _getEncoderCapabilitiesAction = null;
     private CpAction _setEncoderParametersAction = null;
     private CpAction _getEncoderParametersAction = null;
 
-    public EncoderService(CpDevice device)
+    public EncoderService(CpDevice device, StateVariableChangedDlgt svChangeDlg)
     {
+      _device = device;
+      if (!device.Services.TryGetValue("urn:opencable-com:serviceId:urn:schemas-opencable-com:service:Encoder", out _service))
+      {
+        // Encoder is a mandatory service, so this is an error.
+        throw new NotImplementedException("DRI: device does not implement an Encoder service");
+      }
+
+      _service.Actions.TryGetValue("GetEncoderCapabilities", out _getEncoderCapabilitiesAction);
+      _service.Actions.TryGetValue("SetEncoderParameters", out _setEncoderParametersAction);
+      _service.Actions.TryGetValue("GetEncoderParameters", out _getEncoderParametersAction);
+
+      if (svChangeDlg != null)
+      {
+        _stateVariableDelegate = svChangeDlg;
+        _service.StateVariableChanged += _stateVariableDelegate;
+        _service.SubscribeStateVariables();
+      }
     }
 
     public void Dispose()
     {
-      _service.UnsubscribeStateVariables();
+      if (_stateVariableDelegate != null && _service != null)
+      {
+        if (_service.IsStateVariablesSubscribed)
+        {
+          _service.UnsubscribeStateVariables();
+        }
+        _service.StateVariableChanged -= _stateVariableDelegate;
+        _stateVariableDelegate = null;
+      }
     }
 
     /// <summary>
@@ -136,7 +162,7 @@ namespace TvLibrary.Implementations.Dri
         int expectedByteCount = (audioProfileSize * numberAudioCompressionFormat) + 1;
         if (bytes.Length != expectedByteCount)
         {
-          Log.Log.Error("DRI: GetEncoderCapabilities audioProfile has {0} profile(s), but the byte count is {1} (we expect {2})", numberAudioCompressionFormat, bytes.Length, expectedByteCount);
+          throw new Exception(string.Format("DRI: GetEncoderCapabilities audioProfile has {0} profile(s), but the byte count is {1} (we expect {2})", numberAudioCompressionFormat, bytes.Length, expectedByteCount));
         }
         else
         {
@@ -157,7 +183,7 @@ namespace TvLibrary.Implementations.Dri
         int expectedByteCount = (videoProfileSize * numberVideoCompressionFormat) + 1;
         if (bytes.Length != expectedByteCount)
         {
-          Log.Log.Error("DRI: GetEncoderCapabilities videoProfile has {0} profile(s), but the byte count is {1} (we expect {2})", numberVideoCompressionFormat, bytes.Length, expectedByteCount);
+          throw new TvException(string.Format("DRI: GetEncoderCapabilities videoProfile has {0} profile(s), but the byte count is {1} (we expect {2})", numberVideoCompressionFormat, bytes.Length, expectedByteCount));
         }
         else
         {

@@ -253,6 +253,7 @@ namespace TvLibrary.Implementations.Dri
   {
     private CpDevice _device = null;
     private CpService _service = null;
+    private StateVariableChangedDlgt _stateVariableDelegate = null;
 
     private CpAction _setAvTransportUriAction = null;
     private CpAction _setNextAvTransportUriAction = null;
@@ -272,14 +273,13 @@ namespace TvLibrary.Implementations.Dri
     private CpAction _setRecordQualityModeAction = null;
     private CpAction _getCurrentTransportActionsAction = null;
 
-    public AvTransportService(CpDevice device)
+    public AvTransportService(CpDevice device, StateVariableChangedDlgt svChangeDlg)
     {
       _device = device;
       if (!device.Services.TryGetValue("urn:upnp-org:serviceId:urn:schemas-upnp-org:service:AVTransport", out _service))
       {
         // AVTransport is a mandatory service, so this is an error.
-        Log.Log.Error("DRI: device {0} does not implement an AVTransport service", device.UDN);
-        return;
+        throw new NotImplementedException("DRI: device does not implement an AVTransport service");
       }
 
       _service.Actions.TryGetValue("SetAVTransportURI", out _setAvTransportUriAction);
@@ -299,12 +299,26 @@ namespace TvLibrary.Implementations.Dri
       _service.Actions.TryGetValue("SetPlayMode", out _setPlayModeAction);
       _service.Actions.TryGetValue("SetRecordQualityMode", out _setRecordQualityModeAction);
       _service.Actions.TryGetValue("GetCurrentTransportActions", out _getCurrentTransportActionsAction);
-      _service.SubscribeStateVariables();
+
+      if (svChangeDlg != null)
+      {
+        _stateVariableDelegate = svChangeDlg;
+        _service.StateVariableChanged += _stateVariableDelegate;
+        _service.SubscribeStateVariables();
+      }
     }
 
     public void Dispose()
     {
-      _service.UnsubscribeStateVariables();
+      if (_stateVariableDelegate != null && _service != null)
+      {
+        if (_service.IsStateVariablesSubscribed)
+        {
+          _service.UnsubscribeStateVariables();
+        }
+        _service.StateVariableChanged -= _stateVariableDelegate;
+        _stateVariableDelegate = null;
+      }
     }
 
     public void SetAvTransportUri(UInt32 instanceId, string currentUri, string currentUriMetaData)
@@ -312,15 +326,16 @@ namespace TvLibrary.Implementations.Dri
       _setAvTransportUriAction.InvokeAction(new List<object> { instanceId, currentUri, currentUriMetaData });
     }
 
-    public void SetNextAvTransportUri(UInt32 instanceId, string nextUri, string nextUriMetaData)
+    public bool SetNextAvTransportUri(UInt32 instanceId, string nextUri, string nextUriMetaData)
     {
       if (_setNextAvTransportUriAction == null)
       {
         Log.Log.Debug("DRI: device {0} does not implement an AVTransport SetNextAVTransportURI action", _device.UDN);
-        return;
+        return false;
       }
 
       _setNextAvTransportUriAction.InvokeAction(new List<object> { instanceId, nextUri, nextUriMetaData });
+      return true;
     }
 
     public void GetMediaInfo(UInt32 instanceId, out UInt32 nrTracks, out string mediaDuration, out string currentUri,
@@ -390,26 +405,28 @@ namespace TvLibrary.Implementations.Dri
       _playAction.InvokeAction(new List<object> { instanceId });
     }
 
-    public void Pause(UInt32 instanceId)
+    public bool Pause(UInt32 instanceId)
     {
       if (_pauseAction == null)
       {
         Log.Log.Debug("DRI: device {0} does not implement a AVTransport Pause action", _device.UDN);
-        return;
+        return false;
       }
 
       _pauseAction.InvokeAction(new List<object> { instanceId });
+      return true;
     }
 
-    public void Record(UInt32 instanceId)
+    public bool Record(UInt32 instanceId)
     {
       if (_recordAction == null)
       {
         Log.Log.Debug("DRI: device {0} does not implement a AVTransport Record action", _device.UDN);
-        return;
+        return false;
       }
 
       _recordAction.InvokeAction(new List<object> { instanceId });
+      return false;
     }
 
     public void Seek(UInt32 instanceId, UpnpAvSeekMode unit, string target)
@@ -433,39 +450,42 @@ namespace TvLibrary.Implementations.Dri
       _previousAction.InvokeAction(new List<object> { instanceId });
     }
 
-    public void SetPlayMode(UInt32 instanceId, UpnpAvCurrentPlayMode newPlayMode)
+    public bool SetPlayMode(UInt32 instanceId, UpnpAvCurrentPlayMode newPlayMode)
     {
       if (_setPlayModeAction == null)
       {
         Log.Log.Debug("DRI: device {0} does not implement a AVTransport SetPlayMode action", _device.UDN);
-        return;
+        return false;
       }
 
       _setPlayModeAction.InvokeAction(new List<object> { instanceId, newPlayMode.ToString() });
+      return true;
     }
 
-    public void SetRecordQualityMode(UInt32 instanceId, UpnpAvRecordQualityMode newRecordQualityMode)
+    public bool SetRecordQualityMode(UInt32 instanceId, UpnpAvRecordQualityMode newRecordQualityMode)
     {
       if (_setRecordQualityModeAction == null)
       {
         Log.Log.Debug("DRI: device {0} does not implement a AVTransport SetRecordQualityMode action", _device.UDN);
-        return;
+        return false;
       }
 
       _setRecordQualityModeAction.InvokeAction(new List<object> { instanceId, newRecordQualityMode.ToString() });
+      return true;
     }
 
-    public void GetCurrentTransportActions(UInt32 instanceId, out IList<UpnpAvTransportAction> actions)
+    public bool GetCurrentTransportActions(UInt32 instanceId, out IList<UpnpAvTransportAction> actions)
     {
       actions = new List<UpnpAvTransportAction>();
       if (_getCurrentTransportActionsAction == null)
       {
         Log.Log.Debug("DRI: device {0} does not implement a AVTransport GetCurrentTransportActions action", _device.UDN);
-        return;
+        return false;
       }
 
       IList<object> outParams = _getCurrentTransportActionsAction.InvokeAction(new List<object> { instanceId });
       actions = (IList<UpnpAvTransportAction>)outParams[0].ToString().Split(',').Select(x => (UpnpAvTransportAction)Enum.Parse(typeof(UpnpAvTransportAction), x));
+      return true;
     }
   }
 }
