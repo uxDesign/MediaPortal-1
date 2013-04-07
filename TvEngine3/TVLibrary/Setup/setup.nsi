@@ -431,6 +431,13 @@ ${MementoSection} "MediaPortal TV Server" SecServer
   File "${TVSERVER.BASE}\tevii.dll"
   File "${TVSERVER.BASE}\Ionic.Zip.dll"
 
+  ; protocol implementations for MPIPTVSource.ax
+  File "${git_DirectShowFilters}\MPIPTVSource\bin\${BUILD_TYPE}\MPIPTV_FILE.dll"
+  File "${git_DirectShowFilters}\MPIPTVSource\bin\${BUILD_TYPE}\MPIPTV_HTTP.dll"
+  File "${git_DirectShowFilters}\MPIPTVSource\bin\${BUILD_TYPE}\MPIPTV_RTP.dll"
+  File "${git_DirectShowFilters}\MPIPTVSource\bin\${BUILD_TYPE}\MPIPTV_RTSP.dll"
+  File "${git_DirectShowFilters}\MPIPTVSource\bin\${BUILD_TYPE}\MPIPTV_UDP.dll"
+
   File "${git_DirectShowFilters}\StreamingServer\bin\${BUILD_TYPE}\StreamingServer.dll"
   
   File "${git_DirectShowFilters}\DXErr9\bin\${BUILD_TYPE}\dxerr9.dll"
@@ -441,6 +448,7 @@ ${MementoSection} "MediaPortal TV Server" SecServer
   SetOutPath "${COMMON_APPDATA}"
   File "${git_Common_MP_TVE3}\Gentle.config"
   File "${TVSERVER.BASE}\log4net.config"
+  File "${git_DirectShowFilters}\MPIPTVSource\MPIPTVSource\MPIPTVSource.ini"
   File "${TVSERVER.BASE}\TvSetupLog.config"
   
   #---------------------------------------------------------------------------
@@ -539,6 +547,8 @@ ${MementoSectionEnd}
   RMDir /r "${COMMON_APPDATA}\WebEPG\grabbers"
   ; Remove XMLTV data dir
   Delete "${COMMON_APPDATA}\xmltv\xmltv.dtd"
+  ; Remove ini file for IPTV filter
+  Delete "${COMMON_APPDATA}\MPIPTVSource.ini"
 
   ; Remove Plugins
   Delete "$INSTDIR\Plugins\ComSkipLauncher.dll"
@@ -589,6 +599,13 @@ ${MementoSectionEnd}
   Delete "$INSTDIR\tevii.dll"
   Delete "$INSTDIR\Ionic.Zip.dll"
   ;Delete "$INSTDIR\Interop.SHDocVw.dll"
+
+  ; protocol implementations for MPIPTVSource.ax
+  Delete "$INSTDIR\MPIPTV_FILE.dll"
+  Delete "$INSTDIR\MPIPTV_HTTP.dll"
+  Delete "$INSTDIR\MPIPTV_RTP.dll"
+  Delete "$INSTDIR\MPIPTV_RTSP.dll"
+  Delete "$INSTDIR\MPIPTV_UDP.dll"  
 
   ; remove Start Menu shortcuts
   Delete "${STARTMENU_GROUP}\TV-Server Configuration.lnk"
