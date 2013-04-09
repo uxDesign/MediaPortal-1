@@ -148,8 +148,8 @@ namespace TvLibrary.Implementations.Dri
       protocolInfo = (string)outParams[2];
       peerConnectionManager = (string)outParams[3];
       peerConnectionId = (int)outParams[4];
-      direction = (UpnpConnectionDirection)Enum.Parse(typeof(UpnpConnectionDirection), (string)outParams[4]);
-      status = (UpnpConnectionStatus)Enum.Parse(typeof(UpnpConnectionStatus), (string)outParams[5]);
+      direction = (UpnpConnectionDirection)Enum.Parse(typeof(UpnpConnectionDirection), (string)outParams[5]);
+      status = (UpnpConnectionStatus)Enum.Parse(typeof(UpnpConnectionStatus), (string)outParams[6]);
     }
   }
 }
