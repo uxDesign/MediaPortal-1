@@ -704,7 +704,15 @@ namespace TvLibrary.Implementations
 
     private void UpnpRootDeviceRemoved(RootDescriptor rootDescriptor)
     {
+      if (rootDescriptor == null)
+      {
+        return;
+      }
       DeviceDescriptor deviceDescriptor = DeviceDescriptor.CreateRootDeviceDescriptor(rootDescriptor);
+      if (deviceDescriptor == null)
+      {
+        return;
+      }
       if (deviceDescriptor.FriendlyName.StartsWith("HDHomeRun Prime Tuner") ||
         deviceDescriptor.FriendlyName.StartsWith("Ceton InfiniTV")
       )

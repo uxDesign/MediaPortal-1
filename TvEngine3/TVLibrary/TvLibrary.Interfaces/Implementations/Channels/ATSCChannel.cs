@@ -178,20 +178,20 @@ namespace TvLibrary.Channels
         return true;
       }
 
-      // ATSC (over-the-air digital television).
-      // Here we are comparing physical channel numbers that are mapped
-      // to frequencies by the network provider.
-      if (_modulation == ModulationType.Mod8Vsb || _modulation == ModulationType.Mod16Vsb)
-      {
-        return atscChannel.PhysicalChannel != _physicalChannel;
-      }
-      // Clear QAM (unencrypted digital cable television).
-      else if (_modulation != ModulationType.ModNotSet)
-      {
-        return atscChannel.Frequency != Frequency;
-      }
-      // CableCARD (encrypted digital cable television).
-      // Here we are comparing virtual (ie. logical) channel numbers.
+      // The phyiscal channel field holds two distinct parameters depending on
+      // the channel type.
+      // For ATSC (over-the-air digital) and clear QAM (unencrypted digital
+      // cable) channels (modulation = 8 or 16 VSB for ATSC, 64 or 256 QAM for
+      // clear QAM), physical channel is an arbitrary number that is mapped by
+      // the network provider to the frequency that must be tuned by the
+      // hardware. It relates to frequency/channel/band plans defined by
+      // standards bodies like FCC, SCTE and ATSC.
+      // Digital cable channels created by scanning with CableCARD tuners are
+      // different. For those channels (modulation = Not Set), physical channel
+      // holds a "virtual" channel number. This "vchannel" is equivalent to a
+      // DVB logical channel number (LCN); it is the number that people use for
+      // zapping. For DVB LCN is a label, not a tuning parameter; for CableCARD
+      // it is the one and only tuning parameter.
       return atscChannel.PhysicalChannel != _physicalChannel;
     }
   }
