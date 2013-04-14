@@ -493,8 +493,16 @@ namespace TvLibrary.Implementations.Dri
         return false;
       }
 
-      IList<object> outParams = _getCurrentTransportActionsAction.InvokeAction(new List<object> { instanceId });
-      actions = outParams[0].ToString().Split(',').Select(x => (UpnpAvTransportAction)Enum.Parse(typeof(UpnpAvTransportAction), x)).ToList<UpnpAvTransportAction>();
+      try
+      {
+        IList<object> outParams = _getCurrentTransportActionsAction.InvokeAction(new List<object> { instanceId });
+        actions = outParams[0].ToString().Split(',').Select(x => (UpnpAvTransportAction)Enum.Parse(typeof(UpnpAvTransportAction), x)).ToList<UpnpAvTransportAction>();
+      }
+      catch
+      {
+        Log.Log.Debug("DRI: device {0} does not implement a AVTransport GetCurrentTransportActions action, threw exception", _device.UDN);
+        return false;
+      }
       return true;
     }
   }

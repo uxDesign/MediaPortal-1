@@ -251,7 +251,7 @@ namespace TvLibrary.Implementations.Dri
         if (_auxService.GetAuxCapabilities(out formats, out svideoInputCount, out compositeInputCount))
         {
           Log.Log.Debug("DRI CC: auxiliary input info...");
-          Log.Log.Debug("  supported formats     = {0}", string.Join(", ", formats.Select(x => x.ToString())));
+          Log.Log.Debug("  supported formats     = {0}", string.Join(", ", formats));
           Log.Log.Debug("  S-video input count   = {0}", svideoInputCount);
           Log.Log.Debug("  composite input count = {0}", compositeInputCount);
         }
@@ -345,7 +345,7 @@ namespace TvLibrary.Implementations.Dri
         Log.Log.Debug("  EA loc. code  = {0}", eaLocationCode);  // EA = emergency alert
         Log.Log.Debug("  rating region = {0}", ratingRegion);
 
-        Log.Log.Debug("DRI CC: diag service parameters...");
+        Log.Log.Debug("DRI CC: diagnostic parameters...");
         string value = string.Empty;
         bool isVolatile = false;
         foreach (DriDiagParameter p in DriDiagParameter.Values)
@@ -353,6 +353,82 @@ namespace TvLibrary.Implementations.Dri
           _diagService.GetParameter(p, out value, out isVolatile);
           Log.Log.Debug("  {0}{1} = {2}", p.ToString(), isVolatile ? " [volatile]" : "", value);
         }
+        Log.Log.Debug("DRI CC: Ceton-specific diagnostic parameters...");
+        foreach (CetonDiagParameter p in CetonDiagParameter.Values)
+        {
+          _diagService.GetParameter(p, out value, out isVolatile);
+          Log.Log.Debug("  {0}{1} = {2}", p.ToString(), isVolatile ? " [volatile]" : "", value);
+        }
+
+        IList<UpnpAvTransportAction> actions;
+        if (_avTransportService.GetCurrentTransportActions((uint)_avTransportId, out actions))
+        {
+          Log.Log.Debug("DRI CC: supported AV transport actions = {0}", string.Join(", ", actions));
+        }
+        IList<UpnpAvStorageMedium> playMedia;
+        IList<UpnpAvStorageMedium> recordMedia;
+        IList<UpnpAvRecordQualityMode> recordQualityModes;
+        _avTransportService.GetDeviceCapabilities((uint)_avTransportId, out playMedia, out recordMedia, out recordQualityModes);
+        Log.Log.Debug("DRI CC: supported play media = {0}", string.Join(", ", playMedia));
+        Log.Log.Debug("DRI CC: supported record media = {0}", string.Join(", ", recordMedia));
+        Log.Log.Debug("DRI CC: supported record quality modes = {0}", string.Join(", ", recordQualityModes));
+
+        Log.Log.Debug("DRI CC: media info...");
+        uint trackCount = 0;
+        string mediaDuration = string.Empty;
+        string currentUri = string.Empty;
+        string currentUriMetaData = string.Empty;
+        string nextUri = string.Empty;
+        string nextUriMetaData = string.Empty;
+        UpnpAvStorageMedium playMedium = UpnpAvStorageMedium.Unknown;
+        UpnpAvStorageMedium recordMedium = UpnpAvStorageMedium.Unknown;
+        UpnpAvRecordMediumWriteStatus writeStatus = UpnpAvRecordMediumWriteStatus.NOT_IMPLEMENTED;
+        _avTransportService.GetMediaInfo((uint)_avTransportId, out trackCount, out mediaDuration, out currentUri,
+          out currentUriMetaData, out nextUri, out nextUriMetaData, out playMedium, out recordMedium, out writeStatus);
+        Log.Log.Debug("  track count        = {0}", trackCount);
+        Log.Log.Debug("  duration           = {0}", mediaDuration);
+        Log.Log.Debug("  cur. URI           = {0}", currentUri);
+        Log.Log.Debug("  cur. URI meta data = {0}", currentUriMetaData);
+        Log.Log.Debug("  next URI           = {0}", nextUri);
+        Log.Log.Debug("  next URI meta data = {0}", nextUriMetaData);
+        Log.Log.Debug("  play medium        = {0}", playMedium);
+        Log.Log.Debug("  record medium      = {0}", recordMedium);
+        Log.Log.Debug("  write status       = {0}", writeStatus);
+
+        /*Log.Log.Debug("DRI CC: position info...");
+        uint track = 0;
+        string duration = string.Empty;
+        string metaData = string.Empty;
+        string uri = string.Empty;
+        string relTime = string.Empty;
+        string absTime = string.Empty;
+        int relCount = 0;
+        int absCount = 0;
+        _avTransportService.GetPositionInfo((uint)_avTransportId, out track, out duration, out metaData, out uri,
+          out relTime, out absTime, out relCount, out absCount);
+        Log.Log.Debug("  track          = {0}", track);
+        Log.Log.Debug("  duration       = {0}", duration);
+        Log.Log.Debug("  meta data      = {0}", metaData);
+        Log.Log.Debug("  URI            = {0}", uri);
+        Log.Log.Debug("  relative time  = {0}", relTime);
+        Log.Log.Debug("  absolute time  = {0}", absTime);
+        Log.Log.Debug("  relative count = {0}", relCount);
+        Log.Log.Debug("  absolute count = {0}", absCount);*/
+
+        Log.Log.Debug("DRI CC: transport info...");
+        UpnpAvTransportState transportState = UpnpAvTransportState.NO_MEDIA_PRESENT;
+        UpnpAvTransportStatus transportStatus = UpnpAvTransportStatus.OK;
+        string speed = string.Empty;
+        _avTransportService.GetTransportInfo((uint)_avTransportId, out transportState, out transportStatus, out speed);
+        Log.Log.Debug("  state       = {0}", transportState);
+        Log.Log.Debug("  status      = {0}", transportStatus);
+        Log.Log.Debug("  speed       = {0}", speed);
+
+        UpnpAvCurrentPlayMode playMode;
+        UpnpAvRecordQualityMode recordQualityMode;
+        _avTransportService.GetTransportSettings((uint)_avTransportId, out playMode, out recordQualityMode);
+        Log.Log.Debug("  play mode   = {0}", playMode);
+        Log.Log.Debug("  record mode = {0}", recordQualityMode);
       }
       catch (Exception ex)
       {

@@ -72,6 +72,15 @@
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\TVDatabase\references\Gentle.Provider.SQLServer.dll</HintPath>
     </Reference>
+    <Reference Include="Griffin.Networking">
+      <HintPath>..\..\..\..\MediaPortal-2\MediaPortal\Source\Core\UPnP\bin\x86\Debug\Griffin.Networking.dll</HintPath>
+    </Reference>
+    <Reference Include="Griffin.Networking.Protocol.Http">
+      <HintPath>..\..\..\..\MediaPortal-2\MediaPortal\Source\Core\UPnP\bin\x86\Debug\Griffin.Networking.Protocol.Http.dll</HintPath>
+    </Reference>
+    <Reference Include="Griffin.WebServer">
+      <HintPath>..\..\..\..\MediaPortal-2\MediaPortal\Source\Core\UPnP\bin\x86\Debug\Griffin.WebServer.dll</HintPath>
+    </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core">
       <RequiredTargetFramework>3.5</RequiredTargetFramework>
