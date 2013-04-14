@@ -87,7 +87,7 @@ namespace TvLibrary.Implementations.Dri
       currentCarrierLock = (bool)outParams[1];
       currentFrequency = (uint)outParams[2];
       currentSpectrumInversion = (bool)outParams[3];
-      currentPidList = (IList<UInt16>)outParams[4].ToString().Split(',').Select(x => Convert.ToUInt16(x, 16));
+      currentPidList = outParams[4].ToString().Split(',').Select(x => Convert.ToUInt16(x, 16)).ToList<UInt16>();
     }
 
     /// <summary>

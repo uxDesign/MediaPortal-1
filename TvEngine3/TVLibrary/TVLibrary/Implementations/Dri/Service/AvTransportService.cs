@@ -182,6 +182,11 @@ namespace TvLibrary.Implementations.Dri
       return false;
     }
 
+    public static ICollection<UpnpAvRecordQualityMode> Values
+    {
+      get { return _values.Values; }
+    }
+
     public static explicit operator UpnpAvRecordQualityMode(string name)
     {
       UpnpAvRecordQualityMode value = null;
@@ -231,6 +236,11 @@ namespace TvLibrary.Implementations.Dri
         return true;
       }
       return false;
+    }
+
+    public static ICollection<UpnpAvSeekMode> Values
+    {
+      get { return _values.Values; }
     }
 
     public static explicit operator UpnpAvSeekMode(string name)
@@ -350,8 +360,8 @@ namespace TvLibrary.Implementations.Dri
       currentUriMetaData = (string)outParams[3];
       nextUri = (string)outParams[4];
       nextUriMetaData = (string)outParams[5];
-      playMedium = (UpnpAvStorageMedium)outParams[6];
-      recordMedium = (UpnpAvStorageMedium)outParams[7];
+      playMedium = (UpnpAvStorageMedium)(string)outParams[6];
+      recordMedium = (UpnpAvStorageMedium)(string)outParams[7];
       writeStatus = (UpnpAvRecordMediumWriteStatus)Enum.Parse(typeof(UpnpAvRecordMediumWriteStatus), (string)outParams[8]);
     }
 
@@ -383,16 +393,16 @@ namespace TvLibrary.Implementations.Dri
                                       out IList<UpnpAvStorageMedium> recMedia, out IList<UpnpAvRecordQualityMode> recQualityModes)
     {
       IList<object> outParams = _getDeviceCapabilitiesAction.InvokeAction(new List<object> { instanceId });
-      playMedia = (IList<UpnpAvStorageMedium>)outParams[0].ToString().Split(',').Select(x => (UpnpAvStorageMedium)x);
-      recMedia = (IList<UpnpAvStorageMedium>)outParams[1].ToString().Split(',').Select(x => (UpnpAvStorageMedium)x);
-      recQualityModes = (IList<UpnpAvRecordQualityMode>)outParams[2].ToString().Split(',').Select(x => (UpnpAvRecordQualityMode)x);
+      playMedia = outParams[0].ToString().Split(',').Select(x => (UpnpAvStorageMedium)(string)x).ToList<UpnpAvStorageMedium>();
+      recMedia = outParams[1].ToString().Split(',').Select(x => (UpnpAvStorageMedium)(string)x).ToList<UpnpAvStorageMedium>();
+      recQualityModes = outParams[2].ToString().Split(',').Select(x => (UpnpAvRecordQualityMode)(string)x).ToList<UpnpAvRecordQualityMode>();
     }
 
     public void GetTransportSettings(UInt32 instanceId, out UpnpAvCurrentPlayMode playMode, out UpnpAvRecordQualityMode recQualityMode)
     {
       IList<object> outParams = _getTransportSettingsAction.InvokeAction(new List<object> { instanceId });
       playMode = (UpnpAvCurrentPlayMode)Enum.Parse(typeof(UpnpAvCurrentPlayMode), (string)outParams[0]);
-      recQualityMode = (UpnpAvRecordQualityMode)outParams[1];
+      recQualityMode = (UpnpAvRecordQualityMode)(string)outParams[1];
     }
 
     public void Stop(UInt32 instanceId)
@@ -484,7 +494,7 @@ namespace TvLibrary.Implementations.Dri
       }
 
       IList<object> outParams = _getCurrentTransportActionsAction.InvokeAction(new List<object> { instanceId });
-      actions = (IList<UpnpAvTransportAction>)outParams[0].ToString().Split(',').Select(x => (UpnpAvTransportAction)Enum.Parse(typeof(UpnpAvTransportAction), x));
+      actions = outParams[0].ToString().Split(',').Select(x => (UpnpAvTransportAction)Enum.Parse(typeof(UpnpAvTransportAction), x)).ToList<UpnpAvTransportAction>();
       return true;
     }
   }

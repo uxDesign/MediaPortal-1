@@ -19,13 +19,18 @@
 #endregion
 
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Xml.XPath;
+using DirectShowLib;
+using DirectShowLib.BDA;
+using TvLibrary.Channels;
 using TvLibrary.Implementations.DVB;
+using TvLibrary.Implementations.Helper;
+using TvLibrary.Interfaces;
 using UPnP.Infrastructure.CP;
 using UPnP.Infrastructure.CP.Description;
 using UPnP.Infrastructure.CP.DeviceTree;
-using TvLibrary.Implementations.Helper;
-using DirectShowLib;
 
 namespace TvLibrary.Implementations.Dri
 {
@@ -80,8 +85,6 @@ namespace TvLibrary.Implementations.Dri
 
       GetPreloadBitAndCardId();
       GetSupportsPauseGraph();
-
-      BuildGraph();
     }
 
     public override void Dispose()
@@ -132,7 +135,14 @@ namespace TvLibrary.Implementations.Dri
       }
       if (_connectionManagerService != null)
       {
-        //_connectionManagerService.ConnectionComplete(_connectionId);
+        try
+        {
+          _connectionManagerService.ConnectionComplete(_connectionId);
+        }
+        catch (Exception ex)
+        {
+          Log.Log.Debug("debug: connectioncomplete ex {0}", ex.ToString());
+        }
         _connectionManagerService.Dispose();
         _connectionManagerService = null;
       }
@@ -183,16 +193,18 @@ namespace TvLibrary.Implementations.Dri
         _avTransportService = new AvTransportService(_deviceConnection.Device, _stateVariableDelegate);
         _connectionManagerService = new ConnectionManagerService(_deviceConnection.Device, _stateVariableDelegate);
 
+        int rcsId = -1;
         try
         {
-          int rcsId = -1;
-          bool executed = _connectionManagerService.PrepareForConnection(string.Empty, string.Empty, -1, UpnpConnectionDirection.Output, out _connectionId, out _avTransportId, out rcsId);
-          Log.Log.Debug("debug: executed = {0}, connection ID = {1}, AV transport ID = {2}, RCS ID = {3}", executed, _connectionId, _avTransportId, rcsId);
+          _connectionManagerService.PrepareForConnection(string.Empty, string.Empty, -1, UpnpConnectionDirection.Output, out _connectionId, out _avTransportId, out rcsId);
         }
-        catch (Exception ex)
+        catch
         {
-          Log.Log.Debug("debug: exception :(\r\n{0}", ex);
+          Log.Log.Debug("PrepareForConnection FAILED!!! :(");
         }
+        Log.Log.Debug("DRI CC: PrepareForConnection, connection ID = {0}, AV transport ID = {1}", _connectionId, _avTransportId);
+
+        LogDeviceInfo();
 
         _graphState = GraphState.Created;
       }
@@ -200,6 +212,151 @@ namespace TvLibrary.Implementations.Dri
       {
         Dispose();
         throw;
+      }
+    }
+
+    private void LogDeviceInfo()
+    {
+      try
+      {
+        Log.Log.Debug("DRI CC: current tuner status...");
+        bool isCarrierLocked = false;
+        uint frequency = 0;
+        DriTunerModulation modulation = DriTunerModulation.All;
+        bool isPcrLocked = false;
+        int signalLevel = 0;
+        uint snr = 0;
+        _tunerService.GetTunerParameters(out isCarrierLocked, out frequency, out modulation, out isPcrLocked, out signalLevel, out snr);
+        Log.Log.Debug("  carrier lock = {0}", isCarrierLocked);
+        Log.Log.Debug("  frequency    = {0} kHz", frequency);
+        Log.Log.Debug("  modulation   = {0}", modulation.ToString());
+        Log.Log.Debug("  PCR lock     = {0}", isPcrLocked);
+        Log.Log.Debug("  signal level = {0} dBmV", signalLevel);
+        Log.Log.Debug("  SNR          = {0} dB", snr);
+
+        Log.Log.Debug("DRI CC: current forward data channel status...");
+        uint bitrate = 0;
+        bool spectrumInversion = false;
+        IList<ushort> pids;
+        _fdcService.GetFdcStatus(out bitrate, out isCarrierLocked, out frequency, out spectrumInversion, out pids);
+        Log.Log.Debug("  bitrate           = {0} kbps", bitrate);
+        Log.Log.Debug("  carrier lock      = {0}", isCarrierLocked);
+        Log.Log.Debug("  frequency         = {0} kHz", frequency);
+        Log.Log.Debug("  spectrum inverted = {0}", spectrumInversion);
+        Log.Log.Debug("  PIDs              = {0}", string.Join(", ", pids));
+
+        IList<DriAuxFormat> formats;
+        byte svideoInputCount = 0;
+        byte compositeInputCount = 0;
+        if (_auxService.GetAuxCapabilities(out formats, out svideoInputCount, out compositeInputCount))
+        {
+          Log.Log.Debug("DRI CC: auxiliary input info...");
+          Log.Log.Debug("  supported formats     = {0}", string.Join(", ", formats.Select(x => x.ToString())));
+          Log.Log.Debug("  S-video input count   = {0}", svideoInputCount);
+          Log.Log.Debug("  composite input count = {0}", compositeInputCount);
+        }
+        else
+        {
+          Log.Log.Debug("DRI CC: auxiliary inputs not present/supported");
+        }
+
+        IList<DriEncoderAudioProfile> audioProfiles;
+        IList<DriEncoderVideoProfile> videoProfiles;
+        _encoderService.GetEncoderCapabilities(out audioProfiles, out videoProfiles);
+        if (audioProfiles.Count > 0)
+        {
+          Log.Log.Debug("DRI CC: encoder audio profiles...");
+          foreach (DriEncoderAudioProfile ap in audioProfiles)
+          {
+            Log.Log.Debug("  codec = {0}, bit depth = {1}, channel count = {2}, sample rate = {3} Hz", Enum.GetName(typeof(DriEncoderAudioAlgorithm), ap.AudioAlgorithmCode), ap.BitDepth, ap.NumberChannel, ap.SamplingRate);
+          }
+        }
+        if (videoProfiles.Count > 0)
+        {
+          Log.Log.Debug("DRI CC: encoder video profiles...");
+          foreach (DriEncoderVideoProfile vp in videoProfiles)
+          {
+            Log.Log.Debug("  hor. pixels = {0}, vert. pixels = {1}, aspect ratio = {2}, frame rate = {3}, {4}", vp.HorizontalSize, vp.VerticalSize, Enum.GetName(typeof(DriEncoderVideoAspectRatio), vp.AspectRatioInformation), Enum.GetName(typeof(DriEncoderVideoFrameRate), vp.FrameRateCode));
+          }
+        }
+
+        uint maxAudioBitrate = 0;
+        uint minAudioBitrate = 0;
+        DriEncoderAudioMode audioBitrateMode = DriEncoderAudioMode.CBR;
+        uint audioBitrateStepping = 0;
+        uint audioBitrate = 0;
+        byte audioProfileIndex = 0;
+        bool isMuted = false;
+        bool sapDetected = false; // second audio program (additional audio stream)
+        bool sapActive = false;
+        DriEncoderFieldOrder fieldOrder = DriEncoderFieldOrder.HIGHER;
+        DriEncoderInputSelection source = DriEncoderInputSelection.AUX;
+        bool noiseFilterActive = false;
+        bool pulldownDetected = false;
+        bool pulldownActive = false;
+        uint maxVideoBitrate = 0;
+        uint minVideoBitrate = 0;
+        DriEncoderVideoMode videoBitrateMode = DriEncoderVideoMode.CBR;
+        uint videoBitrate = 0;
+        uint videoBitrateStepping = 0;
+        byte videoProfileIndex = 0;
+        _encoderService.GetEncoderParameters(out maxAudioBitrate, out minAudioBitrate, out audioBitrateMode,
+          out audioBitrateStepping, out audioBitrate, out audioProfileIndex, out isMuted,
+          out fieldOrder, out source, out noiseFilterActive, out pulldownDetected,
+          out pulldownActive, out sapDetected, out sapActive, out maxVideoBitrate, out minVideoBitrate,
+          out videoBitrateMode, out videoBitrate, out videoBitrateStepping, out videoProfileIndex);
+        Log.Log.Debug("DRI CC: current encoder audio parameters...");
+        Log.Log.Debug("  max bitrate  = {0} kbps", maxAudioBitrate);
+        Log.Log.Debug("  min bitrate  = {0} kbps", minAudioBitrate);
+        Log.Log.Debug("  bitrate mode = {0}", Enum.GetName(typeof(DriEncoderAudioMode), audioBitrateMode));
+        Log.Log.Debug("  bitrate step = {0} kbps", audioBitrateStepping);
+        Log.Log.Debug("  bitrate      = {0} kbps", audioBitrate);
+        Log.Log.Debug("  profile      = {0}", audioProfileIndex);
+        Log.Log.Debug("  is muted     = {0}", isMuted);
+        Log.Log.Debug("  SAP detected = {0}", sapDetected);
+        Log.Log.Debug("  SAP active   = {0}", sapActive);
+        Log.Log.Debug("DRI CC: current encoder video parameters...");
+        Log.Log.Debug("  max bitrate  = {0} kbps", maxVideoBitrate);
+        Log.Log.Debug("  min bitrate  = {0} kbps", minVideoBitrate);
+        Log.Log.Debug("  bitrate mode = {0}", Enum.GetName(typeof(DriEncoderVideoMode), videoBitrateMode));
+        Log.Log.Debug("  bitrate step = {0} kbps", videoBitrateStepping);
+        Log.Log.Debug("  bitrate      = {0} kbps", videoBitrate);
+        Log.Log.Debug("  profile      = {0}", videoProfileIndex);
+        Log.Log.Debug("  field order  = {0}", Enum.GetName(typeof(DriEncoderFieldOrder), fieldOrder));
+        Log.Log.Debug("  source       = {0}", Enum.GetName(typeof(DriEncoderInputSelection), source));
+        Log.Log.Debug("  noise filter = {0}", noiseFilterActive);
+        Log.Log.Debug("  3:2 detected = {0}", pulldownDetected);
+        Log.Log.Debug("  3:2 active   = {0}", pulldownActive);
+
+        Log.Log.Debug("DRI CC: card status...");
+        DriCasCardStatus status = DriCasCardStatus.Removed;
+        string manufacturer = string.Empty;
+        string version = string.Empty;
+        bool isDst = false;
+        uint eaLocationCode = 0;
+        byte ratingRegion = 0;
+        int timeZone = 0;
+        _casService.GetCardStatus(out status, out manufacturer, out version, out isDst, out eaLocationCode, out ratingRegion, out timeZone);
+        Log.Log.Debug("  status        = {0}", status.ToString());
+        Log.Log.Debug("  manufacturer  = {0}", manufacturer);
+        Log.Log.Debug("  version       = {0}", version);
+        Log.Log.Debug("  time zone     = {0}", timeZone);
+        Log.Log.Debug("  DST           = {0}", isDst);
+        Log.Log.Debug("  EA loc. code  = {0}", eaLocationCode);  // EA = emergency alert
+        Log.Log.Debug("  rating region = {0}", ratingRegion);
+
+        Log.Log.Debug("DRI CC: diag service parameters...");
+        string value = string.Empty;
+        bool isVolatile = false;
+        foreach (DriDiagParameter p in DriDiagParameter.Values)
+        {
+          _diagService.GetParameter(p, out value, out isVolatile);
+          Log.Log.Debug("  {0}{1} = {2}", p.ToString(), isVolatile ? " [volatile]" : "", value);
+        }
+      }
+      catch (Exception ex)
+      {
+        Log.Log.Debug("EXCEPTION: {0}", ex.ToString());
       }
     }
 
@@ -256,9 +413,24 @@ namespace TvLibrary.Implementations.Dri
       }
     }
 
+    /// <summary>
+    /// Check if the device can tune to a given channel.
+    /// </summary>
+    /// <param name="channel">The channel to check.</param>
+    /// <returns><c>true</c> if the device can tune to the channel, otherwise <c>false</c></returns>
+    public override bool CanTune(IChannel channel)
+    {
+      ATSCChannel atscChannel = channel as ATSCChannel;
+      if (atscChannel != null && atscChannel.ModulationType == ModulationType.ModNotSet)
+      {
+        return true;
+      }
+      return false;
+    }
+
     private void StateVariableChanged(CpStateVariable stateVariable, object newValue)
     {
-      Log.Log.Debug("DRI CC: state variable {0} for service {1} changed to {2}", stateVariable.Name, stateVariable.ParentService.FullQualifiedName, newValue ?? "[null]");
+      Log.Log.Debug("DRI CC: state variable {0} for tuner {3} service {1} changed to {2}", stateVariable.Name, stateVariable.ParentService.FullQualifiedName, newValue ?? "[null]", _devicePath);
     }
   }
 }

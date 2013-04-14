@@ -60,10 +60,15 @@ namespace TvLibrary.Implementations.Dri
       return false;
     }
 
+    public static ICollection<DriTunerModulation> Values
+    {
+      get { return _values.Values; }
+    }
+
     public static explicit operator DriTunerModulation(string name)
     {
       DriTunerModulation value = null;
-      if (!_values.TryGetValue(name, out value))
+      if (name == null || !_values.TryGetValue(name, out value))
       {
         return null;
       }
@@ -142,7 +147,7 @@ namespace TvLibrary.Implementations.Dri
       }
       IList<object> outParams = _setTunerParametersAction.InvokeAction(new List<object> { newFrequency, newModulationListCsv });
       currentFrequency = (uint)outParams[0];
-      currentModulation = (DriTunerModulation)outParams[1];
+      currentModulation = (DriTunerModulation)(string)outParams[1];
       pcrLockStatus = (bool)outParams[2];
     }
 
@@ -162,7 +167,7 @@ namespace TvLibrary.Implementations.Dri
       IList<object> outParams = _getTunerParametersAction.InvokeAction(null);
       currentCarrierLock = (bool)outParams[0];
       currentFrequency = (uint)outParams[1];
-      currentModulation = (DriTunerModulation)outParams[2];
+      currentModulation = (DriTunerModulation)(string)outParams[2];
       currentPcrLock = (bool)outParams[3];
       currentSignalLevel = (int)outParams[4];
       currentSnr = (uint)outParams[5];

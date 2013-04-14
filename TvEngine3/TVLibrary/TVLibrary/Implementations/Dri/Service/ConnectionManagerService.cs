@@ -134,7 +134,7 @@ namespace TvLibrary.Implementations.Dri
     public void GetCurrentConnectionIds(out IList<UInt32> currentConnectionIds)
     {
       IList<object> outParams = _getCurrentConnectionIdsAction.InvokeAction(null);
-      currentConnectionIds = (IList<UInt32>)outParams[0].ToString().Split(',').Select(x => UInt32.Parse(x));
+      currentConnectionIds = outParams[0].ToString().Split(',').Select(x => UInt32.Parse(x)).ToList<UInt32>();
     }
 
     public void GetCurrentConnectionInfo(Int32 connectionId, out Int32 rcsId, out Int32 avTransportId,

@@ -54,6 +54,11 @@ namespace TvLibrary.Implementations.Dri
       return false;
     }
 
+    public static ICollection<DriCasCaptureMode> Values
+    {
+      get { return _values.Values; }
+    }
+
     public static explicit operator DriCasCaptureMode(string name)
     {
       DriCasCaptureMode value = null;
@@ -121,6 +126,11 @@ namespace TvLibrary.Implementations.Dri
       return false;
     }
 
+    public static ICollection<DriCasDescramblingStatus> Values
+    {
+      get { return _values.Values; }
+    }
+
     public static explicit operator DriCasDescramblingStatus(string name)
     {
       DriCasDescramblingStatus value = null;
@@ -181,6 +191,11 @@ namespace TvLibrary.Implementations.Dri
         return true;
       }
       return false;
+    }
+
+    public static ICollection<DriCasCardStatus> Values
+    {
+      get { return _values.Values; }
     }
 
     public static explicit operator DriCasCardStatus(string name)
@@ -263,7 +278,7 @@ namespace TvLibrary.Implementations.Dri
                               out byte currentRatingRegion, out Int32 currentTimeZone)
     {
       IList<object> outParams = _getCardStatusAction.InvokeAction(null);
-      currentCardStatus = (DriCasCardStatus)outParams[0];
+      currentCardStatus = (DriCasCardStatus)(string)outParams[0];
       currentCardManufacturer = (string)outParams[1];
       currentCardVersion = (string)outParams[2];
       currentDaylightSaving = (bool)outParams[3];
@@ -301,7 +316,7 @@ namespace TvLibrary.Implementations.Dri
       }
 
       IList<object> outParams = _getEntitlementAction.InvokeAction(new List<object> { newChannelNumber, newSourceId });
-      currentEntitlement = (DriCasDescramblingStatus)outParams[0];
+      currentEntitlement = (DriCasDescramblingStatus)(string)outParams[0];
       entitlementMessage = (string)outParams[1];
       return true;
     }

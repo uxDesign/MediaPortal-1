@@ -54,6 +54,11 @@ namespace TvLibrary.Implementations.Dri
       return false;
     }
 
+    public static ICollection<DriAuxFormat> Values
+    {
+      get { return _values.Values; }
+    }
+
     public static explicit operator DriAuxFormat(string name)
     {
       DriAuxFormat value = null;
@@ -97,6 +102,11 @@ namespace TvLibrary.Implementations.Dri
         return true;
       }
       return false;
+    }
+
+    public static ICollection<DriInputType> Values
+    {
+      get { return _values.Values; }
     }
 
     public static explicit operator DriInputType(string name)
@@ -178,7 +188,7 @@ namespace TvLibrary.Implementations.Dri
       }
 
       IList<object> outParams = _getAuxCapabilitiesAction.InvokeAction(null);
-      supportedFormat = (IList<DriAuxFormat>)outParams[0].ToString().Split(',').Select(x => (DriAuxFormat)x);
+      supportedFormat = outParams[0].ToString().Split(',').Select(x => (DriAuxFormat)(string)x).ToList<DriAuxFormat>();
       svideoNbr = (byte)outParams[1];
       videoNbr = (byte)outParams[2];
       return true;
@@ -207,7 +217,7 @@ namespace TvLibrary.Implementations.Dri
       IList<object> outParams = _setAuxParametersAction.InvokeAction(new List<object> {
         selectType.ToString(), selectInput, selectFormat.ToString()
       });
-      actualFormat = (DriAuxFormat)outParams[0];
+      actualFormat = (DriAuxFormat)(string)outParams[0];
       currentGenLock = (bool)outParams[1];
       return true;
     }

@@ -79,6 +79,11 @@ namespace TvLibrary.Implementations.Dri
       return false;
     }
 
+    public static ICollection<DriDiagParameter> Values
+    {
+      get { return _values.Values; }
+    }
+
     public static explicit operator DriDiagParameter(string name)
     {
       DriDiagParameter value = null;
