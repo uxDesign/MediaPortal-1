@@ -17,4 +17,5 @@
 UINT CALLBACK SchedulerThread(void* param);
 UINT CALLBACK WorkerThread(void* param);
 UINT CALLBACK TimerThread(void* param);
+UINT CALLBACK DispTimThread(void* param);
 

@@ -68,7 +68,15 @@ void CSyncClock::SetBias(double pBias)
 void CSyncClock::SetAdjustment(double pAdjustment)
 {
   m_SynchCorrection.SetAdjustment(pAdjustment);
-  m_dAdjustment = pAdjustment;
+  if (pAdjustment < 0)
+  {
+    //Negative adjustment values are temporary adjustments (bias is not corrected)
+    m_dAdjustment = -pAdjustment;
+  }
+  else
+  {
+    m_dAdjustment = pAdjustment;
+  }
 }
 
 void CSyncClock::SetAudioDelay(INT64 pAudioDelay)

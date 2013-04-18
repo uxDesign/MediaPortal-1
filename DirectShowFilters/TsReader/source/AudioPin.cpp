@@ -77,6 +77,8 @@ CAudioPin::CAudioPin(LPUNKNOWN pUnk, CTsReaderFilter *pFilter, HRESULT *phr,CCri
   m_bPinNoAddPMT = false;
   m_bAddPMT = false;
   m_bDownstreamFlush=false;
+  m_nNextAFT = 0;
+	m_fAFTMean = 0.0;
 }
 
 CAudioPin::~CAudioPin()
@@ -434,9 +436,9 @@ HRESULT CAudioPin::FillBuffer(IMediaSample *pSample)
       {
         m_FillBuffSleepTime = 5;
         buffer=NULL; //Continue looping
-        if (!m_pTsReaderFilter->m_bStreamCompensated && (m_nNextASD != 0))
+        if (!m_pTsReaderFilter->m_bStreamCompensated && (m_nNextAFT != 0))
         {
-          ClearAverageSampleDur();
+          ClearAverageFtime();
         }
         
         if (!m_pTsReaderFilter->m_bStreamCompensated)
@@ -455,7 +457,7 @@ HRESULT CAudioPin::FillBuffer(IMediaSample *pSample)
         bool HasTimestamp ;
         double fTime = 0.0;
         double clock = 0.0;
-        double stallPoint = 1.5;
+        double stallPoint = AUDIO_STALL_POINT;
         //check if it has a timestamp
         if ((HasTimestamp=buffer->MediaTime(RefTime)))
         {
@@ -468,6 +470,7 @@ HRESULT CAudioPin::FillBuffer(IMediaSample *pSample)
           m_pTsReaderFilter->GetMediaPosition(&RefClock) ;
           clock = (double)(RefClock-m_rtStart.m_time)/10000000.0 ;
           fTime = ((double)cRefTime.m_time/10000000.0) - clock ;
+          // m_pTsReaderFilter->m_LastAudioPinDelta = (float)fTime;
 
           //Discard late samples at start of play,
           //and samples outside a sensible timing window during play 
@@ -560,6 +563,7 @@ HRESULT CAudioPin::FillBuffer(IMediaSample *pSample)
               LogDebug("Aud/Ref : %03.3f, Compensated = %03.3f ( %0.3f A/V buffers=%02d/%02d), Clk : %f, SampCnt %d, Sleep %d ms, stallPt %03.3f", (float)RefTime.Millisecs()/1000.0f, (float)cRefTime.Millisecs()/1000.0f, fTime,cntA,cntV, clock, m_sampleCount, m_FillBuffSleepTime, (float)stallPoint);
             }
             if (m_pTsReaderFilter->m_ShowBufferAudio) m_pTsReaderFilter->m_ShowBufferAudio--;
+            CalcAverageFtime(fTime);
           }
           else
           {
@@ -610,59 +614,47 @@ HRESULT CAudioPin::FillBuffer(IMediaSample *pSample)
   return NOERROR;
 }
 
-void CAudioPin::ClearAverageSampleDur()
+void CAudioPin::ClearAverageFtime()
 {
-  m_FillBuffSleepTime = 1;
-  m_sampleDuration = 10000; //1 ms
-
-  m_llLastComp = 0;
-  m_llLastASDts = 0;
-  m_nNextASD = 0;
-	m_fASDMean = 0;
-	m_llASDSumAvg = 0;
-  ZeroMemory((void*)&m_pllASD, sizeof(LONGLONG) * NB_ASDSIZE);
+  m_nNextAFT = 0;
+	m_fAFTMean = 0.0;
+	m_llAFTSumAvg = 0.0;
+  ZeroMemory((void*)&m_pllAFT, sizeof(double) * NB_AFTSIZE);
 }
 
-// Calculate rolling average audio sample duration
-LONGLONG CAudioPin::GetAverageSampleDur(LONGLONG timeStamp)
-{
-  LONGLONG stsDiff;
-  if (m_nNextASD > 0)
-  {
-    stsDiff = timeStamp - m_llLastASDts;
-  }
-  else
-  {
-    stsDiff = 10000;
-  }
-  
-  m_llLastASDts = timeStamp;
-        
+// Calculate rolling average audio ftime
+void CAudioPin::CalcAverageFtime(double ftime)
+{          
     // Calculate the mean timestamp difference
-  if (m_nNextASD >= NB_ASDSIZE)
+  if (m_nNextAFT >= NB_AFTSIZE)
   {
-    m_fASDMean = m_llASDSumAvg / (LONGLONG)NB_ASDSIZE;
+    m_fAFTMean = m_llAFTSumAvg / (double)NB_AFTSIZE;
   }
-  else if (m_nNextASD > 1)
+  else if (m_nNextAFT > 1)
   {
-    m_fASDMean = m_llASDSumAvg / (LONGLONG)m_nNextASD;
+    m_fAFTMean = m_llAFTSumAvg / (double)m_nNextAFT;
   }
   else
   {
-    m_fASDMean = stsDiff;
+    m_fAFTMean = ftime;
   }
 
-    // Update the rolling timestamp difference sum
+  m_pTsReaderFilter->m_LastAudioPinDelta = (float)m_fAFTMean;
+
+    // Update the rolling timestamp to presentation diff average
     // (these values are initialised in OnThreadStartPlay())
-  int tempNextASD = (m_nNextASD % NB_ASDSIZE);
-  m_llASDSumAvg -= m_pllASD[tempNextASD];
-  m_pllASD[tempNextASD] = stsDiff;
-  m_llASDSumAvg += stsDiff;
-  m_nNextASD++;
+  int tempNextASD = (m_nNextAFT % NB_AFTSIZE);
+  m_llAFTSumAvg -= m_pllAFT[tempNextASD];
+  m_pllAFT[tempNextASD] = ftime;
+  m_llAFTSumAvg += ftime;
+  m_nNextAFT++;
   
-  //LogDebug("audPin:GetAverageSampleTime, nextASD %d, TsMeanDiff %0.3f, stsDiff %0.3f", m_nNextASD, (float)m_fASDMean/10000.0f, (float)stsDiff/10000.0f);
-  
-  return m_fASDMean;
+  //LogDebug("audPin:GetAverageSampleTime, nextASD %d, TsMeanDiff %0.3f, ftime %0.3f", m_nNextAFT, (float)m_fAFTMean/10000.0f, (float)ftime/10000.0f);  
+}
+
+double CAudioPin::GetAudToPresMeanDelta()
+{
+  return m_fAFTMean;
 }
 
 bool CAudioPin::IsInFillBuffer()
@@ -739,7 +731,7 @@ HRESULT CAudioPin::OnThreadStartPlay()
   m_FillBuffSleepTime = 1;
   m_LastFillBuffTime = GET_TIME_NOW();
   
-  ClearAverageSampleDur();
+  ClearAverageFtime();
 
   //get file-duration and set m_rtDuration
   GetDuration(NULL);

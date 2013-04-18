@@ -1,4 +1,4 @@
-// Copyright (C) 2005-2010 Team MediaPortal
+// Copyright (C) 2005-2012 Team MediaPortal
 // http://www.team-mediaportal.com
 // 
 // MediaPortal is free software: you can redistribute it and/or modify
@@ -22,30 +22,84 @@
 #include <Mferror.h>
 #include "OuterEVR.h"
 #include "IAVSyncClock.h"
+#include "ITSRStatus.h"
 #include "callback.h"
 #include "myqueue.h"
 
 using namespace std;
 #define CHECK_HR(hr, msg) if (FAILED(hr)) Log(msg);
 #define SAFE_RELEASE(p) { if(p) { (p)->Release(); (p)=NULL; } }
+  
 
 //Disables MP audio renderer functions if true
 #define NO_MP_AUD_REND false
 
-#define NUM_SURFACES 5
+//Enables DWM queued mode if true
+#define ENABLE_DWM_QUEUED false
+//Enables reset of DWM parameters if true
+#define ENABLE_DWM_RESET true
+//Bring Scheduler thread under Multimedia Class Scheduler Service (MMCSS) control if 'true'
+#define SCHED_ENABLE_MMCSS true
+//Enables DWM audio delay compensation if true
+#define ENABLE_AUDIO_DELAY_COMP false
+//Enables early/forced display of first frame at start of play if true
+#define FORCE_FIRST_FRAME false
+//Enables lower resolution/lower CPU usage Vsync correction timing if true
+#define LOW_RES_TIMING false
+//Minimum usable vsync correction delay in 100 ns units (used when LOW_RES_TIMING is true)
+#define MIN_VSC_DELAY 11000
+//Enable late DWM init when true
+#define ENABLE_LATE_DWM_INIT false
+//Enable DWM init sleep when true
+#define ENABLE_DWM_INIT_SLEEP true
+//Enable DWM init for 24Hz when true
+#define ENABLE_DWM_FOR_24Hz true
+//Enable LogAllFrameDrops when true
+#define LOG_ALL_FRAME_DROPS false
+
+//Maximum FPS rate limiter default settings
+#define FPS_LIM_RATE 0
+#define FPS_LIM_V 700
+#define FPS_LIM_H 1200
+
+//Set MMCSS thread priorities - these are incremented by one to allow DWORD (unsigned) representation in Registry
+#define SCHED_MMCSS_PRIORITY  (AVRT_PRIORITY_HIGH + 1)  
+#define WORKER_MMCSS_PRIORITY (AVRT_PRIORITY_NORMAL + 1)
+#define TIMER_MMCSS_PRIORITY  (AVRT_PRIORITY_LOW + 1)   
+
+//Thread pause timeout in ms
+#define THREAD_PAUSE_TIMEOUT 2000
+
+//Set max/min/default values for sample queue size - actual size is set via 'SampleQueueSize' registry key
+#define MAX_SURFACES 9
+#define MIN_SURFACES 3
+#define DEFAULT_SURFACES 5
+
 #define NB_JITTER 125
 #define NB_RFPSIZE 64
-#define NB_DFTHSIZE 64
-#define NB_CFPSIZE 16
+
+#define NB_DFTHSIZE 8
+#define NB_CFPSIZE 24
+
 #define NB_PCDSIZE 32
-#define LF_THRESH_LOW 3
-#define LF_THRESH (LF_THRESH_LOW + 1)
-#define LF_THRESH_HIGH (LF_THRESH + 3)
-#define FRAME_PROC_THRESH 30
-#define FRAME_PROC_THRSH2 60
+#define FRAME_PROC_THRESH 32
 #define DFT_THRESH 0.007
-#define NUM_PHASE_DEVIATIONS 32
+//#define NUM_PHASE_DEVIATIONS 32
+#define NUM_PHASE_DEVIATIONS 8
+#define NUM_PHASE_DEV_2 16
 #define FILTER_LIST_SIZE 9
+
+//Valid range is 2-8
+#define NUM_DWM_BUFFERS 3
+
+#define NUM_DWM_FRAMES 1
+
+//skip DwmInit() if display refresh period is > 25.0 ms (i.e. below 40Hz refresh rate)
+//if ENABLE_DWM_FOR_24Hz is false
+#define DWM_REFRESH_THRESH 25.0
+
+//Bring DWM under Multimedia Class Scheduler Service (MMCSS) control if 'true'
+#define DWM_ENABLE_MMCSS false
 
 // magic numbers
 #define DEFAULT_FRAME_TIME 200000 // used when fps information is not provided (PAL interlaced == 50fps)
@@ -58,6 +112,9 @@ using namespace std;
 
 // uncomment the //Log to enable extra logging
 #define LOG_LATEFR //Log
+
+// Disable some logging in skip-step FFWD/RWD
+#define LOG_NOSCRUB if (!m_bZeroScrub) Log 
 
 // Macro for locking 
 #define TIME_LOCK(obj, crit, name)  \
@@ -73,10 +130,10 @@ class MPEVRCustomPresenter;
 
 enum MP_RENDER_STATE
 {
-  MP_RENDER_STATE_STARTED = 1,
-  MP_RENDER_STATE_STOPPED,
+	MP_RENDER_STATE_SHUTDOWN = 0,
   MP_RENDER_STATE_PAUSED,
-  MP_RENDER_STATE_SHUTDOWN
+  MP_RENDER_STATE_STARTED,
+  MP_RENDER_STATE_STOPPED
 };
 
 enum FPS_SOURCE_METHOD
@@ -101,12 +158,13 @@ typedef struct _SchedulerParams
 {
   MPEVRCustomPresenter* pPresenter;
   CCritSec csLock;
+  CAMEvent eStall;  //Thread stall event
+  CAMEvent eDoHPtask;  //Delegated high priority event
   CAMEvent eHasWork;   //Urgent event
   CAMEvent eHasWorkLP; //Low-priority event
-  CAMEvent eTimerEnd;  //Timer thread event
+  CAMEvent eUnstall;  //Release stall event
+  CAMEvent eTimerEnd;  //Timer end event
   BOOL bDone;
-  long iPause;
-  BOOL bPauseAck;
   LONGLONG llTime;     //Timer target time
 } SchedulerParams;
 
@@ -213,10 +271,15 @@ public:
   double         GetRealFramePeriod();
   double         GetVideoFramePeriod(FPS_SOURCE_METHOD fpsSource);
   void           GetFrameRateRatio();
-
+  int            CheckQueueCount();
   void           NotifyTimer(LONGLONG targetTime);
   void           NotifySchedulerTimer();
-
+  void           DelegatedFlush();
+  int            GetScanLine();
+  void           DriftAdjust(int adjust);
+  double         CompareFrameTimes();
+  void           UpdatePhaseDiff();
+  
   // Release EVR callback (C# side)
   void           ReleaseCallback();
 
@@ -225,14 +288,75 @@ public:
   void           ResetEVRStatCounters();
   void           ResetTraceStats(); // Reset tracing stats
   void           ResetFrameStats(); // Reset frame stats
-  
+  void           LogRenderStats();
+    
   void           NotifyRateChange(double pRate);
   void           NotifyDVDMenuState(bool pIsInMenu);
   void           UpdateDisplayFPS();
 
+  void           DwmReset(bool newWinHand);
+  void           DwmInit();
+
   bool           m_bScrubbing;
   bool           m_bZeroScrub;
 
+  bool           m_bSchedulerEnableMMCSS;
+
+  int            m_regSchedMmcssPriority;   
+  int            m_regWorkerMmcssPriority; 
+  int            m_regTimerMmcssPriority;   
+  
+  bool           m_bLowResTiming;
+  int            m_iFramesProcessed;
+  int            m_iFramesDrawn;
+  int            m_iDisplayFrameCount;
+  double         m_dDispToVidRatio;
+  double         m_dDToVdrift;
+  int            m_iDriftAdjust;
+  double         m_dDisplayPeriodRolling;
+
+  CAMEvent      m_WorkerStalledEvent;
+  CAMEvent      m_SchedulerStalledEvent;
+
+  // IsRunning: The "running" state is not shutdown or stopped (used in Scheduler.cpp)
+  inline BOOL IsRunning() const
+  {
+    return ((m_state == MP_RENDER_STATE_STARTED) || (m_state == MP_RENDER_STATE_PAUSED));   
+  }
+
+  inline void MPEVRCustomPresenter::NotifyThreadSP(SchedulerParams* params)
+  {
+    if (m_bSchedulerRunning)
+    {
+      params->eHasWork.Set();
+    }
+  }
+
+  inline void MPEVRCustomPresenter::NotifyThreadLP(SchedulerParams* params)
+  {
+    if (m_bSchedulerRunning)
+    {
+      params->eHasWorkLP.Set();
+    }
+  }
+
+  inline void MPEVRCustomPresenter::NotifyThread(SchedulerParams* params, bool setWork, bool setWorkLP, LONGLONG llTime)
+  {
+    if (m_bSchedulerRunning)
+    {
+      if (setWork)
+      {
+        params->llTime = llTime;
+        params->eHasWork.Set();
+      }
+      if (setWorkLP)
+      {
+        params->llTime = llTime;
+        params->eHasWorkLP.Set();
+      }
+    }
+  }
+  
 friend class StatsRenderer;
 
 protected:
@@ -254,9 +378,6 @@ protected:
   void           StopWorkers();
   void           StartThread(PHANDLE handle, SchedulerParams* pParams, UINT (CALLBACK *ThreadProc)(void*), UINT* threadId, int threadPriority);
   void           EndThread(HANDLE hThread, SchedulerParams* params);
-  void           PauseThread(HANDLE hThread, SchedulerParams* params);
-  void           WakeThread(HANDLE hThread, SchedulerParams* params);
-  void           NotifyThread(SchedulerParams* params, bool setWork, bool setWorkLP, LONGLONG llTime);
   void           NotifyScheduler(bool forceWake);
   void           NotifyWorker(bool setInAvail);
   HRESULT        GetTimeToSchedule(IMFSample* pSample, LONGLONG* pDelta, LONGLONG *hnsSystemTime);
@@ -265,17 +386,31 @@ protected:
   void           ScheduleSample(IMFSample* pSample);
   IMFSample*     PeekSample();
   BOOL           PopSample();
-  int            CheckQueueCount();
+  BOOL           PutSample(IMFSample* pSample);
+  bool           SampleAvailable();
   HRESULT        TrackSample(IMFSample *pSample);
   HRESULT        GetFreeSample(IMFSample** ppSample);
-  void           ReturnSample(IMFSample* pSample, BOOL tryNotify);
+  void           ReturnSample(IMFSample* pSample, BOOL tryNotify, BOOL isWorker);
   HRESULT        PresentSample(IMFSample* pSample);
   void           VideoFpsFromSample(IMFSample* pSample);
   void           GetRealRefreshRate();
   LONGLONG       GetDelayToRasterTarget(LONGLONG *targetTime, LONGLONG *offsetTime);
   void           DwmEnableMMCSSOnOff(bool enable);
   bool           BufferMoreSamples();
+  void           DwmSetParameters(BOOL useSourceRate, UINT buffers, UINT rfshPerFrame);
+  void           DwmGetState();
+  void           DwmFlush();
+  void           ReadRegistryKeyDword(HKEY hKey, LPCTSTR& lpSubKey, DWORD& data);
+  void           WriteRegistryKeyDword(HKEY hKey, LPCTSTR& lpSubKey, DWORD& data);
 
+  void           StallWorker();
+  void           ReleaseWorker();
+  void           StallScheduler();
+  void           ReleaseScheduler();
+  void           DwmInitDelegated();
+  
+  void           GetTSRStatusInterface();
+ 
   HRESULT EnumFilters(IFilterGraph *pGraph);
   bool GetFilterNames();
 
@@ -287,27 +422,40 @@ protected:
   CComPtr<IMFTransform>             m_pMixer;
   CComPtr<IMFMediaType>             m_pMediaType;
   CComPtr<IMediaSeeking>            m_pMediaSeeking;
-  CComPtr<IDirect3DTexture9>        textures[NUM_SURFACES];
-  CComPtr<IDirect3DSurface9>        surfaces[NUM_SURFACES];
-  CComPtr<IMFSample>                samples[NUM_SURFACES];
+  CComPtr<IDirect3DTexture9>        textures[MAX_SURFACES];
+  CComPtr<IDirect3DSurface9>        surfaces[MAX_SURFACES];
+  CComPtr<IMFSample>                samples[MAX_SURFACES];
+
   CCritSec                          m_lockSamples;
-  CCritSec                          m_lockScheduledSamples;
   CCritSec                          m_lockRasterData;
-  CCritSec                          m_lockRefreshEstimator;
   CCritSec                          m_lockCallback;
+  CCritSec                          m_lockRenderStats;
+  CCritSec                          m_lockMState;
+  CCritSec                          m_lockWorkerStall;
+  CCritSec                          m_lockSchedulerStall;
+  CCritSec                          m_lockDWM;
+  CCritSec                          m_lockNST;
+  
   int                               m_iFreeSamples;
-  IMFSample*                        m_vFreeSamples[NUM_SURFACES];
+  IMFSample*                        m_vFreeSamples[MAX_SURFACES];
+  IMFSample*                        m_vAllSamples[MAX_SURFACES];
   CMyQueue<IMFSample*>              m_qScheduledSamples;
+  bool                              m_bWorkerHasSample;
+  bool                              m_bSchedulerHasSample;
+  
   SchedulerParams                   m_schedulerParams;
   SchedulerParams                   m_workerParams;
   SchedulerParams                   m_timerParams;
+  SchedulerParams                   m_dispTimParams;
   BOOL                              m_bSchedulerRunning;
   HANDLE                            m_hScheduler;
   HANDLE                            m_hWorker;
   HANDLE                            m_hTimer;
+  HANDLE                            m_hDispTim;
   UINT                              m_uSchedulerThreadId;
   UINT                              m_uWorkerThreadId;
   UINT                              m_uTimerThreadId;
+  UINT                              m_uDispTimThreadId;
   UINT                              m_iResetToken;
   float                             m_fRate;
   long                              m_refCount;
@@ -321,14 +469,11 @@ protected:
   BOOL                              m_bEndStreaming;
   bool                              m_bEndBuffering;
   bool                              m_bNewSegment;
-  bool                              m_bFlush;
   bool                              m_bDoPreBuffering;
-  int                               m_iFramesDrawn;
   int                               m_iFramesDropped;
+  int                               m_iEarlyFrCnt;
   bool                              m_bFrameSkipping;
   double                            m_fSeekRate;
-//  bool                              m_bScrubbing;
-//  bool                              m_bZeroScrub;
   bool                              m_bFirstFrame;
   bool                              m_bDVDMenu;
   MP_RENDER_STATE                   m_state;
@@ -346,10 +491,16 @@ protected:
   double                            m_fRFPMean;
 
   LONGLONG                          m_pllCFP [NB_CFPSIZE];   // timestamp buffer for estimating real frame period
-  LONGLONG                          m_llLastCFPts;
+  LONGLONG                          m_llLastNST;
+  LONGLONG                          m_llLastRST;
+  LONGLONG                          m_llLastFrameTime;
+  LONGLONG                          m_llLastRD;
   int                               m_nNextCFP;
   LONGLONG                          m_fCFPMean;
+  LONGLONG                          m_fCFPLast;
   LONGLONG                          m_llCFPSumAvg;
+  LONGLONG                          m_hnsAvgNSToffset;
+  bool                              m_NSTinitDone;
 
   double                            m_pllPCD [NB_PCDSIZE];   // timestamp buffer for estimating pres/sys clock delta
   LONGLONG                          m_llLastPCDprsTs;
@@ -357,13 +508,12 @@ protected:
   int                               m_nNextPCD;
   double                            m_fPCDMean;
   double                            m_fPCDSumAvg;
-	
-	
-  int                               m_iFramesHeld;
-  int                               m_iLateFrames;
-  int                               m_iFramesProcessed;
+		
+  int                               m_regFPSLimRate;
+  int                               m_regFPSLimV;
+  int                               m_regFPSLimH;
+  bool                              m_bOddFrame;
  
-
   int       m_nNextSyncOffset;
   LONGLONG  nsSampleTime;
 
@@ -395,7 +545,7 @@ protected:
   void OnVBlankFinished(bool fAll, LONGLONG periodStart, LONGLONG periodEnd);
   void CalculateJitter(LONGLONG PerfCounter);
   void CalculateRealFramePeriod(LONGLONG timeStamp);
-  void CalculateNSTStats(LONGLONG timeStamp);
+  void CalculateAvgNstOffset(LONGLONG timeStamp, LONGLONG frameTime);
   void CalculatePresClockDelta(LONGLONG presTime, LONGLONG sysTime);
 
   bool QueryFpsFromVideoMSDecoder();
@@ -418,6 +568,8 @@ protected:
   UINT   m_rasterLimitNP;
 
   double m_dEstRefCycDiff; 
+  
+  double m_dLastEstRefreshCycle;
   
   LONGLONG m_SampDuration;
 
@@ -442,23 +594,37 @@ protected:
   double        m_DetSampleAve;
 
   int           m_frameRateRatio;
+  //  int           m_frameRateRatX2;
   int           m_rawFRRatio;
+  double        m_dRawFRmult;
   
-  int           m_qGoodPopCnt;
-  int           m_qBadPopCnt;
   int           m_qGoodPutCnt;
-  int           m_qBadPutCnt;
-  int           m_qBadSampTimCnt;
-  int           m_qCorrSampTimCnt;
+
+  //  int           m_qBadSampTimCnt;
   
   LONGLONG      m_stallTime;
   LONGLONG      m_earliestPresentTime;
   LONGLONG      m_lastPresentTime;
   LONGLONG      m_lastDelayErr;
 
+  UINT          m_dwmBuffers;
+  UINT          m_regNumDWMBuffers;
+  int           m_regNumSamples;
+  HWND          m_hDwmWinHandle;
+  bool          m_bDWMinit;
+  BOOL          m_bDwmCompEnabled;
+  bool          m_bEnableDWMQueued;
+  bool          m_bDWMEnableMMCSS;
+  bool          m_bEnableAudioDelayComp;
+  bool          m_bForceFirstFrame;
+  bool          m_bLateDWMInit;
+  bool          m_bDWMInitSleep;
+  double        m_dDWMRefreshThresh;
+  bool          m_bLogAllFrameDrops;
+  
   char          m_filterNames[FILTER_LIST_SIZE][MAX_FILTER_NAME];
   int           m_numFilters;
-  
+    
   BOOL          m_bIsWin7;
   bool          m_bMsVideoCodec;
   
@@ -467,15 +633,26 @@ protected:
   double        m_dMaxBias;
   double        m_dMinBias;
   bool          m_bBiasAdjustmentDone;
+  
   double        m_dPhaseDeviations[NUM_PHASE_DEVIATIONS];
   int           m_nNextPhDev;
   double        m_sumPhaseDiff;
+  double        m_avPhaseDiff;  
+
+  double        m_dPhaseDeviations2[NUM_PHASE_DEV_2];
+  int           m_nNextPhDev2;
+  double        m_sumPhaseDiff2;
+  double        m_avPhaseDiff2;  
+  
   double        m_dVariableFreq;
   double        m_dPreviousVariableFreq;
   unsigned int  m_iClockAdjustmentsDone;
-  double        m_avPhaseDiff;
+  double        m_dLastMPARbias;
+  double        m_dMPARbiasDelta;
 
   COuterEVR*    m_pOuterEVR;
+  
+  ITSRStatus*   m_pTSRStatus;
 
   LONGLONG      m_streamDuration;
 
@@ -483,6 +660,7 @@ protected:
   CAMEvent      m_EndOfStreamingEvent;
 
   CAMEvent      m_bFlushDone;
+  CAMEvent      m_bDwmInitDone;
 
   // CheckShutdown: 
   //     Returns MF_E_SHUTDOWN if the presenter is shutdown.
@@ -500,4 +678,11 @@ protected:
   {
     return ((m_state == MP_RENDER_STATE_STARTED) || (m_state == MP_RENDER_STATE_PAUSED));
   }
+  
+  inline void SetRenderState(MP_RENDER_STATE renderState)
+  {
+    CAutoLock msLock(&m_lockMState);
+    m_state = renderState;
+  }
+  
 };

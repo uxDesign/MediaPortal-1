@@ -31,6 +31,8 @@
 #define QUALITY_CORRECTION_LIMIT 60000.0 //correction limit
 #define QUALITY_CORRECTION_MULTIPLIER 1.02 //correction rate
 #define QUALITY_BIAS_LIMIT 0.01 // if the bias is within this of one we use quality mode
+#define MAX_BIAS_CORRECTION 100e-6 // maximum bias correction used in SetAdjustment()
+#define MIN_BIAS_CORRECTION 2e-6   // minimum bias correction used in SetAdjustment()
 
 typedef struct stSampleTimeData 
 {

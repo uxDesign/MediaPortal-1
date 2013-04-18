@@ -60,7 +60,7 @@ void SynchCorrection::Flush()
 void SynchCorrection::Reset(bool soft)
 {
   Log("SynchCorrection::Reset %u", soft);
-  m_dBiasCorrection = 0.0001;
+  m_dBiasCorrection = MAX_BIAS_CORRECTION;
   m_iBiasDir = 0;
   //m_dlastAdjustment = 1.0;
   
@@ -116,30 +116,53 @@ double SynchCorrection::GetCurrentDrift(REFERENCE_TIME rtAHwTime, REFERENCE_TIME
   return TotalAudioDrift(rtAHwTime, rtRCTime);
 }
 
-// used for the adjustment - it also corrects bias
+// used for the adjustment - it can also correct bias
 void SynchCorrection::SetAdjustment(double adjustment)
 {
   CAutoLock lock(&m_csAdjustmentLock);
+  
+  if (adjustment < 0)
+  {
+    //Negative adjustment values are temporary adjustments (bias is not corrected)
+    m_Adjustment = -adjustment;   
+    if (adjustment == -1.0) //Special value to 'reset' BiasCorrection
+    {
+      m_dBiasCorrection = MAX_BIAS_CORRECTION/2;
+      m_iBiasDir = 0;
+    }
+    return;
+  }
 
   if (adjustment != m_dlastAdjustment)
   {
 	  m_dlastAdjustment=adjustment;
-    if (m_iBiasDir != 0) // there has been an adjustment already
+
+    if (adjustment != 1.0)
     {
-      // if the direction is different we have overshot so half the correction
-      if ((m_iBiasDir == DIRUP) && (adjustment < 1))
-        m_dBiasCorrection /= 2;
-      else if ((m_iBiasDir == DIRDOWN) && (adjustment > 1)) 
-        m_dBiasCorrection /= 2;
+      if (m_iBiasDir != 0) // there has been an adjustment already
+      {
+        // if the direction is different we have overshot so reduce the correction      
+        if (((adjustment < 1) && (m_iBiasDir == DIRUP)) || 
+            ((adjustment > 1) && (m_iBiasDir == DIRDOWN)))   //change of direction
+        {
+          m_dBiasCorrection /= 2;
+        }
+        else //same direction - increase correction slowly
+        {
+          m_dBiasCorrection *= 1.25;          
+        }
+        //Keep within min/max value
+        m_dBiasCorrection = max(MIN_BIAS_CORRECTION, (min(MAX_BIAS_CORRECTION, m_dBiasCorrection)));
+      }
+  
+      if (adjustment > 1)
+        m_iBiasDir = DIRUP;
+      else if (adjustment < 1)
+        m_iBiasDir = DIRDOWN; 
+  
+      CAutoLock lock(&m_csBiasLock);
+      m_Bias += m_dBiasCorrection * (double) m_iBiasDir;
     }
-
-    if (adjustment > 1)
-      m_iBiasDir = DIRUP;
-    else if (adjustment < 1)
-      m_iBiasDir = DIRDOWN;
-
-    CAutoLock lock(&m_csBiasLock);
-    m_Bias += m_dBiasCorrection * (double) m_iBiasDir;
   }
   m_Adjustment=adjustment;
 }

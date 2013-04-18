@@ -24,12 +24,6 @@
 #define LowDW(num) ((unsigned __int64)(unsigned long)(num & 0xFFFFFFFFUL))
 #define HighDW(num) ((unsigned __int64)(num >> 32))
 
-static BOOL           g_bTimerInitializer = false;
-static BOOL           g_bQPCAvail;
-static LARGE_INTEGER  g_lPerfFrequency;
-
-static CCritSec lock;  // lock for timer initialization (multiple threads are using the timer during startup)
-
 #pragma warning(disable: 4723)
 __int64 _stdcall cMulDiv64(__int64 operant, __int64 multiplier, __int64 divider)
 {
@@ -149,33 +143,43 @@ __int64 _stdcall cMulDiv64(__int64 operant, __int64 multiplier, __int64 divider)
   }
 }
 
-
-LONGLONG GetCurrentTimestamp()
-{
-  LONGLONG result;
-  if (!g_bTimerInitializer)
-  {
-    CAutoLock lock(&lock);
-    DWORD_PTR oldmask = SetThreadAffinityMask(GetCurrentThread(), 1);
-    g_bQPCAvail = QueryPerformanceFrequency((LARGE_INTEGER*)&g_lPerfFrequency);
-    SetThreadAffinityMask(GetCurrentThread(), oldmask);
-    g_bTimerInitializer = true;
-    if( g_lPerfFrequency.QuadPart == 0)
-    {
-      // Bug in HW? Frequency cannot be zero
-      g_bQPCAvail = false;
-    }
-  }
-  if (g_bQPCAvail)
-  {
-    ULARGE_INTEGER tics;
-    QueryPerformanceCounter((LARGE_INTEGER*)&tics);
-    result = cMulDiv64(tics.QuadPart, 10000000, g_lPerfFrequency.QuadPart); // to keep accuracy
-  }
-  else
-  {
-    result = timeGetTime() * 10000; // ms to 100ns units
-  }
-  return result;
-}
+//static BOOL           g_bTimerInitializer = false;
+//static BOOL           g_bQPCAvail;
+//static LARGE_INTEGER  g_lPerfFrequency;
+//
+//static CCritSec lock;  // lock for timer initialization (multiple threads are using the timer during startup)
+//
+//LONGLONG GetCurrentTimestamp()
+//{
+//  LONGLONG result;
+//  if (!g_bTimerInitializer)
+//  {
+//    CAutoLock lock(&lock);
+//    // DWORD_PTR oldmask = SetThreadAffinityMask(GetCurrentThread(), 1);
+//    g_bQPCAvail = QueryPerformanceFrequency((LARGE_INTEGER*)&g_lPerfFrequency);
+//    // SetThreadAffinityMask(GetCurrentThread(), oldmask);
+//    g_bTimerInitializer = true;
+//    if( g_lPerfFrequency.QuadPart == 0)
+//    {
+//      // Bug in HW? Frequency cannot be zero
+//      g_bQPCAvail = false;
+//    }
+//  }
+//  if (g_bQPCAvail)
+//  {
+//    // http://msdn.microsoft.com/en-us/library/ms644904(VS.85).aspx
+//    // Use always the same CPU core (should help with broken BIOS and/or HAL)
+//    // DWORD_PTR oldmask = SetThreadAffinityMask(GetCurrentThread(), 1);
+//    ULARGE_INTEGER tics;
+//    QueryPerformanceCounter((LARGE_INTEGER*)&tics);
+//    // SetThreadAffinityMask(GetCurrentThread(), oldmask);
+//    // result = cMulDiv64(tics.QuadPart, 10000000, g_lPerfFrequency.QuadPart); // to keep accuracy
+//    result = (LONGLONG)(((double)tics.QuadPart * 10000000.0) / (double)g_lPerfFrequency.QuadPart);
+//  }
+//  else
+//  {
+//    result = timeGetTime() * 10000; // ms to 100ns units
+//  }
+//  return result;
+//}
 

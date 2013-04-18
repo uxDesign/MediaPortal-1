@@ -653,8 +653,16 @@ HRESULT CMPAudioRenderer::AdjustClock(DOUBLE pAdjustment)
   
   if (m_Settings.m_bUseTimeStretching && m_Settings.m_bEnableSyncAdjustment)
   {
-    m_dAdjustment = pAdjustment;
-    m_pClock->SetAdjustment(m_dAdjustment);
+    m_pClock->SetAdjustment(pAdjustment);
+    if (pAdjustment < 0)
+    {
+      //Negative adjustment values are temporary adjustments (bias is not corrected)
+      m_dAdjustment = -pAdjustment;
+    }
+    else
+    {
+      m_dAdjustment = pAdjustment;
+    }
     
     if (m_pTimeStretch)
       m_pTimeStretch->setTempo(m_dBias, m_dAdjustment);
@@ -741,7 +749,7 @@ HRESULT CMPAudioRenderer::SetBias(DOUBLE pBias)
 HRESULT CMPAudioRenderer::GetBias(DOUBLE* pBias)
 {
   CheckPointer(pBias, E_POINTER);
-  *pBias = m_pClock->Bias();
+  *pBias = m_pClock->GetBias();
 
   return S_OK;
 }

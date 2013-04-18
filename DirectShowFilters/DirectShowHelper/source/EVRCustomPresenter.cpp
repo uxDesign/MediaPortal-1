@@ -1,4 +1,4 @@
-// Copyright (C) 2005-2010 Team MediaPortal
+// Copyright (C) 2005-2012 Team MediaPortal
 // http://www.team-mediaportal.com
 // 
 // MediaPortal is free software: you can redistribute it and/or modify
@@ -33,6 +33,7 @@
 #include "timesource.h"
 #include "statsrenderer.h"
 #include "autoint.h"
+#include "version.h"
 
 // For more details for memory leak detection see the alloctracing.h header
 #include "..\..\alloctracing.h"
@@ -62,10 +63,11 @@ void LogGUID(REFGUID guid)
 MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDevice9* direct3dDevice, HMONITOR monitor, IBaseFilter** EVRFilter, BOOL pIsWin7):
   CUnknown(NAME("MPEVRCustomPresenter"), NULL),
   m_refCount(1), 
-  m_qScheduledSamples(NUM_SURFACES),
+  m_qScheduledSamples(MAX_SURFACES),
   m_bIsWin7(pIsWin7),
   m_bMsVideoCodec(true),
   m_bNewSegment(true),
+  m_pTSRStatus(NULL),
   m_pAVSyncClock(NULL),
   m_dBias(1.0),
   m_dMaxBias(1.1),
@@ -74,29 +76,40 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
   m_dVariableFreq(1.0),
   m_dPreviousVariableFreq(1.0),
   m_iClockAdjustmentsDone(0),
+  m_dLastMPARbias(1.0),
+  m_dMPARbiasDelta(0),
+  m_dDispToVidRatio(-1.0),
+  m_dDToVdrift(1.0),
+    
   m_nNextPhDev(0),
   m_avPhaseDiff(0.0),
   m_sumPhaseDiff(0.0),
+
+  m_nNextPhDev2(0),
+  m_avPhaseDiff2(0.0),
+  m_sumPhaseDiff2(0.0),
+  
   m_pOuterEVR(NULL),
   m_bEndBuffering(false),
   m_state(MP_RENDER_STATE_SHUTDOWN),
   m_streamDuration(0)
 {
   ZeroMemory((void*)&m_dPhaseDeviations, sizeof(double) * NUM_PHASE_DEVIATIONS);
+  ZeroMemory((void*)&m_dPhaseDeviations2, sizeof(double) * NUM_PHASE_DEV_2);
 
   timeBeginPeriod(1);
   if (m_pMFCreateVideoSampleFromSurface)
   {
     HRESULT hr;
-    LogRotate();
+    //LogRotate();
     if (NO_MP_AUD_REND)
     {
-      Log("---------- v1.5.59 ----------- instance 0x%x", this);
+      Log("--- v1.6.%d Unicode with DWM queue support --- instance 0x%x", DSHOWHELPER_VERSION, this);
     }
     else
     {
-      Log("---------- v1.5.59 ----------- instance 0x%x", this);
-      Log("--- audio renderer enabled --- instance 0x%x", this);
+      Log("--- v1.6.%d Unicode with DWM queue support --- instance 0x%x", DSHOWHELPER_VERSION, this);
+      Log("---------- audio renderer enabled ------------- instance 0x%x", this);
     }
     m_hMonitor = monitor;
     m_pD3DDev = direct3dDevice;
@@ -117,6 +130,8 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
     m_bSchedulerRunning        = FALSE;
     m_fRate                    = 1.0f;
     m_iFreeSamples             = 0;
+    m_bWorkerHasSample         = false;
+    m_bSchedulerHasSample      = false;
     m_nNextJitter              = 0;
     m_llLastPerf               = 0;
     m_fAvrFps                  = 0.0;
@@ -145,6 +160,11 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
 
     m_dEstRefCycDiff = 0.0;
 
+    m_bDwmCompEnabled  = false;
+    m_bDWMinit         = false;
+    m_dwmBuffers       = 0;
+    m_regNumDWMBuffers = NUM_DWM_BUFFERS;
+    m_hDwmWinHandle    = NULL;
     
     // sample time correction variables
     m_LastScheduledUncorrectedSampleTime  = -1;
@@ -161,7 +181,19 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
     m_LastStartOfPaintScanline    = 0;
     m_frameRateRatio              = 0;
     m_rawFRRatio                  = 0;
-        
+    m_dRawFRmult                  = 0.0;
+
+    m_iFramesDropped  = 0;
+    m_iFramesDrawn    = 0;
+    m_iEarlyFrCnt     = 0;
+    m_iDisplayFrameCount = 0;
+    m_dDisplayPeriodRolling = -1.0;
+
+    m_iVideoWidth  = 1;
+    m_iVideoHeight = 1;
+    m_iARX = 1;
+    m_iARY = 1;
+    
     m_numFilters = 0;
     
     m_pD3DDev->GetDisplayMode(0, &m_displayMode);
@@ -172,6 +204,7 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
     m_displayParams.maxVisScanLine = m_displayMode.Height;
     m_displayParams.minVisScanLine = 5;
     m_displayParams.estRefreshLock = false;
+    m_dLastEstRefreshCycle = 0.0;
 
     m_rasterLimitLow    = (UINT)((((m_displayParams.maxVisScanLine - m_displayParams.minVisScanLine) * 2) / 16) + m_displayParams.minVisScanLine); 
     m_rasterTargetPosn  = m_rasterLimitLow;
@@ -180,7 +213,292 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
     m_rasterLimitNP     = (UINT)m_displayParams.maxVisScanLine; 
 
     m_bDrawStats = false;
+    m_bOddFrame = false;
   }
+
+  //Read (and create if needed) debug registry settings
+  HKEY key;
+  m_bEnableDWMQueued = ENABLE_DWM_QUEUED;
+  m_bDWMEnableMMCSS = DWM_ENABLE_MMCSS;
+  m_bSchedulerEnableMMCSS = SCHED_ENABLE_MMCSS;
+  m_regNumDWMBuffers = NUM_DWM_BUFFERS;
+  m_bEnableAudioDelayComp = ENABLE_AUDIO_DELAY_COMP;
+  m_regNumSamples = DEFAULT_SURFACES;
+  m_regSchedMmcssPriority  = SCHED_MMCSS_PRIORITY;
+  m_regWorkerMmcssPriority = WORKER_MMCSS_PRIORITY;
+  m_regTimerMmcssPriority  = TIMER_MMCSS_PRIORITY;
+  m_bForceFirstFrame = FORCE_FIRST_FRAME;
+  m_bLowResTiming = LOW_RES_TIMING;
+  m_regFPSLimRate = FPS_LIM_RATE;
+  m_regFPSLimV = FPS_LIM_V;
+  m_regFPSLimH = FPS_LIM_H;
+  m_bLateDWMInit = ENABLE_LATE_DWM_INIT;
+  m_bDWMInitSleep = ENABLE_DWM_INIT_SLEEP;
+  m_dDWMRefreshThresh = DWM_REFRESH_THRESH;
+  m_bLogAllFrameDrops = LOG_ALL_FRAME_DROPS;
+  
+  if (ERROR_SUCCESS==RegCreateKeyEx(HKEY_CURRENT_USER, _T("Software\\Team MediaPortal\\EVR Presenter"), 0, NULL, 
+                                    REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, NULL, &key, NULL))
+  {
+    DWORD keyValue;
+    keyValue = m_bEnableDWMQueued ? 1 : 0;
+    LPCTSTR enableDWMQueued = TEXT("EnableDWMQueuedMode");
+    ReadRegistryKeyDword(key, enableDWMQueued, keyValue);
+    if (keyValue)
+    {
+      Log("--- Enable DWM Queued mode");
+      m_bEnableDWMQueued = true;
+    }
+    else
+    {
+      Log("--- Disable DWM Queued mode");
+      m_bEnableDWMQueued = false;
+    }
+
+    keyValue = m_bDWMEnableMMCSS ? 1 : 0;
+    LPCTSTR enableDWM_MMCS = TEXT("EnableMMCSSforDWM");
+    ReadRegistryKeyDword(key, enableDWM_MMCS, keyValue);
+    if (keyValue)
+    {
+      Log("--- Enable MMCS for DWM");
+      m_bDWMEnableMMCSS = true;
+    }
+    else
+    {
+      Log("--- Disable MMCS for DWM");
+      m_bDWMEnableMMCSS = false;
+    }
+    
+    keyValue = m_bSchedulerEnableMMCSS ? 1 : 0;
+    LPCTSTR enableScheduler_MMCS = TEXT("EnableMMCSSforSchedulerThread");
+    ReadRegistryKeyDword(key, enableScheduler_MMCS, keyValue);
+    if (keyValue)
+    {
+      Log("--- Enable MMCS for Scheduler Thread");
+      m_bSchedulerEnableMMCSS = true;
+    }
+    else
+    {
+      Log("--- Disable MMCS for Scheduler Thread");
+      m_bSchedulerEnableMMCSS = false;
+    }
+
+    keyValue = (DWORD)m_regNumDWMBuffers;
+    LPCTSTR numDWM_Buffers = TEXT("NumDWMBuffers");
+    ReadRegistryKeyDword(key, numDWM_Buffers, keyValue);
+    if ((keyValue >= 3) && (keyValue <= 8))
+    {
+      m_regNumDWMBuffers = (UINT)keyValue;
+      Log("--- Number of DWM buffers = %d", m_regNumDWMBuffers);
+    }
+    else
+    {
+      m_regNumDWMBuffers = NUM_DWM_BUFFERS;
+      Log("--- Number of DWM buffers = %d (default value, allowed range is 3 - 8)", m_regNumDWMBuffers);
+    }
+
+    keyValue = m_bEnableAudioDelayComp ? 1 : 0;
+    LPCTSTR enableAudioDelayComp_DWM = TEXT("EnableDWMAudioDelayComp");
+    ReadRegistryKeyDword(key, enableAudioDelayComp_DWM, keyValue);
+    if (keyValue)
+    {
+      Log("--- Enable DWM audio delay compensation");
+      m_bEnableAudioDelayComp = true;
+    }
+    else
+    {
+      Log("--- Disable DWM audio delay compensation");
+      m_bEnableAudioDelayComp = false;
+    }
+
+    keyValue = (DWORD)m_regNumSamples;
+    LPCTSTR numVid_Samples = TEXT("SampleQueueSize");
+    ReadRegistryKeyDword(key, numVid_Samples, keyValue);
+    if ((keyValue >= MIN_SURFACES) && (keyValue <= MAX_SURFACES))
+    {
+      m_regNumSamples = (int)keyValue;
+      Log("--- Sample Queue size = %d", m_regNumSamples);
+    }
+    else
+    {
+      m_regNumSamples = DEFAULT_SURFACES;
+      Log("--- Sample Queue size = %d (default value, allowed range is %d - %d)", m_regNumSamples, MIN_SURFACES, MAX_SURFACES);
+    }
+
+    keyValue = (DWORD)m_regSchedMmcssPriority;
+    LPCTSTR schedMmcss_Priority = TEXT("SchedulerThreadMmcssPriority");
+    ReadRegistryKeyDword(key, schedMmcss_Priority, keyValue);
+    if ((keyValue >= (AVRT_PRIORITY_LOW+1)) && (keyValue <= (AVRT_PRIORITY_CRITICAL+1)))
+    {
+      m_regSchedMmcssPriority = (int)keyValue;
+      Log("--- Scheduler Thread MMCSS priority = %d", m_regSchedMmcssPriority);
+    }
+    else
+    {
+      m_regSchedMmcssPriority = SCHED_MMCSS_PRIORITY;
+      Log("--- Scheduler Thread MMCSS priority = %d (default value, allowed range is %d to %d)", m_regSchedMmcssPriority, (AVRT_PRIORITY_LOW+1), (AVRT_PRIORITY_CRITICAL+1));
+    }
+
+    keyValue = (DWORD)m_regWorkerMmcssPriority;
+    LPCTSTR workerMmcss_Priority = TEXT("WorkerThreadMmcssPriority");
+    ReadRegistryKeyDword(key, workerMmcss_Priority, keyValue);
+    if ((keyValue >= (AVRT_PRIORITY_LOW+1)) && (keyValue <= (AVRT_PRIORITY_CRITICAL+1)))
+    {
+      m_regWorkerMmcssPriority = (int)keyValue;
+      Log("--- Worker Thread MMCSS priority = %d", m_regWorkerMmcssPriority);
+    }
+    else
+    {
+      m_regWorkerMmcssPriority = WORKER_MMCSS_PRIORITY;
+      Log("--- Worker Thread MMCSS priority = %d (default value, allowed range is %d to %d)", m_regWorkerMmcssPriority, (AVRT_PRIORITY_LOW+1), (AVRT_PRIORITY_CRITICAL+1));
+    }
+
+    keyValue = (DWORD)m_regTimerMmcssPriority;
+    LPCTSTR timerMmcss_Priority = TEXT("TimerThreadMmcssPriority");
+    ReadRegistryKeyDword(key, timerMmcss_Priority, keyValue);
+    if ((keyValue >= (AVRT_PRIORITY_LOW+1)) && (keyValue <= (AVRT_PRIORITY_CRITICAL+1)))
+    {
+      m_regTimerMmcssPriority = (int)keyValue;
+      Log("--- Timer Thread MMCSS priority = %d", m_regTimerMmcssPriority);
+    }
+    else
+    {
+      m_regTimerMmcssPriority = TIMER_MMCSS_PRIORITY;
+      Log("--- Timer Thread MMCSS priority = %d (default value, allowed range is %d to %d)", m_regTimerMmcssPriority, (AVRT_PRIORITY_LOW+1), (AVRT_PRIORITY_CRITICAL+1));
+    }
+    keyValue = m_bForceFirstFrame ? 1 : 0;
+    LPCTSTR forceFirstFrame_RRK = TEXT("ForceFirstFrame");
+    ReadRegistryKeyDword(key, forceFirstFrame_RRK, keyValue);
+    if (keyValue)
+    {
+      Log("--- Enable ForceFirstFrame");
+      m_bForceFirstFrame = true;
+    }
+    else
+    {
+      Log("--- Disable ForceFirstFrame");
+      m_bForceFirstFrame = false;
+    }
+
+    keyValue = m_bLowResTiming ? 1 : 0;
+    LPCTSTR lowResTiming_RRK = TEXT("LowResVSyncCorrectionTiming");
+    ReadRegistryKeyDword(key, lowResTiming_RRK, keyValue);
+    if (keyValue)
+    {
+      Log("--- Enable Low Resolution Timing");
+      m_bLowResTiming = true;
+    }
+    else
+    {
+      Log("--- Disable Low Resolution Timing");
+      m_bLowResTiming = false;
+    }
+
+    keyValue = (DWORD)m_regFPSLimRate;
+    LPCTSTR regFPSLimRate_RRK = TEXT("FPSLimitFrameRate");
+    ReadRegistryKeyDword(key, regFPSLimRate_RRK, keyValue);
+    if (keyValue)
+    {
+      m_regFPSLimRate = (int)keyValue;
+      Log("--- FPS Limiter Frame Rate = %d fps", m_regFPSLimRate);
+    }
+    else
+    {
+      m_regFPSLimRate = 0;
+      Log("--- FPS Limiter disabled");
+    }
+
+    keyValue = (DWORD)m_regFPSLimV;
+    LPCTSTR regFPSLimV_RRK = TEXT("FPSLimitHeightThresh");
+    ReadRegistryKeyDword(key, regFPSLimV_RRK, keyValue);
+    if (keyValue)
+    {
+      m_regFPSLimV = (int)keyValue;
+      Log("--- FPS Limit height threshold = %d", m_regFPSLimV);
+    }
+    else
+    {
+      m_regFPSLimV = 0;
+      Log("--- FPS Limit height threshold disabled");
+    }
+
+    keyValue = (DWORD)m_regFPSLimH;
+    LPCTSTR regFPSLimH_RRK = TEXT("FPSLimitWidthThresh");
+    ReadRegistryKeyDword(key, regFPSLimH_RRK, keyValue);
+    if (keyValue)
+    {
+      m_regFPSLimH = (int)keyValue;
+      Log("--- FPS Limit width threshold = %d", m_regFPSLimH);
+    }
+    else
+    {
+      m_regFPSLimH = 0;
+      Log("--- FPS Limit width threshold disabled");
+    }
+
+    keyValue = m_bLateDWMInit ? 1 : 0;
+    LPCTSTR lateDWMInit_RRK = TEXT("EnableLateDWMInit");
+    ReadRegistryKeyDword(key, lateDWMInit_RRK, keyValue);
+    if (keyValue)
+    {
+      Log("--- Enable late DWM init");
+      m_bLateDWMInit = true;
+    }
+    else
+    {
+      Log("--- Disable late DWM init");
+      m_bLateDWMInit = false;
+    }
+
+    keyValue = m_bDWMInitSleep ? 1 : 0;
+    LPCTSTR DWMInitSleep_RRK = TEXT("EnableDWMInitSleep");
+    ReadRegistryKeyDword(key, DWMInitSleep_RRK, keyValue);
+    if (keyValue)
+    {
+      Log("--- Enable DWM init sleep");
+      m_bDWMInitSleep = true;
+    }
+    else
+    {
+      Log("--- Disable DWM init sleep");
+      m_bDWMInitSleep = false;
+    }
+
+    keyValue = ENABLE_DWM_FOR_24Hz ? 1 : 0;
+    LPCTSTR Enable24HzDWM_RRK = TEXT("Enable24HzDWM");
+    ReadRegistryKeyDword(key, Enable24HzDWM_RRK, keyValue);
+    if (keyValue)
+    {
+      Log("--- Enable DWM init for 24Hz");
+      m_dDWMRefreshThresh = 1000.0; // 1Hz threshold
+    }
+    else
+    {
+      Log("--- Disable DWM init for 24Hz");
+      m_dDWMRefreshThresh = DWM_REFRESH_THRESH;
+    }
+
+    keyValue = m_bLogAllFrameDrops ? 1 : 0;
+    LPCTSTR LogAllFrameDrops_RRK = TEXT("LogAllFrameDrops");
+    ReadRegistryKeyDword(key, LogAllFrameDrops_RRK, keyValue);
+    if (keyValue)
+    {
+      Log("--- Enable LogAllFrameDrops");
+      m_bLogAllFrameDrops = true;
+    }
+    else
+    {
+      Log("--- Disable LogAllFrameDrops");
+      m_bLogAllFrameDrops = false;
+    }
+        
+    RegCloseKey(key);
+  }
+
+  //Resize sample queue to correct size (from registry setting)
+  m_qScheduledSamples.Resize(m_regNumSamples);
+
+  ResetFrameStats();
     
   for (int i = 0; i < 2; i++)
   {
@@ -189,6 +507,8 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
       break; //only go round the loop again if we don't get a good result
     }
   }
+
+  m_dLastEstRefreshCycle = m_displayParams.dEstRefreshCycle;
 
   HRESULT result;
   m_pOuterEVR = new COuterEVR(NAME("COuterEVR"), (IUnknown*)(INonDelegatingUnknown*)this, result, this);
@@ -203,6 +523,19 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
   }
   
   m_pStatsRenderer = new StatsRenderer(this, m_pD3DDev);
+    
+  { //Context for CAutoLock
+    CAutoLock sLock(&m_lockDWM);  
+    DwmEnableMMCSSOnOff(m_bDWMEnableMMCSS && (GetDisplayCycle() <= m_dDWMRefreshThresh));
+  }
+  
+  StartWorkers();
+  
+  if (!m_bLateDWMInit)
+  {
+    //Setup the Desktop Window Manager (DWM)
+    DwmInitDelegated();
+  }
 }
 
 void MPEVRCustomPresenter::SetFrameSkipping(bool onOff)
@@ -239,9 +572,16 @@ void MPEVRCustomPresenter::ResetEVRStatCounters()
 
 void MPEVRCustomPresenter::ReleaseCallback()
 {
+  Log("EVRCustomPresenter::ReleaseCallback() - Start - instance 0x%x", this);
   CAutoLock sLock(&m_lockCallback);
-  m_pCallback = NULL;
 
+  DwmReset(false);
+
+  m_bEnableDWMQueued = false;
+  
+  if (m_pTSRStatus)
+    SAFE_RELEASE(m_pTSRStatus);
+  
   if (m_pAVSyncClock)
     SAFE_RELEASE(m_pAVSyncClock);
 
@@ -252,29 +592,30 @@ void MPEVRCustomPresenter::ReleaseCallback()
     m_pOuterEVR->Release();
 
   StopWorkers();
+  ReleaseSurfaces();
+  
+  if (m_pMediaType)
+    m_pMediaType.Release();
+
+  m_pCallback = NULL;
+
+  Log("EVRCustomPresenter::ReleaseCallback() - Done - instance 0x%x", this);
 }
 
 MPEVRCustomPresenter::~MPEVRCustomPresenter()
 {
-  Log("EVRCustomPresenter::dtor - instance 0x%x", this);
+  Log("EVRCustomPresenter::dtor - Start - instance 0x%x", this);
   
-  if (m_pCallback)
+  if (m_pCallback != NULL)
   {
-    m_pCallback->PresentImage(0, 0, 0, 0, 0, 0);
+    //Close/release everything
+    ReleaseCallback();
   }
-
-  StopWorkers();
-//  DwmEnableMMCSSOnOff(false);
-  ReleaseSurfaces();
-  m_pMediaType.Release();
-  m_pDeviceManager =  NULL;
-  for (int i=0; i < NUM_SURFACES; i++)
-  {
-    m_vFreeSamples[i] = 0;
-  }
+    
+  m_pDeviceManager = NULL;
   delete m_pStatsRenderer;
   timeEndPeriod(1);
-  Log("Done");
+  Log("EVRCustomPresenter::dtor - Done - instance 0x%x", this);
 }  
 
 
@@ -555,7 +896,7 @@ HRESULT MPEVRCustomPresenter::InitServicePointers(IMFTopologyServiceLookup *pLoo
     ASSERT(cCount == 0 || cCount == 1);
   }
 
-  m_state = MP_RENDER_STATE_STOPPED;
+  SetRenderState(MP_RENDER_STATE_STOPPED);
 
   return S_OK;
 }
@@ -565,10 +906,7 @@ HRESULT MPEVRCustomPresenter::ReleaseServicePointers()
 {
   Log("ReleaseServicePointers");
 
-  {
-    CAutoLock lock(this);
-    m_state = MP_RENDER_STATE_SHUTDOWN;
-  }
+  SetRenderState(MP_RENDER_STATE_SHUTDOWN);
 
   DoFlush(TRUE);
 
@@ -671,15 +1009,6 @@ HRESULT MPEVRCustomPresenter::GetTimeToSchedule(IMFSample* pSample, LONGLONG *ph
   LONGLONG sampleTime;
   pSample->GetSampleTime(&sampleTime);
   LOG_TRACE("Due: %I64d, Calculated delta: %I64d sample time: %I64d now %I64d (rate: %f)", hnsPresentationTime, hnsDelta, sampleTime, hnsTimeNow, m_fRate);
-
-//  if (m_fRate != 1.0f && m_fRate != 0.0f)
-//  {
-//    *phnsDelta = (LONGLONG)((float)hnsDelta / m_fRate);
-//  }
-//  else
-//  {
-//    *phnsDelta = hnsDelta;
-//  }
 
   *phnsDelta = hnsDelta;
   
@@ -827,14 +1156,13 @@ HRESULT MPEVRCustomPresenter::SetMediaType(CComPtr<IMFMediaType> pType, BOOL* pb
 }
 
 
+//This method is only called from RenegotiateMediaOutputType()
+//and all necessary thread locking is performed there.
+//Only call this when threads are locked/not running/inactive.
 void MPEVRCustomPresenter::ReAllocSurfaces()
 {
   Log("ReallocSurfaces");
-  //make sure all threads are paused
-  CAutoLock tLock(&m_timerParams.csLock);
-  CAutoLock wLock(&m_workerParams.csLock);
-  CAutoLock sLock(&m_schedulerParams.csLock);
-
+  
   ReleaseSurfaces();
 
   // set the presentation parameters
@@ -858,27 +1186,33 @@ void MPEVRCustomPresenter::ReAllocSurfaces()
   CHECK_HR(m_pDeviceManager->LockDevice(hDevice, &pDevice, TRUE), "Cannot lock device");
   HRESULT hr;
   Log("Textures will be %dx%d", m_iVideoWidth, m_iVideoHeight);
-  for (int i = 0; i < NUM_SURFACES; i++)
-  {
-    hr = pDevice->CreateTexture(m_iVideoWidth, m_iVideoHeight, 1,
-      D3DUSAGE_RENDERTARGET, D3DFMT_X8R8G8B8, D3DPOOL_DEFAULT,
-      &textures[i], NULL);
-    if (FAILED(hr))
+  
+  { //Context for CAutoLock
+    CAutoLock sLock(&m_lockSamples);
+    for (int i = 0; i < m_regNumSamples; i++)
     {
-      Log("Could not create offscreen surface. Error 0x%x", hr);
+      hr = pDevice->CreateTexture(m_iVideoWidth, m_iVideoHeight, 1,
+        D3DUSAGE_RENDERTARGET, D3DFMT_X8R8G8B8, D3DPOOL_DEFAULT,
+        &textures[i], NULL);
+      if (FAILED(hr))
+      {
+        Log("Could not create offscreen surface. Error 0x%x", hr);
+      }
+      CHECK_HR(textures[i]->GetSurfaceLevel(0, &surfaces[i]), "Could not get surface from texture");
+  
+      hr = m_pMFCreateVideoSampleFromSurface(surfaces[i], &samples[i]);
+      if (FAILED(hr))
+      {
+        Log("CreateVideoSampleFromSurface failed: 0x%x", hr);
+        return;
+      }
+      Log("Adding sample: 0x%x", samples[i]);
+      m_vFreeSamples[i] = samples[i];
+      m_vAllSamples[i] = samples[i];
     }
-    CHECK_HR(textures[i]->GetSurfaceLevel(0, &surfaces[i]), "Could not get surface from texture");
-
-    hr = m_pMFCreateVideoSampleFromSurface(surfaces[i], &samples[i]);
-    if (FAILED(hr))
-    {
-      Log("CreateVideoSampleFromSurface failed: 0x%x", hr);
-      return;
-    }
-    Log("Adding sample: 0x%x", samples[i]);
-    m_vFreeSamples[i] = samples[i];
+    m_iFreeSamples = m_regNumSamples;
   }
-  m_iFreeSamples = NUM_SURFACES;
+  
   CHECK_HR(m_pDeviceManager->UnlockDevice(hDevice, FALSE), "failed: Unlock device");
   Log("Releasing device: %d", pDevice->Release());
   CHECK_HR(m_pDeviceManager->CloseDeviceHandle(hDevice), "failed: CloseDeviceHandle");
@@ -1047,14 +1381,13 @@ HRESULT MPEVRCustomPresenter::LogOutputTypes()
   return S_OK;
 }
 
-
+//The caller must perform any necessary worker/scheduler thread locking !!!
 HRESULT MPEVRCustomPresenter::RenegotiateMediaOutputType()
 {
-  CAutoLock tLock(&m_timerParams.csLock);
-  CAutoLock wLock(&m_workerParams.csLock);
-  CAutoLock sLock(&m_schedulerParams.csLock);
   m_bFirstInputNotify = FALSE;
-  Log("RenegotiateMediaOutputType");
+  Log("RenegotiateMediaOutputType 1");
+  DoFlush(TRUE);
+  Log("RenegotiateMediaOutputType 3");
   HRESULT hr = S_OK;
   BOOL fFoundMediaType = FALSE;
 
@@ -1141,84 +1474,176 @@ HRESULT MPEVRCustomPresenter::RenegotiateMediaOutputType()
     }
   }
 
+  Log("RenegotiateMediaOutputType - done");
+
   return hr;
 }
 
 
 HRESULT MPEVRCustomPresenter::GetFreeSample(IMFSample** ppSample)
 {
-  TIME_LOCK(&m_lockSamples, 50000, "GetFreeSample");
+  CAutoLock sLock(&m_lockSamples);
+  //TIME_LOCK(&m_lockSamples, 50000, "GetFreeSample");
   LOG_TRACE("Trying to get free sample, size: %d", m_iFreeSamples);
-  if (m_iFreeSamples == 0)
+  if (m_iFreeSamples <= 0 || m_qScheduledSamples.IsFull() || m_bWorkerHasSample)
   {
     return E_FAIL;
   }
   m_iFreeSamples--;
   *ppSample = m_vFreeSamples[m_iFreeSamples];
   m_vFreeSamples[m_iFreeSamples] = NULL;
+  m_bWorkerHasSample = true;
 
   return S_OK;
 }
 
+void MPEVRCustomPresenter::DelegatedFlush()
+{
+  // only flush if not in DVD menu
+  if (!m_bDVDMenu)
+  {
+    //Log("DelegatedFlush() 1");
+    StallWorker();
+    DoFlush(FALSE);
+    m_earliestPresentTime = 0;
+    ReleaseWorker();
+  }
+  else
+  {
+    //Log("DelegatedFlush() 2");
+    m_bFlushDone.Set();
+  }
+}
 
 void MPEVRCustomPresenter::Flush(BOOL forced)
 {
   m_bFlushDone.Reset();
-  m_bFlush = true;
+  
+  if (m_bSchedulerRunning)
+  {
+    //This flush is delegated to the Scheduler thread, so wake it up....
+    m_schedulerParams.eDoHPtask.Set();
+  }
+  else 
+  {
+    DoFlush(TRUE);
+    Log("Flush() - Scheduler thread is shut down");
+  }
   m_bFlushDone.Wait();
 }
 
+
 void MPEVRCustomPresenter::DoFlush(BOOL forced)
 {
-  CAutoLock sLock(&m_lockSamples);
-  CAutoLock ssLock(&m_lockScheduledSamples);
-  if ((m_qScheduledSamples.Count() > 0 && !m_bDVDMenu) ||
-     (m_qScheduledSamples.Count() > 0 && forced))
+  if (!m_bDVDMenu || forced)
   {
     Log("Flushing: size=%d", m_qScheduledSamples.Count());
-    while (m_qScheduledSamples.Count() > 0)
+
+    DwmFlush(); //Just in case...
+    CAutoLock sLock(&m_lockSamples);
+
+    for (int i = 0; i < m_regNumSamples; i++)
     {
-      IMFSample* pSample = PeekSample();
-      if (pSample != NULL)
-      {
-        PopSample();
-        ReturnSample(pSample, FALSE);
-      }
+      m_vFreeSamples[i] = m_vAllSamples[i];
     }
+    m_iFreeSamples = m_regNumSamples;
+    m_qScheduledSamples.Clear();
+    m_bWorkerHasSample = false;
+    m_bSchedulerHasSample = false;
   }
   else
   {
     Log("Not flushing: size=%d", m_qScheduledSamples.Count());
   }
-  
+
+  CheckForEndOfStream();  
   m_bFlushDone.Set();
-  m_bFlush = false;
   LOG_TRACE("pre buffering on 1");
   m_bDoPreBuffering = true;
 }
 
 
-void MPEVRCustomPresenter::ReturnSample(IMFSample* pSample, BOOL tryNotify)
+void MPEVRCustomPresenter::ReturnSample(IMFSample* pSample, BOOL tryNotify, BOOL isWorker)
 {
-  TIME_LOCK(&m_lockSamples, 50000, "ReturnSample")
+  CAutoLock sLock(&m_lockSamples);
+  //TIME_LOCK(&m_lockSamples, 50000, "ReturnSample")
   LOG_TRACE("Sample returned: now having %d samples", m_iFreeSamples+1);
-  m_vFreeSamples[m_iFreeSamples++] = pSample;
-  if (CheckQueueCount() == 0)
+  
+  if (isWorker && !m_bWorkerHasSample)
+  {
+    //Error - worker thread returning un-allocated sample !!
+    return;
+  }
+  if (!isWorker && !m_bSchedulerHasSample)
+  {
+    //Error - scheduler thread returning un-allocated sample !!
+    return;
+  }
+    
+  if (m_iFreeSamples >= m_regNumSamples)
+  {
+    //Error - all samples free !!
+    return;
+  }
+  for (int i = 0; i < m_regNumSamples; i++)
+  {
+    if (m_vFreeSamples[i] == pSample)
+    {
+      //Error - pSample pointer is already free !!
+      return;
+    }
+  }
+  if (m_vFreeSamples[m_iFreeSamples] != NULL)
+  {
+    //Error - array element already holds valid pointer !!
+    return;
+  }
+
+  m_vFreeSamples[m_iFreeSamples] = pSample;
+  m_iFreeSamples++;
+
+  if (isWorker)
+  {
+    m_bWorkerHasSample = false;
+  }
+  else
+  {
+    m_bSchedulerHasSample = false;
+  }
+  
+  if (m_qScheduledSamples.IsEmpty())
   {
     LOG_TRACE("No scheduled samples, queue was empty -> todo, CheckForEndOfStream()");
     CheckForEndOfStream();
   }
 
-  if (tryNotify && (m_iFreeSamples > 0) && (m_iFreeSamples < NUM_SURFACES) && m_bInputAvailable)
+  if (tryNotify && (m_iFreeSamples > 0) && !m_qScheduledSamples.IsFull())
   {
     NotifyWorker(FALSE);
   }
 }
 
-
 HRESULT MPEVRCustomPresenter::PresentSample(IMFSample* pSample)
 {
   HRESULT hr = S_OK;
+  
+  //FPS rate limiter - Discard alternate samples to reduce rendering load when enabled
+  if (m_regFPSLimRate > 0)
+  {
+    m_bOddFrame = !m_bOddFrame;
+    if (!m_bOddFrame && !m_bDVDMenu && !m_bScrubbing && (m_iVideoHeight > m_regFPSLimV) && (m_iVideoWidth > m_regFPSLimH))
+    {    
+      LONGLONG sampleDuration, sampleTime;
+      pSample->GetSampleTime(&sampleTime);
+      pSample->GetSampleDuration(&sampleDuration);
+      if ((sampleDuration > 0) && (sampleDuration < (10000000/m_regFPSLimRate)) && (sampleTime > 0))
+      {
+        //Discard sample
+        return hr;
+      }
+    }
+  }
+
   IMFMediaBuffer* pBuffer = NULL;
   IDirect3DSurface9* pSurface = NULL;
   LONGLONG then = 0;
@@ -1239,16 +1664,16 @@ HRESULT MPEVRCustomPresenter::PresentSample(IMFSample* pSample)
     m_iFramesDrawn++;
     if (m_pClock != NULL)
     {
-      LONGLONG hnsTimeNow, hnsSystemTime, hnsTimeScheduled;
-      m_pClock->GetCorrelatedTime(0, &hnsTimeNow, &hnsSystemTime);
+      LONGLONG hnsTimeScheduled, hnsSubTime;
 
       pSample->GetSampleTime(&hnsTimeScheduled);
-      if (hnsTimeScheduled > 0)
+      hnsSubTime = hnsTimeScheduled - (100*10000);
+      if (hnsSubTime > 0)
       {
-        m_pCallback->SetSampleTime(hnsTimeScheduled);
+        m_pCallback->SetSampleTime(hnsSubTime);
       }
-      pSample->SetSampleTime(0); //Big experiment !!
-      pSample->SetSampleDuration((LONGLONG)(GetDisplayCycle() * 10000.0)); //Big experiment !!
+      pSample->SetSampleTime(0);
+      pSample->SetSampleDuration((LONGLONG)(GetDisplayCycle() * 10000.0));
     }
 
     // Present the swap surface
@@ -1293,11 +1718,12 @@ HRESULT MPEVRCustomPresenter::CheckForScheduledSample(LONGLONG *pTargetTime, LON
   LOG_TRACE("Checking for scheduled sample (size: %d)", m_qScheduledSamples.Count());
   LONGLONG displayTime = (LONGLONG)(GetDisplayCycle() * 10000); // display cycle in hns
   LONGLONG hystersisTime = min(50000, displayTime/4) ;
-  LONGLONG delErrLimit = displayTime ;
+  LONGLONG delErrLimit = hystersisTime * 2 ;
   LONGLONG delErr = 0;
   LONGLONG nextSampleTime = 0;
+  LONGLONG realSampleTime = 0;
   LONGLONG systemTime = 0;
-  LONGLONG lateLimit = 0;
+  LONGLONG lateLimit = hystersisTime;
   LONGLONG earlyLimit = hystersisTime;
 
   LONGLONG frameTime = m_rtTimePerFrame;
@@ -1308,41 +1734,20 @@ HRESULT MPEVRCustomPresenter::CheckForScheduledSample(LONGLONG *pTargetTime, LON
 
   // Allow 'hystersisTime' late or early frames to avoid synchronised judder problems. 
 
-  // only flush queues while not in DVD menus
-  if (m_bFlush)
-  {
-    if (!m_bDVDMenu)
-    {
-      PauseThread(m_hWorker, &m_workerParams);
-      DoFlush(FALSE);
-      WakeThread(m_hWorker, &m_workerParams);
-      m_iLateFrames = 0;
-      *pTargetTime = 0;
-      m_earliestPresentTime = 0;
-      return S_OK;
-    }
-    else
-    {
-      m_bFlushDone.Set();
-      m_bFlush = false;
-    }
-  }
-
   //Bail out after presenting first frame in skip-step FFWD/RWD mode
   if (m_bZeroScrub && (m_iFramesProcessed > 0))
     return S_OK;
 
-  while (CheckQueueCount() > 0)
+  while (SampleAvailable())
   {        
     // don't process frame in paused mode during normal playback
     if (m_state == MP_RENDER_STATE_PAUSED && !m_bDVDMenu) 
     {
-      m_iLateFrames = 0;
       *pTargetTime = 0;
       m_earliestPresentTime = 0;
       break;
     }
-
+     
     *pIdleWait = false;
 
     IMFSample* pSample = PeekSample();
@@ -1352,75 +1757,45 @@ HRESULT MPEVRCustomPresenter::CheckForScheduledSample(LONGLONG *pTargetTime, LON
       break;
     }
   
+    if (m_state != MP_RENDER_STATE_STARTED) 
+    {
+      m_lastPresentTime = 0;
+    }
+
     // get scheduled time, if none is available the sample will be presented immediately
-    CHECK_HR(hr = GetTimeToSchedule(pSample, &nextSampleTime, &systemTime), "Couldn't get time to schedule!");
+    CHECK_HR(hr = GetTimeToSchedule(pSample, &realSampleTime, &systemTime), "Couldn't get time to schedule!");
     if (FAILED(hr))
     {
-      nextSampleTime = 0;
+      realSampleTime = 0; 
     }
+
+    nextSampleTime = realSampleTime;
     
     LOG_TRACE("Time to schedule: %I64d", nextSampleTime);
-   
         
+    delErr = 0;
+    
     if (*pTargetTime > 0)
     {  
-      delErr = *pTargetTime - systemTime;
-      m_lastDelayErr = delErr;
-    }
-    else
-    {
-      delErr = 0;
+      m_lastDelayErr = *pTargetTime - systemTime;
+      if ((m_lastDelayErr < 0) && (m_frameRateRatio > 0) && !m_bDVDMenu && !m_bScrubbing) //late
+      {
+        delErr = min(delErrLimit, -m_lastDelayErr); 
+      }     
     }
     
     *pTargetTime = 0;      
         
-    //De-sensitise frame dropping to avoid occasional delay glitches triggering frame drops
-    if ((m_frameRateRatio > 0) && !m_bDVDMenu && !m_bScrubbing)
+    // Centralise nextSampleTime timing window (using average NST offset)
+    if (realSampleTime != 0)
     {
-      if (m_iLateFrames > 0)
-      {
-        if (m_iLateFrames >= LF_THRESH)
-        {
-          lateLimit = delErrLimit; //more contiguous late frames are allowed
-          delErr = delErrLimit;
-        }
-        else
-        {
-          lateLimit = hystersisTime;
-          delErr = 0;
-        }
-      }
-      else if ( (nextSampleTime < -(hystersisTime - 5000)) || (delErr < -(hystersisTime - 5000)) )
-      {
-        m_iLateFrames = LF_THRESH_HIGH;
-        m_iFramesHeld++;
-        lateLimit = delErrLimit; // Allow this late frame
-        delErr = delErrLimit;
-      }
-      else
-      {
-        lateLimit = hystersisTime;
-        delErr = 0;
-      }
-    }
-    else
-    {
-      lateLimit = hystersisTime;
-      delErr = 0;
-      m_iLateFrames = 0;
+      nextSampleTime = (realSampleTime + (frameTime/2)) - m_hnsAvgNSToffset;
     }
 
     // nextSampleTime == 0 means there is no valid presentation time, so we present it immediately without vsync correction
     // When scrubbing always display at least every eighth frame - even if it's late
     if ( (nextSampleTime >= -lateLimit) || m_bDVDMenu || !m_bFrameSkipping || (m_bScrubbing && !(m_iFramesProcessed % 8)) || m_bZeroScrub )
     {   
-      // Within the time window to 'present' a sample, or it's a special play mode
-      if (m_iLateFrames > 0)
-      {
-        LOG_LATEFR("Late frame (present), sampTime %.2f ms, last sleep %.2f, LFr %d",(double)nextSampleTime/10000, (double)lastSleepTime/10000, m_iLateFrames) ;
-      }
-      
-      //The sample duration has been adjusted to match the video FPS in VideoFpsFromSample()
       LONGLONG GetDuration;
       pSample->GetSampleDuration(&GetDuration);
       m_DetectedFrameTime = ((double)GetDuration)/10000000.0;    
@@ -1430,6 +1805,7 @@ HRESULT MPEVRCustomPresenter::CheckForScheduledSample(LONGLONG *pTargetTime, LON
         frameTime = GetDuration;
       }
 
+      // Within the time window to 'present' a sample, or it's a special play mode
       if (!m_bZeroScrub)
       {   
         systemTime = GetCurrentTimestamp();
@@ -1445,7 +1821,7 @@ HRESULT MPEVRCustomPresenter::CheckForScheduledSample(LONGLONG *pTargetTime, LON
         }
         
         // Apply display vsync correction.     
-        LONGLONG offsetTime = -delErr; //used to widen vsync correction window
+        LONGLONG offsetTime = delErr; //used to widen vsync correction window
         LONGLONG rasterDelay = GetDelayToRasterTarget( pTargetTime, &offsetTime);
 
         if (rasterDelay > 0)
@@ -1453,6 +1829,11 @@ HRESULT MPEVRCustomPresenter::CheckForScheduledSample(LONGLONG *pTargetTime, LON
            // Not at the correct point in the display raster, so sleep until pTargetTime time
           m_earliestPresentTime = 0;
           break;
+        }
+        else //negative 'rasterDelay' indicates delay relative to m_rasterTargetPosn i.e. we're late relative to that time.
+        {
+          realSampleTime -= rasterDelay; //Normalise realSampleTime back to m_rasterTargetPosn reference point
+          m_llLastRD = -rasterDelay;
         }
         
         // We're within the raster timing limits, so present the sample or delay because it's too early...
@@ -1467,18 +1848,22 @@ HRESULT MPEVRCustomPresenter::CheckForScheduledSample(LONGLONG *pTargetTime, LON
           m_earliestPresentTime = systemTime + (displayTime * (m_rawFRRatio - 1)) + offsetTime;
         }    
         
+      
         if (nextSampleTime > (max(frameTime, displayTime) + earlyLimit))
         {      
-          // It's too early to present sample, so delay for a while
-          if (m_iLateFrames > 0)
+          if ((systemTime - m_lastPresentTime < (500*10000)) && (m_lastPresentTime > 0))
           {
-            LOG_LATEFR("Late frame (stall), sampTime %.2f ms, last sleep %.2f, LFr %d",(double)nextSampleTime/10000, (double)lastSleepTime/10000, m_iLateFrames) ;
+            if ((m_frameRateRatio > 0) && !m_bDVDMenu && !m_bScrubbing)
+            {
+              //Count the early/stalled frames
+              m_iEarlyFrCnt++;
+            }
+            // It's too early to present sample, so delay for a while          
+            m_stallTime = m_earliestPresentTime - systemTime;
+            *pTargetTime = systemTime + (m_stallTime/2); //delay in smaller chunks
+            
+            break;
           }
-          
-          m_stallTime = m_earliestPresentTime - systemTime;
-          *pTargetTime = systemTime + (m_stallTime/2); //delay in smaller chunks
-          
-          break;
         }    
                
       }
@@ -1496,51 +1881,53 @@ HRESULT MPEVRCustomPresenter::CheckForScheduledSample(LONGLONG *pTargetTime, LON
       }
       
       m_lastPresentTime = systemTime;
-      CHECK_HR(PresentSample(pSample), "PresentSample failed");
-      ReturnSample(pSample, TRUE);
+      if (m_iFramesDrawn == 0)
+      {
+        LOG_NOSCRUB("Present first sample - start");
+        CHECK_HR(PresentSample(pSample), "PresentSample failed");
+        LOG_NOSCRUB("Present first sample - end");
+      }
+      else
+      {
+        CHECK_HR(PresentSample(pSample), "PresentSample failed");
+      }
+      
+      if ((m_iFramesDrawn < (int)m_dwmBuffers) && m_bDwmCompEnabled) //Push extra samples into the pipeline at start of play
+      {
+        CHECK_HR(PresentSample(pSample), "PresentSample failed");
+        DwmFlush();
+      }     
+      ReturnSample(pSample, TRUE, FALSE);
       m_iFramesProcessed++;
       
       // Notify EVR of sample latency
       if( m_pEventSink )
       {
-        LONGLONG sampleLatency = -nextSampleTime;
+        LONGLONG sampleLatency = -realSampleTime;
         m_pEventSink->Notify(EC_SAMPLE_LATENCY, (LONG_PTR)&sampleLatency, 0);
         LOG_TRACE("Sample Latency: %I64d", sampleLatency);
       }
       
-      if (m_iLateFrames > 0)
+      { //Context for CAutoLock
+	      CAutoLock sLock(&m_lockNST);
+        m_llLastNST = nextSampleTime;
+        m_llLastRST = realSampleTime;
+        m_llLastFrameTime = frameTime;
+      }
+      
+      //Wake dispTim thread to update phase deviation data 
+      //for MP Audio Renderer and NextSampleTime average
+      // m_dispTimParams.eHasWorkLP.Set();
+      NotifyThreadLP(&m_dispTimParams);
+
+      // Notify EVR of sample latency
+      if( m_pEventSink )
       {
-        m_iLateFrames--;
+        LONGLONG sampleLatency = -realSampleTime;
+        m_pEventSink->Notify(EC_SAMPLE_LATENCY, (LONG_PTR)&sampleLatency, 0);
+        LOG_TRACE("Sample Latency: %I64d", sampleLatency);
       }
 
-      if (m_pAVSyncClock) //Update phase deviation data for MP Audio Renderer
-      {
-        //Target (0.5 * frameTime) for nextSampleTime
-        double nstPhaseDiff = -(((double)nextSampleTime / (double)frameTime) - 0.5);
-
-        //Clamp within limits - because of hystersis, the range of nextSampleTime
-        //is greater than frameTime, so it's possible for nstPhaseDiff to exceed
-        //the -0.5 to +0.5 allowable range 
-        if (m_bDVDMenu || m_bScrubbing || (m_iFramesDrawn <= FRAME_PROC_THRSH2) || (m_frameRateRatio == 0 && m_dBias == 1.0))
-        {
-          nstPhaseDiff = 0.0;
-        }
-        else if (nstPhaseDiff < -0.499)
-        {
-          nstPhaseDiff = -0.499;
-        }
-        else if (nstPhaseDiff > 0.499)
-        {
-          nstPhaseDiff = 0.499;
-        }
-          
-        AdjustAVSync(nstPhaseDiff);
-      }
-
-      if (m_bDrawStats)
-      {
-        CalculateNSTStats(nextSampleTime); // update NextSampleTime average
-      }
       break;
     } 
     else // Drop late frames when frame skipping is enabled during normal playback
@@ -1551,12 +1938,12 @@ HRESULT MPEVRCustomPresenter::CheckForScheduledSample(LONGLONG *pTargetTime, LON
       {
         break;
       }
-      ReturnSample(pSample, TRUE);
+      ReturnSample(pSample, TRUE, FALSE);
       
       // Notify EVR of late sample
       if( m_pEventSink )
       {
-        LONGLONG sampleLatency = -nextSampleTime;
+        LONGLONG sampleLatency = -realSampleTime;
         m_pEventSink->Notify(EC_SAMPLE_LATENCY, (LONG_PTR)&sampleLatency, 0);
         LOG_TRACE("Sample Latency: %I64d", sampleLatency);
       }
@@ -1565,9 +1952,9 @@ HRESULT MPEVRCustomPresenter::CheckForScheduledSample(LONGLONG *pTargetTime, LON
                   
       // If video frame rate is higher than display refresh then we'll get lots of dropped frames
       // so it's better to not report them in the log normally.          
-      if (m_bDrawStats && !m_bScrubbing && !m_bDVDMenu)
+      if ((m_bDrawStats || m_bLogAllFrameDrops) && (m_frameRateRatio > 0) && !m_bScrubbing && !m_bDVDMenu)
       {
-        Log("Dropping frame, nextSampleTime %.2f ms, last sleep %.2f ms, last pres %.2f ms, paint %.2f ms, queue count %d, SOP %d, EOP %d, LFr %d, RawFRRatio %d, dropped %d, drawn %d",
+        Log("Dropping frame, nextSampleTime %.2f ms, last sleep %.2f ms, last pres %.2f ms, paint %.2f ms, queue count %d, SOP %d, EOP %d, RawFRRatio %d, dropped %d, drawn %d",
              (double)nextSampleTime/10000, 
              (double)lastSleepTime/10000, 
              (double)((m_lastPresentTime - GetCurrentTimestamp())/10000),
@@ -1575,17 +1962,12 @@ HRESULT MPEVRCustomPresenter::CheckForScheduledSample(LONGLONG *pTargetTime, LON
              m_qScheduledSamples.Count(),
              m_LastStartOfPaintScanline,
              m_LastEndOfPaintScanline,
-             m_iLateFrames,
              m_rawFRRatio,
              m_iFramesDropped,
              m_iFramesDrawn
              );
       }
            
-      if (m_iLateFrames > 0)
-      {
-        m_iLateFrames--;
-      }
       Sleep(1); //Just to be friendly to other threads
     }
     
@@ -1593,6 +1975,58 @@ HRESULT MPEVRCustomPresenter::CheckForScheduledSample(LONGLONG *pTargetTime, LON
   } // end of while loop
   
   return hr;
+}
+
+
+void MPEVRCustomPresenter::DwmInitDelegated()
+{
+  m_bDwmInitDone.Reset();
+  if (m_bSchedulerRunning)
+  {
+    m_timerParams.eDoHPtask.Set(); //Request DwmInit() via timer thread
+  }
+  else 
+  {
+    Log("DwmInit() - Timer thread is shut down");
+    DwmInit();
+  }  
+  m_bDwmInitDone.Wait(1000);
+}
+
+void MPEVRCustomPresenter::StallWorker()
+{
+	CAutoLock sLock(&m_lockWorkerStall);
+  m_WorkerStalledEvent.Reset();
+  m_workerParams.eStall.Set(); //Request a stall of Worker Thread
+  m_WorkerStalledEvent.Wait(20); //Wait for stall to happen, but allow timeout to avoid deadlocks
+  
+  //  if (!m_WorkerStalledEvent.Wait(20))
+  //  {
+  //    Log("StallWorker() - timeout");
+  //  }
+}
+
+void MPEVRCustomPresenter::ReleaseWorker()
+{
+	CAutoLock sLock(&m_lockWorkerStall);
+  m_workerParams.eUnstall.Set(); //Release stall of Worker Thread
+}
+
+void MPEVRCustomPresenter::StallScheduler()
+{
+	CAutoLock sLock(&m_lockSchedulerStall);
+  m_SchedulerStalledEvent.Reset();
+  m_schedulerParams.eStall.Set(); //Request a stall of Scheduler Thread
+  if (!m_SchedulerStalledEvent.Wait(200)) //Wait for stall to happen, but allow timeout to avoid deadlocks
+  {
+    Log("StallScheduler() - timeout");
+  }
+}
+
+void MPEVRCustomPresenter::ReleaseScheduler()
+{
+	CAutoLock sLock(&m_lockSchedulerStall);
+  m_schedulerParams.eUnstall.Set(); //Release stall of Scheduler Thread
 }
 
 
@@ -1604,6 +2038,7 @@ void MPEVRCustomPresenter::StartWorkers()
     return;
   }
 
+  StartThread(&m_hDispTim, &m_dispTimParams, DispTimThread, &m_uDispTimThreadId, THREAD_PRIORITY_BELOW_NORMAL);
   StartThread(&m_hTimer, &m_timerParams, TimerThread, &m_uTimerThreadId, THREAD_PRIORITY_BELOW_NORMAL);
   StartThread(&m_hWorker, &m_workerParams, WorkerThread, &m_uWorkerThreadId, THREAD_PRIORITY_ABOVE_NORMAL);
   StartThread(&m_hScheduler, &m_schedulerParams, SchedulerThread, &m_uSchedulerThreadId, THREAD_PRIORITY_TIME_CRITICAL);
@@ -1643,6 +2078,215 @@ void MPEVRCustomPresenter::DwmEnableMMCSSOnOff(bool enable)
   }
 }
 
+void MPEVRCustomPresenter::DwmFlush()
+{
+  if (m_state == MP_RENDER_STATE_SHUTDOWN)
+  {
+    return;
+  }
+  if (m_pDwmFlush && m_bDwmCompEnabled)
+  {
+    m_pDwmFlush();
+  }
+}
+
+void MPEVRCustomPresenter::DwmGetState()
+{
+  DWORD wProcessId;
+  DWORD cProcessId;
+  HWND fhWindow = NULL;
+  m_hDwmWinHandle = NULL;
+
+  // Find the foreground window handle
+  fhWindow = GetForegroundWindow();
+  // Get it's process ID
+  GetWindowThreadProcessId(fhWindow, &wProcessId);
+  cProcessId = GetCurrentProcessId();
+  
+  // Check that it's the MP window by comparing process ID's    
+  if (fhWindow && (wProcessId == cProcessId))
+  {
+    m_hDwmWinHandle = fhWindow;
+  }
+
+  Log("DwmGetState(), hDwmWinHandle = 0x%x, wProcessId = 0x%x, cProcessId = 0x%x", fhWindow, wProcessId, cProcessId);
+
+  if (m_pDwmIsCompositionEnabled)
+  { 
+    HRESULT hr = m_pDwmIsCompositionEnabled(&m_bDwmCompEnabled);
+    if ((SUCCEEDED(hr)) && m_bDwmCompEnabled) 
+    {
+      m_dwmBuffers = 2;
+      Log("DWM composition is enabled");
+    }
+    else
+    {
+      m_dwmBuffers = 0;
+      m_bDwmCompEnabled = false;
+      Log("DWM composition is disabled");
+    }
+  }
+  else
+  {
+    m_dwmBuffers = 0;
+    m_bDwmCompEnabled = false;
+    Log("DWM composition check failed");
+  }
+}
+
+
+void MPEVRCustomPresenter::DwmSetParameters(BOOL useSourceRate, UINT buffers, UINT rfshPerFrame)
+{  
+  if (!m_bDwmCompEnabled)
+  {
+    return;
+  }
+  
+  HRESULT hr = E_FAIL;
+
+  //  DWM_FRAME_COUNT cRefresh = 0;
+  //  if (false && m_pDwmGetCompositionTimingInfo)
+  //  {
+  //    hr = E_FAIL;
+  //    
+  //    DWM_TIMING_INFO presentationStatus;
+  //    presentationStatus.cbSize = sizeof(presentationStatus);
+  //    if (m_hDwmWinHandle)
+  //    {
+  //      hr = m_pDwmGetCompositionTimingInfo(m_hDwmWinHandle, &presentationStatus);
+  //    }
+  //
+  //    //if (SUCCEEDED(hr)) 
+  //    if (hr==E_PENDING || hr==S_OK) 
+  //    {
+  //      cRefresh = presentationStatus.cRefresh;
+  //      Log("DwmGetCompositionTimingInfo succeeded, hr = 0x%x, cRefresh = %d", hr, cRefresh);
+  //    }
+  //    else
+  //    {
+  //      Log("DwmGetCompositionTimingInfo failed, hr = 0x%x", hr);
+  //    }
+  //  }
+  
+  if (m_pDwmSetPresentParameters)
+  {
+    hr = E_FAIL;
+
+    //Create and initialise the structure
+    DWM_PRESENT_PARAMETERS presentationParams;
+    presentationParams.cbSize = sizeof(presentationParams);
+    presentationParams.fQueue = TRUE;
+    presentationParams.cRefreshStart = 0;
+    presentationParams.cBuffer = buffers;
+    presentationParams.fUseSourceRate = useSourceRate;
+    presentationParams.rateSource.uiNumerator = (UINT)(250000000.0/GetDisplayCycle()); // Actual display rate
+    presentationParams.rateSource.uiDenominator = 100000;
+    presentationParams.cRefreshesPerFrame = rfshPerFrame;
+    presentationParams.eSampling = DWM_SOURCE_FRAME_SAMPLING_POINT;
+    
+    // Set up the DWM presentation parameters    
+    if (m_hDwmWinHandle)
+    {
+      hr = m_pDwmSetPresentParameters(m_hDwmWinHandle, &presentationParams);
+    }
+
+    if (SUCCEEDED(hr)) 
+    {
+      m_dwmBuffers = buffers;
+      Log("DwmSetPresentParameters succeeded, DWM buffers = %d, useSourceRate = %d", m_dwmBuffers, useSourceRate);
+    }
+    else
+    {
+      Log("DwmSetPresentParameters failed, hr = 0x%x, DWM buffers = %d", hr, m_dwmBuffers);
+    }
+    
+  }  
+  
+  if (m_pDwmSetPresentParameters)
+  {
+    hr = E_FAIL;
+    if (m_hDwmWinHandle)
+    {
+      hr = m_pDwmSetDxFrameDuration(m_hDwmWinHandle, (INT)rfshPerFrame);
+    }
+    if (SUCCEEDED(hr)) 
+    {
+      Log("DwmSetDxFrameDuration succeeded, rfshPerFrame = %d", rfshPerFrame);
+    }
+    else
+    {
+      Log("DwmSetDxFrameDuration failed, hr = 0x%x", hr);
+    }
+  }
+
+}
+
+void MPEVRCustomPresenter::DwmInit()
+{
+  if (!m_bEnableDWMQueued || m_bDWMinit)
+  {
+    m_bDwmInitDone.Set();
+    return;
+  }
+  
+  UINT buffers = m_regNumDWMBuffers;
+  UINT rfshPerFrame = NUM_DWM_FRAMES;
+
+  if (GetDisplayCycle() > m_dDWMRefreshThresh)
+  {
+    buffers = 2;
+  }
+    
+  Log("EVRCustomPresenter::DwmInit - start, frame = %d", m_iFramesDrawn);  
+  //Initialise the DWM parameters
+  DwmGetState();  
+  DwmFlush();
+  DwmSetParameters(TRUE, buffers, rfshPerFrame); //'Source rate' mode  
+  DwmFlush();
+  DwmSetParameters(FALSE, buffers, rfshPerFrame); //'Display rate' mode
+  DwmFlush();
+  
+  if (m_bDWMInitSleep)
+  {
+    Sleep((DWORD)(GetDisplayCycle()*3.5));
+  }
+  
+  m_bDWMinit = true;
+  m_bDwmInitDone.Set();
+  Log("EVRCustomPresenter::DwmInit - done");  
+}  
+
+
+void MPEVRCustomPresenter::DwmReset(bool newWinHand)
+{
+  CAutoLock sLock(&m_lockDWM);
+  DwmEnableMMCSSOnOff(false);
+
+  if (!m_bEnableDWMQueued || !ENABLE_DWM_RESET || !m_bDWMinit) 
+  {
+    return;
+  }
+
+  Log("EVRCustomPresenter::DwmReset");  
+  //Reset the DWM parameters
+  if (!m_hDwmWinHandle || newWinHand)
+  {
+    DwmGetState();
+  }
+  
+  DwmFlush();
+  DwmSetParameters(TRUE, 2, 1); //'Source rate' mode
+  DwmFlush();
+  DwmSetParameters(FALSE, 2, 1); //'Display rate' mode
+  DwmFlush();
+
+  if (m_bDWMInitSleep)
+  {
+    Sleep((DWORD)(GetDisplayCycle()*2.5));
+  }
+  
+  m_bDWMinit = false;
+}  
 
 void MPEVRCustomPresenter::StopWorkers()
 {
@@ -1652,11 +2296,11 @@ void MPEVRCustomPresenter::StopWorkers()
   {
     return;
   }
+  m_bSchedulerRunning = FALSE;
   EndThread(m_hScheduler, &m_schedulerParams);
   EndThread(m_hWorker, &m_workerParams);
   EndThread(m_hTimer, &m_timerParams);
-
-  m_bSchedulerRunning = FALSE;
+  EndThread(m_hDispTim, &m_dispTimParams);
 }
 
 
@@ -1665,8 +2309,6 @@ void MPEVRCustomPresenter::StartThread(PHANDLE handle, SchedulerParams* pParams,
   Log("Starting thread!");
   pParams->pPresenter = this;
   pParams->bDone = FALSE;
-  pParams->iPause = 0;
-  pParams->bPauseAck = FALSE;
   pParams->llTime = 0;
 
   *handle = (HANDLE)_beginthreadex(NULL, 0, ThreadProc, pParams, 0, threadId);
@@ -1680,7 +2322,6 @@ void MPEVRCustomPresenter::EndThread(HANDLE hThread, SchedulerParams* params)
   Log("Ending thread 0x%x, 0x%x", hThread, params);
   params->csLock.Lock();
   Log("Got lock.");
-  params->iPause = 0;
   params->bDone = TRUE;
   Log("Notifying thread...");
   params->eHasWork.Set();
@@ -1692,89 +2333,19 @@ void MPEVRCustomPresenter::EndThread(HANDLE hThread, SchedulerParams* params)
   CloseHandle(hThread);
 }
 
-void MPEVRCustomPresenter::PauseThread(HANDLE hThread, SchedulerParams* params)
-{
-  if (!m_bSchedulerRunning)
-  {
-    return;
-  }
-  Log("Pausing thread 0x%x, 0x%x, %d", hThread, params, params->iPause);
-
-  InterlockedIncrement(&params->iPause);
-
-  int i = 0;
-  
-  for (i = 0; i < 50; i++)
-  {
-    params->eHasWork.Set(); //Wake thread (in case it's sleeping)
-    Sleep(1);
-    if (params->bPauseAck)
-    {
-      break;
-    }
-  }
-  
-  if (i >= 50)
-  {
-    Log("Thread pause timeout 0x%x, 0x%x, %d", hThread, params, params->iPause);
-  }
-  else
-  {
-    Log("Thread paused, 0x%x, 0x%x, %d", hThread, params, params->iPause);
-  }
-
-}
-
-void MPEVRCustomPresenter::WakeThread(HANDLE hThread, SchedulerParams* params)
-{
-  if (!m_bSchedulerRunning)
-  {
-    return;
-  }
-
-  InterlockedDecrement(&params->iPause);
-
-  params->eHasWork.Set();
-
-  Log("Waking thread 0x%x, 0x%x, %d", hThread, params, params->iPause);  
-}
-
-
-void MPEVRCustomPresenter::NotifyThread(SchedulerParams* params, bool setWork, bool setWorkLP, LONGLONG llTime)
-{
-  if (m_bSchedulerRunning)
-  {
-    if (setWork)
-    {
-      params->llTime = llTime;
-      params->eHasWork.Set();
-    }
-    if (setWorkLP)
-    {
-      params->llTime = llTime;
-      params->eHasWorkLP.Set();
-    }
-  }
-  else 
-  {
-    Log("Scheduler is already shut down");
-  }
-}
-
 
 void MPEVRCustomPresenter::NotifyScheduler(bool forceWake)
 {
   LOG_TRACE("NotifyScheduler()");
   if (forceWake)
   {
-    NotifyThread(&m_schedulerParams, true, false, 0);
+    NotifyThreadSP(&m_schedulerParams);
   }
   else
   {
-    NotifyThread(&m_schedulerParams, false, true, 0);
+    NotifyThreadLP(&m_schedulerParams);
   }
 }
-
 
 
 void MPEVRCustomPresenter::NotifySchedulerTimer()
@@ -1789,19 +2360,17 @@ void MPEVRCustomPresenter::NotifySchedulerTimer()
   }
 }
 
-
-
 void MPEVRCustomPresenter::NotifyWorker(bool setInAvail)
 {
   LOG_TRACE("NotifyWorker()");
   m_llLastWorkerNotification = GetCurrentTimestamp();
   if (setInAvail)
   {
-    NotifyThread(&m_workerParams, true, false, 0);
+    NotifyThreadSP(&m_workerParams);
   }
   else
   {
-    NotifyThread(&m_workerParams, false, true, 0);
+    NotifyThreadLP(&m_workerParams);
   }
 }
 
@@ -1818,32 +2387,48 @@ void MPEVRCustomPresenter::NotifyTimer(LONGLONG targetTime)
   }   
 }
 
+BOOL MPEVRCustomPresenter::PutSample(IMFSample* pSample)
+{
+  CAutoLock sLock(&m_lockSamples);
+  LOG_TRACE("Adding scheduled sample, size: %d", m_qScheduledSamples.Count());
+  if (!m_qScheduledSamples.IsFull() && (m_iFreeSamples < m_regNumSamples))
+  {
+    m_qScheduledSamples.Put(pSample);
+    m_bWorkerHasSample = false;
+    return TRUE;
+  }
+  return FALSE;
+}
 
 BOOL MPEVRCustomPresenter::PopSample()
 {
-  CAutoLock lock(&m_lockScheduledSamples);
+  CAutoLock sLock(&m_lockSamples);
   LOG_TRACE("Removing scheduled sample, size: %d", m_qScheduledSamples.Count());
-  if (m_qScheduledSamples.Count() > 0)
+  if (!m_qScheduledSamples.IsEmpty() && (m_iFreeSamples < m_regNumSamples) && !m_bSchedulerHasSample)
   {
     m_qScheduledSamples.Get();
-    m_qGoodPopCnt++;
+    m_bSchedulerHasSample = true;
     return TRUE;
   }
-  m_qBadPopCnt++;
   return FALSE;
 }
 
 int MPEVRCustomPresenter::CheckQueueCount()
 {
-  CAutoLock lock(&m_lockScheduledSamples);
   return m_qScheduledSamples.Count();
+}
+
+bool MPEVRCustomPresenter::SampleAvailable()
+{
+  CAutoLock sLock(&m_lockSamples);
+  return !m_qScheduledSamples.IsEmpty();
 }
 
 
 IMFSample* MPEVRCustomPresenter::PeekSample()
 {
-  CAutoLock lock(&m_lockScheduledSamples);
-  if (m_qScheduledSamples.Count() == 0)
+  CAutoLock sLock(&m_lockSamples);
+  if (m_qScheduledSamples.IsEmpty() || (m_iFreeSamples >= m_regNumSamples))
   {
     Log("ERR: PeekSample: empty queue!");
     return NULL;
@@ -1851,11 +2436,10 @@ IMFSample* MPEVRCustomPresenter::PeekSample()
   return m_qScheduledSamples.Peek();
 }
 
-
 void MPEVRCustomPresenter::ScheduleSample(IMFSample* pSample)
 {
-  CAutoLock lock(&m_lockScheduledSamples);
   LOG_TRACE("Scheduling Sample, size: %d", m_qScheduledSamples.Count());
+  BOOL onTimeSample = true;
   
   VideoFpsFromSample(pSample);
 
@@ -1865,22 +2449,51 @@ void MPEVRCustomPresenter::ScheduleSample(IMFSample* pSample)
   CHECK_HR(hr = GetTimeToSchedule(pSample, &nextSampleTime, &systemTime), "Couldn't get time to schedule!");
   if (SUCCEEDED(hr))
   {
-    // consider 5 ms "just-in-time" for log-length's sake
-    if (nextSampleTime < -50000 && !m_bDVDMenu && !m_bScrubbing && m_state != MP_RENDER_STATE_PAUSED)
+    // log really late (>10ms) samples
+    if (nextSampleTime < -100000 && !m_bDVDMenu && !m_bScrubbing && m_state != MP_RENDER_STATE_PAUSED)
     {
+      onTimeSample = false; //Allow sample to be dropped
       Log("Scheduling sample from the past (%.2f ms, last call to NotifyWorker: %.2f ms, Queue: %d)", 
         (double)-nextSampleTime/10000, (GetCurrentTimestamp()-(double)m_llLastWorkerNotification)/10000, m_qScheduledSamples.Count());
     }
   }
 
-  m_qScheduledSamples.Put(pSample);
-  m_SampleAddedEvent.Set();
-  if (m_qScheduledSamples.Count() >= 1)
+  if (onTimeSample || m_bDoPreBuffering)
   {
-    NotifyScheduler(false);
+    if (m_qGoodPutCnt == 0)
+    {
+      if (!SampleAvailable())
+      {       
+        LOG_NOSCRUB("Adding first sample to empty queue");
+        //Setup the Desktop Window Manager (DWM)
+        DwmInitDelegated();
+        if (m_bForceFirstFrame)
+        {
+          //Force first sample to be presented (not dropped)
+          pSample->SetSampleTime(0);
+        }
+      }
+    }
+    PutSample(pSample);
+    m_SampleAddedEvent.Set();
+    m_qGoodPutCnt++;
+    if (SampleAvailable())
+    {
+      NotifyScheduler(false);
+    }
+  }
+  else
+  {
+    ReturnSample(pSample, FALSE, TRUE);
+    // Notify EVR of sample latency
+    if( m_pEventSink )
+    {
+      LONGLONG sampleLatency = -nextSampleTime;
+      m_pEventSink->Notify(EC_SAMPLE_LATENCY, (LONG_PTR)&sampleLatency, 0);
+      LOG_TRACE("Sample Latency: %I64d", sampleLatency);
+    }
   }
 }
-
 
 BOOL MPEVRCustomPresenter::CheckForEndOfStream()
 {
@@ -1889,7 +2502,7 @@ BOOL MPEVRCustomPresenter::CheckForEndOfStream()
     return FALSE;
   }
   // samples pending
-  if (CheckQueueCount() > 0)
+  if (SampleAvailable())
   {
     return FALSE;
   }
@@ -1999,13 +2612,12 @@ HRESULT MPEVRCustomPresenter::ProcessInputNotify(int* samplesProcessed, bool set
         m_pEventSink->Notify(EC_PROCESSING_LATENCY, (LONG_PTR)&mixerLatency, 0);
         LOG_TRACE("Mixer Latency: %I64d", mixerLatency);
       }
+      
       ScheduleSample(sample);
-      m_qGoodPutCnt++;
     }
     else 
     {
-      ReturnSample(sample, FALSE);
-      m_qBadPutCnt++;
+      ReturnSample(sample, FALSE, TRUE);
       switch (hr)
       {
       case MF_E_TRANSFORM_NEED_MORE_INPUT:
@@ -2029,10 +2641,14 @@ HRESULT MPEVRCustomPresenter::ProcessInputNotify(int* samplesProcessed, bool set
         // no errors, just infos why it didn't succeed
         Log("ProcessOutput: change of type");
         bhasMoreSamples = FALSE;
-        PauseThread(m_hScheduler, &m_schedulerParams);
-        //LogOutputTypes();
-        hr = RenegotiateMediaOutputType();
-        WakeThread(m_hScheduler, &m_schedulerParams);
+       //LogOutputTypes();
+        //StallScheduler();
+        {
+          CAutoLock sLock(&m_schedulerParams.csLock);
+          CAutoLock tLock(&m_timerParams.csLock);
+          hr = RenegotiateMediaOutputType();
+        }
+        //ReleaseScheduler();
       break;
 
       default:
@@ -2068,35 +2684,32 @@ HRESULT STDMETHODCALLTYPE MPEVRCustomPresenter::ProcessMessage(MFVP_MESSAGE_TYPE
     case MFVP_MESSAGE_FLUSH:
       // The presenter should discard any pending samples.
       Log("ProcessMessage MFVP_MESSAGE_FLUSH");
-      Flush(FALSE);
+      Flush(FALSE); //Flush delegated to Scheduler Thread to avoid deadlocks
     break;
 
     case MFVP_MESSAGE_INVALIDATEMEDIATYPE:
       // The mixer's output format has changed. The EVR will initiate format negotiation.
       Log("ProcessMessage MFVP_MESSAGE_INVALIDATEMEDIATYPE");
-      PauseThread(m_hWorker, &m_workerParams);
-      PauseThread(m_hScheduler, &m_schedulerParams);
       //LogOutputTypes();
-      hr = RenegotiateMediaOutputType();
-      WakeThread(m_hScheduler, &m_schedulerParams);
-      WakeThread(m_hWorker, &m_workerParams);
+      //StallScheduler();
+      StallWorker();
+      {
+        CAutoLock sLock(&m_schedulerParams.csLock);
+        CAutoLock tLock(&m_timerParams.csLock);
+        hr = RenegotiateMediaOutputType();
+      }
+      ReleaseWorker();
+      //ReleaseScheduler();
     break;
 
     case MFVP_MESSAGE_PROCESSINPUTNOTIFY:
-      {
-        // One input stream on the mixer has received a new sample.
-        LOG_TRACE("ProcessMessage MFVP_MESSAGE_PROCESSINPUTNOTIFY");
-        m_bFirstInputNotify = TRUE;
-      
-        int samplesProcessed = 0;
-
-        if (m_state == MP_RENDER_STATE_STARTED)
-          NotifyWorker(true);
-        else
-          ProcessInputNotify(&samplesProcessed, false);
-
-        break;
-      }
+      // One input stream on the mixer has received a new sample.
+      if (!m_bFirstInputNotify)
+        Log("ProcessMessage MFVP_MESSAGE_PROCESSINPUTNOTIFY");
+        
+      m_bFirstInputNotify = TRUE;      
+      NotifyWorker(true);
+    break;
 
     case MFVP_MESSAGE_BEGINSTREAMING:
       // The EVR switched from stopped to paused. The presenter should allocate resources.
@@ -2105,20 +2718,21 @@ HRESULT STDMETHODCALLTYPE MPEVRCustomPresenter::ProcessMessage(MFVP_MESSAGE_TYPE
       m_bEndStreaming = FALSE;
       m_bInputAvailable = FALSE;
       m_bFirstInputNotify = FALSE;
-      m_state = MP_RENDER_STATE_PAUSED;
-      StartWorkers();
-      DwmEnableMMCSSOnOff(false);
-
-      // TODO add 2nd monitor support
+      SetRenderState(MP_RENDER_STATE_PAUSED);
       ResetTraceStats();
       ResetFrameStats();
+      StartWorkers();
+      //Setup the Desktop Window Manager (DWM)
+      //DwmInitDelegated();
+      // TODO add 2nd monitor support
     break;
 
     case MFVP_MESSAGE_ENDSTREAMING:
       // The EVR switched from running or paused to stopped. The presenter should free resources.
       Log("ProcessMessage MFVP_MESSAGE_ENDSTREAMING");
-      m_state = MP_RENDER_STATE_STOPPED;
+      SetRenderState(MP_RENDER_STATE_STOPPED);
       m_EndOfStreamingEvent.Set();
+      LogRenderStats();
     break;
 
     case MFVP_MESSAGE_ENDOFSTREAM:
@@ -2131,7 +2745,7 @@ HRESULT STDMETHODCALLTYPE MPEVRCustomPresenter::ProcessMessage(MFVP_MESSAGE_TYPE
 
     case MFVP_MESSAGE_STEP:
       // Requests a frame step. The lower DWORD of the ulParam parameter contains the number of frames to step. 
-      // If the value is N, the presenter should skip N ?1 frames and display the N th frame. When that frame 
+      // If the value is N, the presenter should skip N –1 frames and display the N th frame. When that frame 
       // has been displayed, the presenter should send an EC_STEP_COMPLETE event to the EVR. If the presenter 
       // is not paused when it receives this message, it should return MF_E_INVALIDREQUEST.
       Log("ProcessMessage MFVP_MESSAGE_STEP");
@@ -2168,6 +2782,9 @@ HRESULT STDMETHODCALLTYPE MPEVRCustomPresenter::OnClockStart(MFTIME hnsSystemTim
     return hr;
   }
 
+  ResetTraceStats();
+  ResetFrameStats();
+
   LOG_TRACE("pre buffering on 2");
   m_bDoPreBuffering = true;
 
@@ -2186,21 +2803,14 @@ HRESULT STDMETHODCALLTYPE MPEVRCustomPresenter::OnClockStart(MFTIME hnsSystemTim
       //DoFlush(TRUE);
     }
   }
-
-  m_state = MP_RENDER_STATE_STARTED;
   
-  PauseThread(m_hWorker, &m_workerParams);
-  PauseThread(m_hScheduler, &m_schedulerParams);
+  SetRenderState(MP_RENDER_STATE_STARTED);
   
-  ResetTraceStats();
-  ResetFrameStats();
-
-  WakeThread(m_hScheduler, &m_schedulerParams);
-  WakeThread(m_hWorker, &m_workerParams);
-
   NotifyWorker(true);
   NotifyScheduler(true);
+  GetTSRStatusInterface();
   GetAVSyncClockInterface();
+  SetupAudioRenderer();
   m_bEndBuffering = false;
 
   if (m_pMediaSeeking)
@@ -2226,8 +2836,11 @@ HRESULT STDMETHODCALLTYPE MPEVRCustomPresenter::OnClockStop(MFTIME hnsSystemTime
   Log("OnClockStop: %6.3f", hnsSystemTime / 10000000.0);
   if (m_state != MP_RENDER_STATE_STOPPED)
   {
-    m_state = MP_RENDER_STATE_STOPPED;
+    SetRenderState(MP_RENDER_STATE_STOPPED);
+    //StallScheduler();
+    CAutoLock sLock(&m_schedulerParams.csLock);
     DoFlush(FALSE);
+    //ReleaseScheduler();
   }
 
   return S_OK;
@@ -2246,7 +2859,7 @@ HRESULT STDMETHODCALLTYPE MPEVRCustomPresenter::OnClockPause(MFTIME hnsSystemTim
   }
 
   Log("OnClockPause: %6.3f", hnsSystemTime / 10000000.0);
-  m_state = MP_RENDER_STATE_PAUSED;
+  SetRenderState(MP_RENDER_STATE_PAUSED);
   m_bEndBuffering = false;
 
   return S_OK;
@@ -2264,16 +2877,18 @@ HRESULT STDMETHODCALLTYPE MPEVRCustomPresenter::OnClockRestart(MFTIME hnsSystemT
     return hr;
   }
 
+  ResetFrameStats();
+
   LOG_TRACE("pre buffering on 3");
   m_bDoPreBuffering = true;
   Log("OnClockRestart: %6.3f", hnsSystemTime / 10000000.0);
   ASSERT(m_state == MP_RENDER_STATE_PAUSED);
-  m_state = MP_RENDER_STATE_STARTED;
+  SetRenderState(MP_RENDER_STATE_STARTED);
   
-  ResetFrameStats();
   NotifyWorker(true);
   NotifyScheduler(true);
   
+  GetTSRStatusInterface();
   GetAVSyncClockInterface();
   SetupAudioRenderer();
   
@@ -2404,13 +3019,20 @@ void MPEVRCustomPresenter::ReleaseSurfaces()
     m_pCallback->PresentImage(0, 0, 0, 0, 0, 0);
   }
   DoFlush(TRUE);
-  m_iFreeSamples = 0;
-  for (int i = 0; i < NUM_SURFACES; i++)
-  {
-    samples[i] = NULL;
-    surfaces[i] = NULL;
-    textures[i] = NULL;
-    m_vFreeSamples[i] = NULL;
+
+  { //Context for CAutoLock
+    CAutoLock sLock(&m_lockSamples);
+    m_iFreeSamples = 0;
+    m_bWorkerHasSample = false;
+    m_bSchedulerHasSample = false;
+    for (int i = 0; i < MAX_SURFACES; i++)
+    {
+      samples[i] = NULL;
+      surfaces[i] = NULL;
+      textures[i] = NULL;
+      m_vFreeSamples[i] = NULL;
+      m_vAllSamples[i] = NULL;
+    }
   }
 
   m_pDeviceManager->UnlockDevice(hDevice, FALSE);
@@ -2435,20 +3057,7 @@ HRESULT MPEVRCustomPresenter::Paint(CComPtr<IDirect3DSurface9> pSurface)
     {
       return E_FAIL;
     }
-
-    // Presenter is flushing samples, do not render unless in DVD menus
-    if (m_bFlush)
-    {
-      if (!m_bDVDMenu)
-      {
-        return S_OK;
-      }
-      else
-      {
-        m_bFlush = false;
-      }
-    }
-
+    
     HRESULT hr;
 
     if (FAILED(hr = m_pD3DDev->GetRenderTarget(0, &pOldSurface)))
@@ -2811,7 +3420,7 @@ int MPEVRCustomPresenter::MeasureScanLines(LONGLONG startTime, double *times, do
 
 BOOL MPEVRCustomPresenter::EstimateRefreshTimings(int numFrames, int threadPriority)
 {
-  CAutoLock ertLock(&m_lockRefreshEstimator); // Lock to ensure only one instance is running
+  CAutoLock ertLock(this); // Lock to ensure only one instance is running
   
   DisplayParams dParams = m_displayParams;
   dParams.estRefreshLock = false;
@@ -2844,6 +3453,7 @@ BOOL MPEVRCustomPresenter::EstimateRefreshTimings(int numFrames, int threadPrior
     {
       SetThreadPriority(GetCurrentThread(), threadPriority);
     }
+
      
     const int maxScanLineSamples = 1000;
     const int maxFrameSamples = 8;
@@ -2896,20 +3506,20 @@ BOOL MPEVRCustomPresenter::EstimateRefreshTimings(int numFrames, int threadPrior
         dParams.minVisScanLine = startLine;
 
       // make a few measurements
-      Log("Starting Frame: %d, start scanline: %d", i, startLine);
+      //Log("Starting Frame: %d, start scanline: %d", i, startLine);
       sampleCount = MeasureScanLines(startTimeLR, times, scanLines, maxScanLineSamples, &dParams.maxScanLine);
       // Now we're at the next vsync
       m_pD3DDev->GetRasterStatus(0, &rasterStatus);
       endLine = rasterStatus.ScanLine;
       endTime = GetCurrentTimestamp();
 
-      Log("Ending Frame: %d, start scanline: %d, end scanline: %d, maxScanline: %d", i, startLine, endLine, dParams.maxScanLine);
+      //Log("Ending Frame: %d, start scanline: %d, end scanline: %d, maxScanline: %d", i, startLine, endLine, dParams.maxScanLine);
 
       estRefreshCyc[i] = (double)(endTime - startTime); // in hns units
       sumRefCyc += estRefreshCyc[i];
       
       coeff[i].fit = LinearRegression(scanLines, times, sampleCount, &coeff[i].slope, &coeff[i].intercept);
-      Log("  samples = %d, slope = %.6f, intercept = %.6f, fit = %.6f", sampleCount, coeff[i].slope, coeff[i].intercept, coeff[i].fit);
+      //Log("  samples = %d, slope = %.6f, intercept = %.6f, fit = %.6f", sampleCount, coeff[i].slope, coeff[i].intercept, coeff[i].fit);
     }    
 
     dParams.maxVisScanLine = dParams.maxScanLine;
@@ -3185,17 +3795,36 @@ void MPEVRCustomPresenter::ResetTraceStats()
   m_bResetStats     = false;
 }
 
+void MPEVRCustomPresenter::LogRenderStats()
+{
+  Log("Render stats : Display-to-video ratio = %.4f(FRR %d)| Frames dropped %d, drawn %d, repeated %d | MPAR D/V %.4f, clk adj %d",
+       ((GetDisplayCycle() > 0.0) ? (((double) m_rtTimePerFrame)/10000.0)/GetDisplayCycle() : 0),
+       m_frameRateRatio,
+       m_iFramesDropped,
+       m_iFramesDrawn,
+       m_iEarlyFrCnt,
+       m_dDispToVidRatio,
+       m_iClockAdjustmentsDone
+       );
+}
+
 void MPEVRCustomPresenter::ResetFrameStats()
 {
+  LogRenderStats();
+  
+  CAutoLock sLock(&m_lockRenderStats);
+
   m_iFramesDrawn    = 0;
   m_iFramesDropped  = 0;
-  m_iFramesHeld     = 0;
-  m_iLateFrames     = 0;
   m_iFramesProcessed = 0;
+  m_iDisplayFrameCount = 0;
+  m_iEarlyFrCnt     = 0;
+  m_bOddFrame = false;
   
   m_nNextCFP = 0;
   m_fCFPMean = 0;
   m_llCFPSumAvg = 0;
+  m_fCFPLast = 0;
   ZeroMemory((void*)&m_pllCFP, sizeof(LONGLONG) * NB_CFPSIZE);
   
   m_nNextPCD = 0;
@@ -3213,24 +3842,43 @@ void MPEVRCustomPresenter::ResetFrameStats()
   
   m_LastScheduledUncorrectedSampleTime = -1;
   m_frameRateRatio = 0;
+  //  m_frameRateRatX2 = 0;
   m_rawFRRatio = 0;
+  m_dRawFRmult = 0.0;
 
   m_stallTime = 0;
   m_earliestPresentTime = 0;
   m_lastPresentTime = 0;
+  m_hnsAvgNSToffset = 0;
   
   m_nNextRFP = 0;
     
   m_PaintTime = 0;
 
-  m_qGoodPopCnt     = 0;
-  m_qBadPopCnt      = 0; 
-  m_qGoodPutCnt     = 0;
-  m_qBadPutCnt      = 0; 
-  m_qBadSampTimCnt  = 0; 
-  m_qCorrSampTimCnt = 0; 
+  m_qGoodPutCnt = 0;
+
+  //  m_qBadSampTimCnt  = 0; 
+
+  m_nNextPhDev   = 0;
+  m_avPhaseDiff  = 0.0;
+  m_sumPhaseDiff = 0.0;
+  ZeroMemory((void*)&m_dPhaseDeviations, sizeof(double) * NUM_PHASE_DEVIATIONS);
+
+  m_nNextPhDev2   = 0;
+  m_avPhaseDiff2  = 0.0;
+  m_sumPhaseDiff2 = 0.0;
+  ZeroMemory((void*)&m_dPhaseDeviations2, sizeof(double) * NUM_PHASE_DEV_2);
 
   m_iClockAdjustmentsDone = 0;
+  m_dVariableFreq = 1.0;
+  m_dPreviousVariableFreq = 1.0;
+  m_dLastMPARbias = 1.0;
+  m_dMPARbiasDelta = 0.0;
+  m_iDriftAdjust = 0;
+  
+  m_llLastRST = 0;
+  m_llLastNST = 0;
+  m_llLastFrameTime = m_rtTimePerFrame;
 }
 
 REFERENCE_TIME MPEVRCustomPresenter::GetFrameDuration()
@@ -3252,6 +3900,18 @@ REFERENCE_TIME MPEVRCustomPresenter::GetFrameDuration()
 
 }
 
+double MPEVRCustomPresenter::CompareFrameTimes()
+{
+  if ((m_DetectedFrameTime > DFT_THRESH) && m_rtTimePerFrame) 
+  {
+    return (((double)m_rtTimePerFrame) / (m_DetectedFrameTime * 10000000.0));    
+  }
+  else
+  {
+    return 1.0;
+  }
+}
+
 
 // Get the best estimate of the display refresh rate in Hz
 double MPEVRCustomPresenter::GetRefreshRate()
@@ -3270,6 +3930,29 @@ double MPEVRCustomPresenter::GetDisplayCycle()
 double MPEVRCustomPresenter::GetDetectedFrameTime()
 {
   return m_DetectedFrameTime;
+}
+
+int MPEVRCustomPresenter::GetScanLine()
+{    
+  if (!m_pD3DDev) return -1;   
+  D3DRASTER_STATUS rasterStatus;    
+  if (SUCCEEDED(m_pD3DDev->GetRasterStatus(0, &rasterStatus)))
+  {
+    return rasterStatus.ScanLine;
+  }
+  return -1;
+}
+
+void MPEVRCustomPresenter::DriftAdjust(int adjust)
+{
+  if (m_frameRateRatio <= 0)
+  {
+    m_iDriftAdjust = adjust;    
+  }
+  else
+  {
+    m_iDriftAdjust = 0;    
+  }
 }
 
 // Get best estimate of actual video frame duration in seconds
@@ -3318,7 +4001,7 @@ double MPEVRCustomPresenter::GetVideoFramePeriod(FPS_SOURCE_METHOD fpsSource)
       }
     break;
     
-    case 2:
+    case FPS_SOURCE_SAMPLE_DURATION:
       // Returns 0.0 for the first 4 frames, then from sample duration
       if ((m_DetectedFrameTimePos >= 4) && (m_DetSampleAve > DFT_THRESH))
       {
@@ -3355,7 +4038,6 @@ double MPEVRCustomPresenter::GetVideoFramePeriod(FPS_SOURCE_METHOD fpsSource)
 double MPEVRCustomPresenter::GetRealFramePeriod()
 {
   double rtimePerFrame ;
-  double currentDispCycle = GetDisplayCycle(); // in ms
   
   if (m_DetectedFrameTime > DFT_THRESH) 
   {
@@ -3383,31 +4065,43 @@ void MPEVRCustomPresenter::GetFrameRateRatio()
     rtimePerFrameMs = ((double) m_rtTimePerFrame)/10000.0; // in ms
   }
   
-  // Compensate to get actual time per frame after ReClock speed up/down
+  // Compensate to get actual time per frame after MPAR/ReClock speed up/down
   rtimePerFrameMs = rtimePerFrameMs/m_fPCDMean;
   
   int F2DRatioP6 = (int)((rtimePerFrameMs * 1.015)/currentDispCycle); // Allow +1.5% tolerance
   int F2DRatioN6 = (int)((rtimePerFrameMs * 0.985)/currentDispCycle); // Allow -1.5% tolerance
 
   m_rawFRRatio = F2DRatioP6;
- 
-  if (!(m_DetectedFrameTime > DFT_THRESH) || (m_iFramesProcessed < FRAME_PROC_THRESH))
+  
+  if (F2DRatioP6 == 0 || (F2DRatioP6 == F2DRatioN6)) 
   {
-    m_frameRateRatio = 0;
-  }
-  else if (m_iFramesDrawn < FRAME_PROC_THRSH2)
-  {
-    m_frameRateRatio = F2DRatioP6;
-  }
-  else if (F2DRatioP6 == 0 || (F2DRatioP6 == F2DRatioN6)) 
-  {
+    m_dRawFRmult = 0.0;
     m_frameRateRatio = 0;
   }
   else
   {
+    m_dRawFRmult = (rtimePerFrameMs/(currentDispCycle * (double)F2DRatioP6)) - 1.0;
     m_frameRateRatio = F2DRatioP6;
   }
+
+  //  int F4DRatX2P6 = (int)((rtimePerFrameMs * 2.03)/currentDispCycle); // Allow +1.5% tolerance
+  //  int F4DRatX2N6 = (int)((rtimePerFrameMs * 1.97)/currentDispCycle); // Allow -1.5% tolerance
+  //
+  //  if (F4DRatX2P6 == 0 || (F4DRatX2P6 == F4DRatX2N6)) 
+  //  {
+  //    m_frameRateRatX2 = 0;
+  //  }
+  //  else
+  //  {
+  //    m_frameRateRatX2 = F4DRatX2P6;
+  //  }
  
+  if ((m_DetectedFrameTime <= DFT_THRESH) || (m_iFramesDrawn < FRAME_PROC_THRESH) )
+  {
+    //Force to zero until playback has settled down and we know the real video frame rate
+    m_frameRateRatio = 0;
+    // m_frameRateRatX2 = 0;
+  }
 }
 
 // Get the difference in video and display cycle times.
@@ -3420,10 +4114,11 @@ double MPEVRCustomPresenter::GetCycleDifference()
 	if (dBaseDisplayCycle == 0.0 || m_dFrameCycle == 0.0)
   {
     return 1.0;
+    m_dDispToVidRatio = -1.0;
   }
   else
 	{
-    for (j = 1; j <= 2; j++) 
+    for (j = 1; j <= 4; j++) 
 		{
   	  double dFrameCycle = j * m_dFrameCycle;
       for (i = 1; i <= 8; i++) 
@@ -3434,6 +4129,7 @@ double MPEVRCustomPresenter::GetCycleDifference()
   			{
   				minDiff = diff;
   				m_dOptimumDisplayCycle = dDisplayCycle;
+  				m_dDispToVidRatio = (double)i/(double)j;
   			}
   		}
   	}
@@ -3489,12 +4185,36 @@ void MPEVRCustomPresenter::UpdateDisplayFPS()
       break; // only go round the loop again if we don't get a good result
     }
   }
+       
+  //Re-init DWM queued mode if display FPS has changed (and it's a good result)
+  if (m_displayParams.estRefreshLock)
+  {   
+    if ((m_dLastEstRefreshCycle > 0.0) && (m_displayParams.dEstRefreshCycle > 0.0))
+    {   
+      // Check if display refresh rate has changed since last time
+      double currDiff = fabs(1.0 - (m_dLastEstRefreshCycle/m_displayParams.dEstRefreshCycle));
+      if (currDiff > 0.02) //Allow 2.0% difference
+      {
+        //Setup the Desktop Window Manager (DWM)
+        DwmReset(false);
+        { //Context for CAutoLock
+          CAutoLock sLock(&m_lockDWM);  
+          DwmEnableMMCSSOnOff(m_bDWMEnableMMCSS && (GetDisplayCycle() <= m_dDWMRefreshThresh));
+        }
+        DwmInitDelegated();
+      }
+    }
+  }
+ 
+  m_dLastEstRefreshCycle = m_displayParams.dEstRefreshCycle;
   
-  SetupAudioRenderer(); // Bias value needs to be updated
+  SetupAudioRenderer(); // Bias value and delay need to be updated
 }
 
 void MPEVRCustomPresenter::VideoFpsFromSample(IMFSample* pSample)
 {
+  CAutoLock sLock(&m_lockRenderStats);
+
   LONGLONG PrevTime = m_LastScheduledUncorrectedSampleTime;
   LONGLONG Time;
   LONGLONG SetDuration;
@@ -3511,10 +4231,10 @@ void MPEVRCustomPresenter::VideoFpsFromSample(IMFSample* pSample)
     
   m_SampDuration = SetDuration;
   
-  if ( ((SetDuration - Diff) > 50000)  || (-(SetDuration - Diff) > 50000) ) //more than 5ms difference
-  {
-    m_qBadSampTimCnt++;
-  }
+  //  if ( ((SetDuration - Diff) > 50000)  || (-(SetDuration - Diff) > 50000) ) //more than 5ms difference
+  //  {
+  //    m_qBadSampTimCnt++;
+  //  }
 
   if ((Diff < m_rtTimePerFrame*8 && m_rtTimePerFrame && 
       m_fRate == 1.0f && !m_bDVDMenu) || m_bScrubbing)
@@ -3648,7 +4368,8 @@ void MPEVRCustomPresenter::GetRealRefreshRate()
 }
 
 // get time delay (in hns) to target raster paint position
-// returns zero delay if 'now' is inside the limitLow/limitHigh window
+// returns zero or negative delay if 'now' is inside the limitLow/limitHigh window,
+// positive if outside the window
 LONGLONG MPEVRCustomPresenter::GetDelayToRasterTarget(LONGLONG *targetTime, LONGLONG *offsetTime)
 {
   CAutoLock rLock(&m_lockRasterData); // lock to stop raster parameters being updated
@@ -3715,41 +4436,64 @@ LONGLONG MPEVRCustomPresenter::GetDelayToRasterTarget(LONGLONG *targetTime, LONG
     else
     {
       targetDelay = targetDelay / 2; //delay in chunks
-    }
-      
+    }   
+    
     *targetTime = now + targetDelay;
+    
+    if ((targetDelay == 0) && (currScanline > m_rasterTargetPosn)) //we're inside the presentation window
+    {
+      //return a negative value which indicates the offset from m_rasterTargetPosn i.e. the lateness
+      targetDelay = -((LONGLONG)(currScanline - m_rasterTargetPosn) * scanlineTime);
+    }
   }
     
   return targetDelay;
 }
 
 // Update the array m_pllCFP with a new time stamp. Calculate mean.
-void MPEVRCustomPresenter::CalculateNSTStats(LONGLONG timeStamp)
-{
-  LONGLONG cfpDiff = timeStamp;
-  
-  m_llLastCFPts = timeStamp;
-      
+void MPEVRCustomPresenter::CalculateAvgNstOffset(LONGLONG timeStamp, LONGLONG frameTime)
+{  
+  if (m_bDVDMenu || m_bScrubbing || (m_frameRateRatio <= 0))
+  {
+    //Fixed NST offset
+    timeStamp = frameTime/2;
+  }  
+        
   int tempNextCFP = (m_nNextCFP % NB_CFPSIZE);
   m_llCFPSumAvg -= m_pllCFP[tempNextCFP];
-  m_pllCFP[tempNextCFP] = cfpDiff;
-  m_llCFPSumAvg += cfpDiff;
+  m_pllCFP[tempNextCFP] = timeStamp;
+  m_llCFPSumAvg += timeStamp;
   m_nNextCFP++;
   
   if (m_nNextCFP >= NB_CFPSIZE)
   {
     m_fCFPMean = m_llCFPSumAvg / (LONGLONG)NB_CFPSIZE;
   }
-  else if (m_nNextCFP >= 10)
+  else if (m_nNextCFP > 0)
   {
     m_fCFPMean = m_llCFPSumAvg / (LONGLONG)m_nNextCFP;
   }
   else
   {
-    m_fCFPMean = cfpDiff;
+    m_fCFPMean = timeStamp;
   }
+    
+  //Calculate 'next sample time' correction offset
+  //This is used to centre the timing window for the frame drop/stall logic
+  //It is updated every NB_CFPSIZE frames
+  if (tempNextCFP == (NB_CFPSIZE-1))
+  {
+    m_fCFPMean += (LONGLONG)((double)frameTime * m_dRawFRmult * (NB_CFPSIZE*2/3));
+    if (m_fCFPMean < 0)
+    {
+      m_hnsAvgNSToffset = -(-m_fCFPMean % frameTime);
+    }
+    else
+    {
+      m_hnsAvgNSToffset = m_fCFPMean % frameTime;
+    }
+  }    
 }
-
 
   // This function calculates the (average) ratio between the presentation clock and
   // system clock - Audio renderer can modify the presentation clock when performing speed up/down.
@@ -3865,9 +4609,6 @@ void MPEVRCustomPresenter::GetAVSyncClockInterface()
     return;
   }
 
-  m_bMsVideoCodec = QueryFpsFromVideoMSDecoder();
-  SetupAudioRenderer();
-
   FILTER_INFO filterInfo;
   ZeroMemory(&filterInfo, sizeof(filterInfo));
   m_EVRFilter->QueryFilterInfo(&filterInfo); // This addref's the pGraph member
@@ -3878,7 +4619,7 @@ void MPEVRCustomPresenter::GetAVSyncClockInterface()
   filterInfo.pGraph->Release();
   if (hr != S_OK)
   {
-    Log("failed to find MediaPortal - Audio Renderer filter!");
+    // LOG_NOSCRUB("failed to find MediaPortal - Audio Renderer filter!");
     return;
   }
 
@@ -3886,35 +4627,26 @@ void MPEVRCustomPresenter::GetAVSyncClockInterface()
   
   if (hr != S_OK)
   {
-    Log("Could not get IAVSyncClock interface");
+    LOG_NOSCRUB("Could not get IAVSyncClock interface");
     return;
   }
 
-  Log("Found MediaPortal - Audio Renderer filter");
+  LOG_NOSCRUB("Found MediaPortal - Audio Renderer filter");
+
+  m_bMsVideoCodec = QueryFpsFromVideoMSDecoder();
 
   if (m_pAVSyncClock)
   {
     m_pAVSyncClock->GetMaxBias(&m_dMaxBias);
     m_pAVSyncClock->GetMinBias(&m_dMinBias);
     
-    Log("   Allowed bias values between %1.10f and %1.10f", m_dMinBias, m_dMaxBias);
-
-    if (S_OK == m_pAVSyncClock->SetBias(m_dBias))
-    {
-      m_bBiasAdjustmentDone = true;
-      Log("  Adjusting bias to: %1.10f", m_dBias);
-    }
-    else
-    {
-      m_bBiasAdjustmentDone = false;
-      Log("  Failed to adjust bias to : %1.10f", m_dBias);
-    }
+    LOG_NOSCRUB("   Allowed bias values between %1.10f and %1.10f", m_dMinBias, m_dMaxBias);
   }
 }
 
 void MPEVRCustomPresenter::SetupAudioRenderer()
 {
-  if (NO_MP_AUD_REND)
+  if (!m_pAVSyncClock || NO_MP_AUD_REND)
   {
     return;
   }
@@ -3926,7 +4658,10 @@ void MPEVRCustomPresenter::SetupAudioRenderer()
   double calculatedBias = 1.0 / (1 + cycleDiff);
 
   if (m_dMaxBias < calculatedBias || m_dMinBias > calculatedBias)
+  {
+    m_dDispToVidRatio = -1.0; //disable correction
     return;
+  }
 
   // try to filter out the incorrect frame rates that MS Video decoder can produce 
   // on big CPU / GPU load
@@ -3936,30 +4671,58 @@ void MPEVRCustomPresenter::SetupAudioRenderer()
 
   m_dBias = calculatedBias;
 
-  Log("SetupAudioRenderer: cycleDiff: %1.10f", cycleDiff);
+  LOG_NOSCRUB("SetupAudioRenderer: cycleDiff: %1.10f, display to video ratio: %.3f", cycleDiff, m_dDispToVidRatio);
 
   if (m_pAVSyncClock)
   {
-    if (S_OK == m_pAVSyncClock->SetBias(m_dBias))
+    if (m_pTSRStatus)
+    {
+      if (S_OK == m_pTSRStatus->SetBias(m_dBias))
+      {
+        m_bBiasAdjustmentDone = true;
+        LOG_NOSCRUB("SetupAudioRenderer: adjust TsR bias to : %1.10f", m_dBias);
+      }
+      else
+      {
+        m_bBiasAdjustmentDone = false;
+        LOG_NOSCRUB("SetupAudioRenderer: failed to adjust TsR bias to : %1.10f", m_dBias);
+      }
+    }
+    else if (S_OK == m_pAVSyncClock->SetBias(m_dBias))
     {
       m_bBiasAdjustmentDone = true;
-      Log("SetupAudioRenderer: adjust bias to : %1.10f", m_dBias);
+      LOG_NOSCRUB("SetupAudioRenderer: adjust bias to : %1.10f", m_dBias);
     }
     else
     {
       m_bBiasAdjustmentDone = false;
-      Log("SetupAudioRenderer: failed to adjust bias to : %1.10f", m_dBias);
+      LOG_NOSCRUB("SetupAudioRenderer: failed to adjust bias to : %1.10f", m_dBias);
+    }
+
+    m_pAVSyncClock->GetBias(&m_dLastMPARbias);            
+    
+    if (m_bEnableAudioDelayComp)
+    {
+      double audioDelayRequired = (double) m_dwmBuffers * GetDisplayCycle();
+      if (S_OK == m_pAVSyncClock->SetEVRPresentationDelay(audioDelayRequired))
+      {
+        LOG_NOSCRUB("SetupAudioRenderer: Delayed Audio by : %1.10f", audioDelayRequired);
+      }
+      else
+      {
+        LOG_NOSCRUB("SetupAudioRenderer: failed to set audio delay of: %1.10f", audioDelayRequired);
+      }
     }
   }
   else
   {
-    Log("SetupAudioRenderer: adjust bias to : %1.10f - wait audio renderer to be available", m_dBias);
+    LOG_NOSCRUB("SetupAudioRenderer: adjust bias to : %1.10f - wait audio renderer to be available", m_dBias);
   }
 }
 
 void MPEVRCustomPresenter::AdjustAVSync(double currentPhaseDiff)
 {
-  // Keep a rolling average of last X deviations from target phase. 
+  // Keep a rolling (fast) average of last NUM_PHASE_DEVIATIONS deviations from target phase. 
   // These numbers have values between -0.5 and 0.5
   int tempNextPhDev = (m_nNextPhDev % NUM_PHASE_DEVIATIONS);
   m_sumPhaseDiff -= m_dPhaseDeviations[tempNextPhDev];
@@ -3967,51 +4730,178 @@ void MPEVRCustomPresenter::AdjustAVSync(double currentPhaseDiff)
   m_sumPhaseDiff += currentPhaseDiff;
   m_nNextPhDev++;
 
-  double averagePhaseDifference = m_sumPhaseDiff / NUM_PHASE_DEVIATIONS;
+  m_avPhaseDiff = m_sumPhaseDiff / NUM_PHASE_DEVIATIONS;
   
-  m_avPhaseDiff = averagePhaseDifference;
 
-  // If we are getting close to target then stop correcting.
-  // Since it is a rolling average we will overshoot the target, so we plan to stop early.
-  // If we are speeding up, we should stop when above the "green" limit
-  if (m_dVariableFreq > 1.0)
+  //double averagePhaseDifference = (m_sumPhaseDiff + (8 * currentPhaseDiff)) / (NUM_PHASE_DEVIATIONS + 8);
+  //double averagePhaseDifference = m_sumPhaseDiff / NUM_PHASE_DEVIATIONS;
+  
+  //m_avPhaseDiff = averagePhaseDifference;
+
+  bool allowSlowAdj = false;
+
+  if (tempNextPhDev == (NUM_PHASE_DEVIATIONS-1))
   {
-    if (averagePhaseDifference > -0.05 )
+    // Keep a rolling (slow) average of last NUM_PHASE_DEV_2 fast average deviations from target phase. 
+    // These numbers have values between -0.5 and 0.5
+    int tempNextPhDev2 = (m_nNextPhDev2 % NUM_PHASE_DEV_2);
+    m_sumPhaseDiff2 -= m_dPhaseDeviations2[tempNextPhDev2];
+    m_dPhaseDeviations2[tempNextPhDev2] = m_avPhaseDiff;
+    m_sumPhaseDiff2 += m_avPhaseDiff;
+    m_nNextPhDev2++;
+
+    if (tempNextPhDev2 == (NUM_PHASE_DEV_2-1))
     {
-      m_dVariableFreq = 1.0;
+      m_avPhaseDiff2 = m_sumPhaseDiff2 / NUM_PHASE_DEV_2;
+      allowSlowAdj = true;
     }
   }
-  // If we are slowing down, we should stop when below the "green" limit
-  if (m_dVariableFreq < 1.0)
-  {
-    if (averagePhaseDifference < 0.05 )
-    {
-      m_dVariableFreq = 1.0;
-    }
-  }
-
+      
   // If we have drifted significantly away from target, let us speed up or slow down until we are within above limits again
-  if (averagePhaseDifference > 0.1)
+  if (m_iDriftAdjust != 0) //display-video frequency drift adjustment only
   {
-    m_dVariableFreq = 1.003;
-  }
-  if (averagePhaseDifference < -0.1)
-  {
-    m_dVariableFreq = 0.997;
-  }
-
-  //Log("VF: %f averagePhaseDif: %f CP: %f ", m_dVariableFreq, averagePhaseDifference, currentPhase);
-
-  if (m_pAVSyncClock && m_dVariableFreq != m_dPreviousVariableFreq)
-  {
-    HRESULT hr = m_pAVSyncClock->AdjustClock(1.0/m_dVariableFreq);
-    if (hr == S_OK && m_dPreviousVariableFreq == 1.0)
+    if (m_pTSRStatus)
     {
-      m_iClockAdjustmentsDone++;
+      m_pTSRStatus->AdjustClock(1.0);
+      
+      if (m_iDriftAdjust > 0)
+        m_pTSRStatus->AdjustClock(1.003); //speed up
+      else
+        m_pTSRStatus->AdjustClock(0.997); //slow down
+        
+      m_pTSRStatus->AdjustClock(1.0); 
+    }
+    else
+    {
+      m_pAVSyncClock->AdjustClock(1.0);
+      
+      if (m_iDriftAdjust > 0)
+        m_pAVSyncClock->AdjustClock(1.003);
+      else
+        m_pAVSyncClock->AdjustClock(0.997);
+        
+      m_pAVSyncClock->AdjustClock(1.0);
+    }
+    m_iClockAdjustmentsDone++;
+    m_dVariableFreq = 1.0;
+    m_dPreviousVariableFreq = 1.0;
+    m_iDriftAdjust = 0;
+    //Update current actual bias and delta change values from previous setting (for stats renderer)
+    double mparbias;
+    m_pAVSyncClock->GetBias(&mparbias);            
+    double mparbiasDiff = mparbias - m_dLastMPARbias;
+    m_dLastMPARbias = mparbias;
+    m_dMPARbiasDelta = mparbiasDiff * 1000000.0;
+    return;
+  }
+  else if (m_dVariableFreq == 1.0)
+  {
+    if (allowSlowAdj)
+    {
+      if (m_avPhaseDiff2 > 0.08)
+      {
+        m_dVariableFreq = 1.003; // +100 ppm
+      }
+      else if (m_avPhaseDiff2 < -0.08)
+      {
+        m_dVariableFreq = 0.997; // -100 ppm
+      }
+    }
+    else
+    {
+      if (m_avPhaseDiff > 0.25)
+      {
+        m_dVariableFreq = 1.003; // +3000 ppm
+      }
+      else if (m_avPhaseDiff < -0.25)
+      {
+        m_dVariableFreq = 0.997; // -3000 ppm
+      }
     }
   }
+  else
+  {
+    // If we are getting close to target then stop correcting.
+    // Since it is a rolling average we will overshoot the target, so we plan to stop early.
+    // If we are speeding up, we should stop when below the "green" limit
+    if ((m_dVariableFreq > 1.0) && (m_avPhaseDiff < 0.04))
+    {
+      m_dVariableFreq = 1.0;
+    }
+    // If we are slowing down, we should stop when above the "green" limit
+    if ((m_dVariableFreq < 1.0) && (m_avPhaseDiff > -0.04))
+    {
+      m_dVariableFreq = 1.0;
+    }
+  }
+  
+  //Log("VF: %f averagePhaseDif: %f CP: %f ", m_dVariableFreq, m_avPhaseDiff, currentPhase);
 
-  m_dPreviousVariableFreq = m_dVariableFreq;
+  if (m_pAVSyncClock && (m_dVariableFreq != m_dPreviousVariableFreq))
+  {
+    HRESULT hr = E_FAIL;
+    if (m_pTSRStatus)
+    {
+      hr = m_pTSRStatus->AdjustClock(m_dVariableFreq);
+    }
+    else
+    {
+      hr = m_pAVSyncClock->AdjustClock(m_dVariableFreq);
+    }
+    if (hr == S_OK)
+    {
+      m_dPreviousVariableFreq = m_dVariableFreq;
+      if (m_dVariableFreq != 1.0)
+      {
+        m_iClockAdjustmentsDone++;
+        //Update current actual bias and delta change values from previous setting (for stats renderer)
+        double mparbias;
+        m_pAVSyncClock->GetBias(&mparbias);            
+        double mparbiasDiff = mparbias - m_dLastMPARbias;
+        m_dLastMPARbias = mparbias;
+        m_dMPARbiasDelta = mparbiasDiff * 1000000.0;
+      }
+    }
+  }
+}
+
+
+void MPEVRCustomPresenter::UpdatePhaseDiff()
+{
+  LONGLONG realSampleTime, frameTime;
+  
+  { //Context for CAutoLock
+    CAutoLock sLock(&m_lockNST);
+    realSampleTime = m_llLastRST;
+    frameTime = m_llLastFrameTime;
+  }
+  
+  CalculateAvgNstOffset(realSampleTime, frameTime);
+  
+  if (m_pAVSyncClock) //Update phase deviation data for MP Audio Renderer
+  {                   
+    //Target (0.5 * frameTime) for realSampleTime
+    double nstPhaseDiff = 0.0;
+    if (!m_bDVDMenu && !m_bScrubbing && (m_frameRateRatio > 0) && 
+                (m_dDispToVidRatio > 0) && (frameTime > 0))
+    {
+      nstPhaseDiff = (((double)realSampleTime / (double)frameTime) - 0.5);
+    }      
+  
+    //Clamp within limits - because of hystersis, the range of realSampleTime
+    //is greater than frameTime, so it's possible for nstPhaseDiff to exceed
+    //the -0.5 to +0.5 allowable range 
+    if (nstPhaseDiff < -0.499)
+    {
+      nstPhaseDiff = -0.499;
+    }
+    else if (nstPhaseDiff > 0.499)
+    {
+      nstPhaseDiff = 0.499;
+    }
+               
+    AdjustAVSync(nstPhaseDiff);
+  }
 }
 
 
@@ -4021,7 +4911,7 @@ bool MPEVRCustomPresenter::GetState(DWORD dwMilliSecsTimeout, FILTER_STATE* Stat
   bool moreSamplesNeeded = BufferMoreSamples();
   bool stopWaiting = false;
 
-  if (!moreSamplesNeeded || !m_bDoPreBuffering) // all samples have arrieved 
+  if (!moreSamplesNeeded || !m_bDoPreBuffering) // all samples have arrived 
   {
     return false;
   }
@@ -4060,7 +4950,7 @@ bool MPEVRCustomPresenter::GetState(DWORD dwMilliSecsTimeout, FILTER_STATE* Stat
   }
   else
   {
-    LOG_TRACE("pre buffering off 3");
+    Log("pre buffering off 3");
     m_bDoPreBuffering = false;
     return false;
   }
@@ -4069,10 +4959,8 @@ bool MPEVRCustomPresenter::GetState(DWORD dwMilliSecsTimeout, FILTER_STATE* Stat
 bool MPEVRCustomPresenter::BufferMoreSamples()
 {
   CAutoLock sLock(&m_lockSamples);
-  CAutoLock ssLock(&m_lockScheduledSamples);
-  return m_qScheduledSamples.Count() < NUM_SURFACES && !m_bEndBuffering && m_state != MP_RENDER_STATE_STOPPED;
+  return ((m_qScheduledSamples.Count() < MIN_SURFACES) && !m_bEndBuffering && m_state != MP_RENDER_STATE_STOPPED);
 }
-
 
 //=============== Filter Graph interface functions =================
 
@@ -4138,4 +5026,84 @@ HRESULT MPEVRCustomPresenter::EnumFilters(IFilterGraph *pGraph)
   return S_OK;
 }
 
+//=============== Registry interface functions =================
 
+void MPEVRCustomPresenter::ReadRegistryKeyDword(HKEY hKey, LPCTSTR& lpSubKey, DWORD& data)
+{
+  DWORD dwSize = sizeof(DWORD);
+  DWORD dwType = REG_DWORD;
+  LONG error = RegQueryValueEx(hKey, lpSubKey, NULL, &dwType, (PBYTE)&data, &dwSize);
+  if (error != ERROR_SUCCESS)
+  {
+    LPSTR astr;
+    UnicodeToAnsi(lpSubKey, &astr);
+    if (error == ERROR_FILE_NOT_FOUND)
+    {
+      Log("Create default value for %s", astr);
+      WriteRegistryKeyDword(hKey, lpSubKey, data);
+    }
+    else
+    {
+      Log("Faíled to create default value for %s", astr);
+    }
+  }
+}
+
+void MPEVRCustomPresenter::WriteRegistryKeyDword(HKEY hKey, LPCTSTR& lpSubKey, DWORD& data)
+{  
+  DWORD dwSize = sizeof(DWORD);
+  LONG result = RegSetValueEx(hKey, lpSubKey, 0, REG_DWORD, (LPBYTE)&data, dwSize);
+  LPSTR astr;
+  UnicodeToAnsi(lpSubKey, &astr);
+  if (result == ERROR_SUCCESS) 
+  {
+    Log("Success writing to Registry: %s", astr);
+  } 
+  else 
+  {
+    Log("Error writing to Registry - subkey: %s error: %d", astr, result);
+  }
+}
+
+//=============== TS Reader interface functions =================
+
+void MPEVRCustomPresenter::GetTSRStatusInterface()
+{
+  if (m_pTSRStatus)
+  {
+    return;
+  }
+
+  FILTER_INFO filterInfo;
+  ZeroMemory(&filterInfo, sizeof(filterInfo));
+  m_EVRFilter->QueryFilterInfo(&filterInfo); // This addref's the pGraph member
+
+  CComPtr<IBaseFilter> pBaseFilter;
+
+  HRESULT hr = filterInfo.pGraph->FindFilterByName(L"TsReader", &pBaseFilter);
+  filterInfo.pGraph->Release();
+  if (hr != S_OK)
+  {
+    // LOG_NOSCRUB("failed to find TsReader!");
+    return;
+  }
+
+  hr = pBaseFilter->QueryInterface(IID_ITSRStatus, (void**)&m_pTSRStatus);
+  
+  if (hr != S_OK)
+  {
+    LOG_NOSCRUB("Could not get TSRStatus interface");
+    return;
+  }
+
+  if (m_pTSRStatus)
+  {
+    //Tell TsReader.ax we are around...
+    STATUSDATA StatusData;
+    HRESULT hr = m_pTSRStatus->GetStatusData(&StatusData);
+    if (hr != S_OK)
+    {
+      LOG_NOSCRUB("Get TSRStatus failed");
+    }
+  }
+}

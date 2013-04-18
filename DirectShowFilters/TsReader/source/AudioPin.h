@@ -23,7 +23,7 @@
 #include "tsreader.h"
 #include "mediaseeking.h"
 
-#define NB_ASDSIZE 8
+#define NB_AFTSIZE 8
 
 class CAudioPin : public CSourceStream, public CSourceSeeking
 {
@@ -52,7 +52,7 @@ public:
   STDMETHODIMP GetDuration(LONGLONG *pDuration);
   STDMETHODIMP GetCurrentPosition(LONGLONG *pCurrent);
   STDMETHODIMP Notify(IBaseFilter * pSender, Quality q);
-
+  
   HRESULT OnThreadStartPlay();
   HRESULT DeliverNewSegment(REFERENCE_TIME tStart, REFERENCE_TIME tStop, double dRate);
   void SetStart(CRefTime rtStartTime);
@@ -61,6 +61,7 @@ public:
   bool HasDeliveredSample();
   void SetDiscontinuity(bool onOff);
   void SetAddPMT();
+  double GetAudToPresMeanDelta();
   LONGLONG m_sampleDuration;
   //DWORD    m_sampleSleepTime;
   DWORD    m_FillBuffSleepTime;
@@ -77,15 +78,13 @@ protected:
   bool      m_bInFillBuffer;
   bool      m_bDownstreamFlush;
   
-  void     ClearAverageSampleDur();
-  LONGLONG GetAverageSampleDur (LONGLONG timeStamp);
+  void     ClearAverageFtime();
+  void     CalcAverageFtime(double ftime);
     
-  LONGLONG  m_pllASD [NB_ASDSIZE];   // timestamp buffer for average Audio sample duration calculation
-  LONGLONG  m_llLastASDts;
-  int       m_nNextASD;
-	LONGLONG  m_fASDMean;
-	LONGLONG  m_llASDSumAvg;	
-  LONGLONG  m_llLastComp;
+  double  m_pllAFT [NB_AFTSIZE];   // buffer for average Audio ftime calculation
+  int     m_nNextAFT;
+	double  m_fAFTMean;
+	double  m_llAFTSumAvg;	
   
   DWORD m_LastFillBuffTime;
   int   m_sampleCount;

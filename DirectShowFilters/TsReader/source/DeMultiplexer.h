@@ -40,6 +40,8 @@
 #include <dvdmedia.h>
 #include "MpegPesParser.h"
 
+#define NB_AADSIZE 16
+
 using namespace std;
 class CTsReaderFilter;
 
@@ -159,7 +161,12 @@ public:
   long m_AVDataLowCount;
   DWORD m_targetAVready;
   bool  m_bSubtitleCompensationSet;
-
+  
+  int  m_initialAudioSamples;
+  int  m_initialVideoSamples;
+  
+  double GetAverageAudDelta();
+  
 private:
   struct stAudioStream
   {
@@ -215,8 +222,14 @@ private:
   CBuffer* m_pCurrentAudioBuffer;
   CPcr     m_streamPcr;
   CPcr     m_lastVideoPTS;
+  CPcr     m_lastVideoDTS;
   CPcr     m_lastAudioPTS;
   double   m_minVideoPTSdiff;
+  double   m_minVideoDTSdiff;
+  int      m_vidPTScount;
+  int      m_vidDTScount;
+  bool     m_bLogFPSfromDTSPTS;
+  bool     m_bUsingGOPtimestamp;
   CTsDuration& m_duration;
   CTsReaderFilter& m_filter;
   unsigned int m_iAudioStream;
@@ -238,7 +251,6 @@ private:
   DWORD m_WaitNewPatTmo;
   DWORD m_WaitGoodPatTmo;
   bool m_bWaitGoodPat;
-  int m_receivedPackets;
 
   bool m_bFirstGopFound;
   bool m_bSecondGopFound;
@@ -271,14 +283,14 @@ private:
   CPcr m_VideoPts;
   CPcr m_CurrentVideoPts;
   bool m_bInBlock;
-  double m_curFrameRate;
+  double m_curFramePeriod;
   int m_LastValidFrameCount;
   CPcr m_LastValidFramePts;
 
   bool m_bAudioAtEof;
   bool m_bVideoAtEof;
 
-  float m_MinAudioDelta;
+  double m_MinAudioDelta;
   float m_MinVideoDelta;
 
   bool m_bShuttingDown;
@@ -292,4 +304,13 @@ private:
   
   bool m_isNewNALUTimestamp;
   bool m_bVideoPTSroff;
+
+  void     ClearAverageAudDelta();
+  void     CalcAverageAudioDelta(double delta);
+    
+  double  m_pllAFT [NB_AADSIZE];   // buffer for average Audio ftime calculation
+  int     m_nNextAFT;
+	double  m_dAudioMeanDelta;
+	double  m_llAFTSumAvg;	
+  
 };
