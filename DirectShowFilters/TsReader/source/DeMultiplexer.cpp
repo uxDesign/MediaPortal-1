@@ -34,7 +34,7 @@
 #include "audioPin.h"
 #include "videoPin.h"
 #include "subtitlePin.h"
-//#include "..\..\DVBSubtitle2\Source\IDVBSub.h"
+#include "..\..\DVBSubtitle3\Source\IDVBSub.h"
 #include "mediaFormats.h"
 #include "h264nalu.h"
 #include <cassert>
@@ -194,7 +194,7 @@ bool CDeMultiplexer::SetAudioStream(int stream)
   CAutoLock lock (&m_sectionSetAudioStream);
   LogDebug("SetAudioStream : %d",stream);
   //is stream index valid?
-  if (stream < 0 || stream >= m_audioStreams.size())
+  if (stream < 0 || stream >= (int)m_audioStreams.size())
     return S_FALSE;
 
   //set index
@@ -255,7 +255,7 @@ bool CDeMultiplexer::GetAudioStream(__int32 &audioIndex)
 
 void CDeMultiplexer::GetAudioStreamInfo(int stream,char* szName)
 {
-  if (stream < 0 || stream>=m_audioStreams.size())
+  if (stream < 0 || stream >= (int)m_audioStreams.size())
   {
     szName[0] = szName[1] = szName[2] = 0;
     return;
@@ -275,7 +275,7 @@ int CDeMultiplexer::GetAudioStreamCount()
 
 void CDeMultiplexer::GetAudioStreamType(int stream,CMediaType& pmt)
 {
-  if (m_iAudioStream< 0 || stream >= m_audioStreams.size())
+  if (m_iAudioStream< 0 || stream >= (int)m_audioStreams.size())
   {
     pmt.InitMediaType();
     pmt.SetType      (& MEDIATYPE_Audio);
@@ -358,7 +358,7 @@ void CDeMultiplexer::GetAudioStreamType(int stream,CMediaType& pmt)
 bool CDeMultiplexer::SetSubtitleStream(__int32 stream)
 {
   //is stream index valid?
-  if (stream < 0 || stream >= m_subtitleStreams.size())
+  if (stream < 0 || stream >= (int)m_subtitleStreams.size())
     return S_FALSE;
 
   //set index
@@ -375,7 +375,7 @@ bool CDeMultiplexer::GetCurrentSubtitleStream(__int32 &stream)
 
 bool CDeMultiplexer::GetSubtitleStreamLanguage(__int32 stream,char* szLanguage)
 {
-  if (stream <0 || stream >= m_subtitleStreams.size())
+  if (stream <0 || stream >= (int)m_subtitleStreams.size())
   {
     szLanguage[0] = szLanguage[1] = szLanguage[2] = 0;
     return S_FALSE;
@@ -1191,7 +1191,7 @@ void CDeMultiplexer::OnTsPacket(byte* tsPacket)
       {
         TeletextServiceInfo& info = *vit;
         LogDebug("Calling Teletext Service info callback");
-        (*pTeletextServiceInfoCallback)(info.page, info.type, (byte)info.lang[0],(byte)info.lang[1],(byte)info.lang[2]);
+        (*pTeletextServiceInfoCallback)(info.page, (byte)info.type, (byte)info.lang[0],(byte)info.lang[1],(byte)info.lang[2]);
         vit++;
       }
       m_currentTeletextPid = m_pids.TeletextPid;
@@ -2604,10 +2604,6 @@ void CDeMultiplexer::FillSubtitle(CTsHeader& header, byte* tsPacket)
         pDVBSubtitleFilter->SetHDMV(false);
         LogDebug(" done - DVBSub3 - SetHDMV");
       }
-      else if (m_filter.m_subtitleCLSID == CLSID_DVBSub2)
-      {
-        LogDebug(" done - DVBSub2");
-      }
     }
   }
 
@@ -2704,12 +2700,12 @@ bool CDeMultiplexer::CheckPrefetchState(bool isNormal, bool isForced)
   if (isNormal)
   {
     if (m_filter.GetAudioPin()->IsConnected() && 
-         ((m_vecAudioBuffers.size() < (4 + m_initialAudioSamples)) 
+         (((int)m_vecAudioBuffers.size() < (4 + m_initialAudioSamples)) 
        || (m_dAudioMeanDelta < (m_filter.m_dAudToPresDeltaRef + 0.1))))
     {
       return true;
     }
-    if (m_filter.GetVideoPin()->IsConnected() && (m_vecVideoBuffers.size() < (4 + m_initialVideoSamples)))
+    if (m_filter.GetVideoPin()->IsConnected() && ((int)m_vecVideoBuffers.size() < (4 + m_initialVideoSamples)))
     {
       return true;
     }
@@ -2850,7 +2846,7 @@ void CDeMultiplexer::OnNewChannel(CChannelInfo& info)
   }
   m_audioStreams.clear();
 
-  for(int i(0) ; i < m_pids.audioPids.size() ; i++)
+  for(int i(0) ; i < (int)m_pids.audioPids.size() ; i++)
   {
     struct stAudioStream audio;
     audio.pid=m_pids.audioPids[i].Pid;
@@ -2867,7 +2863,7 @@ void CDeMultiplexer::OnNewChannel(CChannelInfo& info)
 
   m_subtitleStreams.clear();
   
-  for(int i(0) ; i < m_pids.subtitlePids.size() ; i++)
+  for(int i(0) ; i < (int)m_pids.subtitlePids.size() ; i++)
   {
     struct stSubtitleStream subtitle;
     subtitle.pid=m_pids.subtitlePids[i].Pid;

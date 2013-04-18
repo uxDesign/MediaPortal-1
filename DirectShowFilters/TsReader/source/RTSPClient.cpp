@@ -132,7 +132,7 @@ Boolean CRTSPClient::clientStartPlayingSession(Medium* client,MediaSession* sess
     if (fStart<0) fStart=0 ;
   }
 
-  long diff=abs(dur-m_fStart);
+//  long diff=abs(dur-m_fStart);
 //  if (diff <20 && m_fStart>1 )
 //  {
 //    m_fStart=dur+5;
@@ -293,7 +293,7 @@ bool CRTSPClient::OpenStream(char* url)
       double End=atof(pEnd) ;
 
       LogDebug("rangestart:%f rangeend:%f", Start,End);
-      m_duration=((End-Start)*1000.0);
+      m_duration = (long)((End-Start)*1000.0);
     }
   }
   // Create a media session object from this SDP description:
@@ -617,7 +617,8 @@ bool CRTSPClient::UpdateDuration()
       double End=atof(pEnd) ;
 
       //LogDebug("rangestart:%f rangeend:%f", Start,End);
-      m_duration=((End-Start)*1000.0);
+      m_duration = (long)((End-Start)*1000.0);
     }
   }
+  return true;
 }

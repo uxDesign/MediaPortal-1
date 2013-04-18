@@ -321,11 +321,11 @@ CTsReaderFilter::CTsReaderFilter(IUnknown *pUnk, HRESULT *phr):
 //  ::DeleteFile(filename);
   
   instCount++;
+  instanceID = this;  
 
   LogDebug("----- Experimental noStopMod version ----- instance 0x%x", this);
   LogDebug("---------- v0.0.%d XXX -------------------", TSREADER_VERSION);
   LogDebug("---- Logging format: Date Time [InstanceID] [ThreadID] Message...");
-  instanceID = this;  
   LogDebug("---- logFileParsed = %d, logger handle = %x, instCount = %d, logFileDate = %d", logFileParsed, m_hLogger, instCount, logFileDate);
     
   
@@ -2264,13 +2264,6 @@ HRESULT CTsReaderFilter::GetSubInfoFromPin(IPin* pPin)
           fhr = pi.pFilter->QueryInterface( IID_IDVBSubtitle3, ( void**)&m_pDVBSubtitle );
           assert( fhr == S_OK);
           LogDebug("DVBSub3 interface OK");
-          m_pDVBSubtitle->Test(1);
-        }
-        else if (clsid == CLSID_DVBSub2)
-        {
-          fhr = pi.pFilter->QueryInterface( IID_IDVBSubtitle2, ( void**)&m_pDVBSubtitle );
-          assert( fhr == S_OK);
-          LogDebug("DVBSub2 interface OK");
           m_pDVBSubtitle->Test(1);
         }
         filterInfo.pGraph->Release();

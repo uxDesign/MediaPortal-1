@@ -38,6 +38,8 @@
 // For more details for memory leak detection see the alloctracing.h header
 #include "..\..\alloctracing.h"
 
+extern MPEVRCustomPresenter* instanceID;
+
 void LogIID(REFIID riid)
 {
   LPOLESTR str;
@@ -97,6 +99,8 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
   ZeroMemory((void*)&m_dPhaseDeviations, sizeof(double) * NUM_PHASE_DEVIATIONS);
   ZeroMemory((void*)&m_dPhaseDeviations2, sizeof(double) * NUM_PHASE_DEV_2);
 
+  instanceID = this;  
+
   timeBeginPeriod(1);
   if (m_pMFCreateVideoSampleFromSurface)
   {
@@ -104,12 +108,16 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
     //LogRotate();
     if (NO_MP_AUD_REND)
     {
-      Log("--- v1.6.%d Unicode with DWM queue support --- instance 0x%x", DSHOWHELPER_VERSION, this);
+      Log("--------------------------------------------------------------");
+      Log("---- v1.6.%d Unicode with DWM queue support --- instance 0x%x", DSHOWHELPER_VERSION, this);
+      Log("--------------------------------------------------------------");
     }
     else
     {
+      Log("--------------------------------------------------------------");
       Log("--- v1.6.%d Unicode with DWM queue support --- instance 0x%x", DSHOWHELPER_VERSION, this);
-      Log("---------- audio renderer enabled ------------- instance 0x%x", this);
+      Log("--- MP Audio Renderer control enabled");
+      Log("--------------------------------------------------------------");
     }
     m_hMonitor = monitor;
     m_pD3DDev = direct3dDevice;

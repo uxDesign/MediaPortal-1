@@ -56,7 +56,7 @@ bool CMpegPesParser::ParseVideo(byte* tsPacket,bool isMpeg2,bool reset)
 	if (isMpeg2)
 	{
 		seqhdr seq;
-		if (hdrParser.Read(seq,framesize,&pmt,reset))
+		if (hdrParser.Read(seq,(int)framesize,&pmt,reset))
 		{
 			//hdrParser.DumpSequenceHeader(seq);
 			basicVideoInfo.width=seq.width;
@@ -75,7 +75,7 @@ bool CMpegPesParser::ParseVideo(byte* tsPacket,bool isMpeg2,bool reset)
 	}
 	else 
 	{
-		if (hdrParser.Read(avc,framesize,&pmt,reset))
+		if (hdrParser.Read(avc, (int)framesize,&pmt,reset))
 		{
 			//hdrParser.DumpAvcHeader(avc);
 			basicVideoInfo.width=avc.width;
