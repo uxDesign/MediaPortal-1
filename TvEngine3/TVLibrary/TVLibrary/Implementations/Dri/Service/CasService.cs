@@ -29,9 +29,9 @@ namespace TvLibrary.Implementations.Dri
     private readonly string _name;
     private static readonly IDictionary<string, DriCasCaptureMode> _values = new Dictionary<string, DriCasCaptureMode>();
 
-    public static readonly DriCasCaptureMode Live = new DriCasCaptureMode("LIVE");
-    public static readonly DriCasCaptureMode Buffer = new DriCasCaptureMode("BUFFER");
-    public static readonly DriCasCaptureMode Record = new DriCasCaptureMode("RECORD");
+    public static readonly DriCasCaptureMode Live = new DriCasCaptureMode("Live");
+    public static readonly DriCasCaptureMode Buffer = new DriCasCaptureMode("Buffer");
+    public static readonly DriCasCaptureMode Record = new DriCasCaptureMode("Record");
 
     private DriCasCaptureMode(string name)
     {
@@ -214,6 +214,20 @@ namespace TvLibrary.Implementations.Dri
     }
   }
 
+  public enum DriCasMmiAction : byte
+  {
+    Close = 0,
+    Open = 1
+  }
+
+  public enum DriCasMmiDisplayType : byte
+  {
+    FullScreen = 0,
+    Overlay = 1,
+    NewWindow = 2
+    // 0x03..0xff reserved
+  }
+
   public class CasService
   {
     private CpDevice _device = null;
@@ -343,13 +357,17 @@ namespace TvLibrary.Implementations.Dri
     /// 6.  Set the DescramblingMessage (CAS service) state variable to Null.
     /// 7.  Send a ca_pmt(Ok_descrambling) APDU to the Card.
     /// </summary>
-    /// <param name="newCaptureMode">This argument sets the CaptureMode state variable.</param>
     /// <param name="newChannelNumber">This argument sets the VirtualChannelNumber state variable.</param>
     /// <param name="newSourceId">This argument sets the SourceId state variable.</param>
+    /// <param name="newCaptureMode">This argument sets the CaptureMode state variable.</param>
     /// <param name="pcrLockStatus">This argument provides the value of A_ARG_TYPE_PCRLock state variable when the action response is created.</param>
-    public void SetChannel(DriCasCaptureMode newCaptureMode, UInt32 newChannelNumber, UInt32 newSourceId, out bool pcrLockStatus)
+    public void SetChannel(UInt32? newChannelNumber, UInt32? newSourceId, DriCasCaptureMode newCaptureMode, out bool pcrLockStatus)
     {
-      IList<object> outParams = _setChannelAction.InvokeAction(new List<object> { newCaptureMode.ToString(), newChannelNumber, newSourceId });
+      // Note that the input argument order doesn't match the DRI
+      // specification. This seems to be due to the hardware vendors choosing
+      // to support the MS PBDA solution from WMC. The MS implementation sends
+      // the parameters in the wrong order!
+      IList<object> outParams = _setChannelAction.InvokeAction(new List<object> { newChannelNumber, newSourceId, newCaptureMode.ToString() });
       pcrLockStatus = (bool)outParams[0];
     }
 
