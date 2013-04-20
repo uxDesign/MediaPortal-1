@@ -502,9 +502,6 @@ namespace TvService
         Log.Info("Controller: using {0} database connection: {1}", provider, ConnectionLog);
         Gentle.Framework.ProviderFactory.SetDefaultProviderConnectionString(connectionString);
 
-        _cards = new Dictionary<int, ITvCardHandler>();
-        _localCardCollection = new DeviceDetector(this);
-
         //log all local ip adresses, usefull for debugging problems
         Log.Write("Controller: started at {0}", Dns.GetHostName());
         IPHostEntry local = Dns.GetHostEntry(Dns.GetHostName());
@@ -572,6 +569,9 @@ namespace TvService
         {
           _deviceGroups.Add(group.IdCardGroup, new HybridCardGroup());
         }
+
+        _cards = new Dictionary<int, ITvCardHandler>();
+        _localCardCollection = new DeviceDetector(this);
 
         Log.Info("Controller: setup streaming");
         _streamer = new RtspStreaming(_ourServer.HostName, _ourServer.RtspPort);
