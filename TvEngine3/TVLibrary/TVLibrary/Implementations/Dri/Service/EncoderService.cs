@@ -83,17 +83,13 @@ namespace TvLibrary.Implementations.Dri
 
   public enum DriEncoderFieldOrder
   {
-    LOWER,
     Lower,
-    HIGHER,
     Higher
   }
 
   public enum DriEncoderInputSelection
   {
-    TUNER,
     Tuner,
-    AUX,
     Aux
   }
 
