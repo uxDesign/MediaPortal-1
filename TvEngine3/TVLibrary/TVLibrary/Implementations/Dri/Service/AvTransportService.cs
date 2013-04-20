@@ -412,7 +412,7 @@ namespace TvLibrary.Implementations.Dri
 
     public void Play(UInt32 instanceId, string speed)
     {
-      _playAction.InvokeAction(new List<object> { instanceId });
+      _playAction.InvokeAction(new List<object> { instanceId, speed });
     }
 
     public bool Pause(UInt32 instanceId)
