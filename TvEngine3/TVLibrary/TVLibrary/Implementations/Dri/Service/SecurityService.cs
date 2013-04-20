@@ -24,6 +24,71 @@ using UPnP.Infrastructure.CP.DeviceTree;
 
 namespace TvLibrary.Implementations.Dri
 {
+  public sealed class DriSecurityPairingStatus
+  {
+    private readonly string _name;
+    private static readonly IDictionary<string, DriSecurityPairingStatus> _values = new Dictionary<string, DriSecurityPairingStatus>();
+
+    /// <summary>
+    /// The DRIT tuner is registered with a DRIR, controlled content
+    /// can be released under DRM protection.
+    /// </summary>
+    public static readonly DriSecurityPairingStatus Green = new DriSecurityPairingStatus("Green");
+    /// <summary>
+    /// The DRIT tuner is registered with a DRIR, but this pairing is
+    /// going to time out. The DRIR is expected to refresh its pairing in
+    /// background. Controlled content can be released under DRM
+    /// protection.
+    /// </summary>
+    public static readonly DriSecurityPairingStatus Orange = new DriSecurityPairingStatus("Orange");
+    /// <summary>
+    /// The DRIT tuner is not registered with a DRIR. No controlled
+    /// content can be released.
+    /// </summary>
+    public static readonly DriSecurityPairingStatus Red = new DriSecurityPairingStatus("Red");
+
+    private DriSecurityPairingStatus(string name)
+    {
+      _name = name;
+      _values.Add(name, this);
+    }
+
+    public override string ToString()
+    {
+      return _name;
+    }
+
+    public override bool Equals(object obj)
+    {
+      DriSecurityPairingStatus pairingStatus = obj as DriSecurityPairingStatus;
+      if (pairingStatus != null && this == pairingStatus)
+      {
+        return true;
+      }
+      return false;
+    }
+
+    public static ICollection<DriSecurityPairingStatus> Values
+    {
+      get { return _values.Values; }
+    }
+
+    public static explicit operator DriSecurityPairingStatus(string name)
+    {
+      DriSecurityPairingStatus value = null;
+      if (!_values.TryGetValue(name, out value))
+      {
+        return null;
+      }
+      return value;
+    }
+
+    public static implicit operator string(DriSecurityPairingStatus pairingStatus)
+    {
+      return pairingStatus._name;
+    }
+  }
+
   public class SecurityService : IDisposable
   {
     private CpDevice _device = null;
