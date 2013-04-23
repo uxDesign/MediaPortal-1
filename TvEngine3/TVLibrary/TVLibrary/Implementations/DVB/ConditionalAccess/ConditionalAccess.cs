@@ -28,6 +28,7 @@ using DirectShowLib.BDA;
 using TvDatabase;
 using TvLibrary.Hardware;
 using TvLibrary.Implementations.Dri;
+using TvLibrary.Implementations.Dri.Service;
 
 namespace TvLibrary.Implementations.DVB
 {

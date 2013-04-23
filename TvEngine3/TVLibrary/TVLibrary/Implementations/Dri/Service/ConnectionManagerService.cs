@@ -25,7 +25,7 @@ using UPnP.Infrastructure.CP.Description;
 using UPnP.Infrastructure.CP.DeviceTree;
 using UPnP.Infrastructure.CP.SSDP;
 
-namespace TvLibrary.Implementations.Dri
+namespace TvLibrary.Implementations.Dri.Service
 {
   public enum UpnpConnectionStatus
   {

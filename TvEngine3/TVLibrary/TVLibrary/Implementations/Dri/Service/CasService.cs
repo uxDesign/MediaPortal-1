@@ -22,7 +22,7 @@ using System;
 using System.Collections.Generic;
 using UPnP.Infrastructure.CP.DeviceTree;
 
-namespace TvLibrary.Implementations.Dri
+namespace TvLibrary.Implementations.Dri.Service
 {
   public sealed class DriCasCaptureMode
   {

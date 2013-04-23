@@ -23,7 +23,7 @@ using System.Collections.Generic;
 using System.Linq;
 using UPnP.Infrastructure.CP.DeviceTree;
 
-namespace TvLibrary.Implementations.Dri
+namespace TvLibrary.Implementations.Dri.Service
 {
   public enum UpnpAvTransportState
   {

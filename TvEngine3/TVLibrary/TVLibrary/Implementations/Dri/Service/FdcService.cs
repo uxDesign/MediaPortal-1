@@ -23,7 +23,7 @@ using System.Collections.Generic;
 using System.Linq;
 using UPnP.Infrastructure.CP.DeviceTree;
 
-namespace TvLibrary.Implementations.Dri
+namespace TvLibrary.Implementations.Dri.Service
 {
   public class FdcService
   {
@@ -100,7 +100,7 @@ namespace TvLibrary.Implementations.Dri
       string tidHexCsv = "ALL"; // = no filtering
       if (tid != null)
       {
-        tidHexCsv = string.Join(",", tid.Select(x => string.Format("%x", x)));
+        tidHexCsv = string.Join(",", tid.Select(x => string.Format("{0:x}", x)));
       }
       _requestTablesAction.InvokeAction(new List<object> { });
     }
@@ -116,7 +116,7 @@ namespace TvLibrary.Implementations.Dri
       string addPidListHexCsv = string.Empty;
       if (addPidList != null)
       {
-        addPidListHexCsv = string.Join(",", addPidList.Select(x => string.Format("%x", x)));
+        addPidListHexCsv = string.Join(",", addPidList.Select(x => string.Format("{0:x}", x)));
       }
       IList<object> outParams = _addPidAction.InvokeAction(new List<object> { addPidListHexCsv });
       remainingPidFilter = (byte)outParams[0];
@@ -132,7 +132,7 @@ namespace TvLibrary.Implementations.Dri
       string removePidListHexCsv = string.Empty;
       if (removePidList != null)
       {
-        removePidListHexCsv = string.Join(",", removePidList.Select(x => string.Format("%x", x)));
+        removePidListHexCsv = string.Join(",", removePidList.Select(x => string.Format("{0:x}", x)));
       }
       _removePidAction.InvokeAction(new List<object> { removePidListHexCsv });
     }

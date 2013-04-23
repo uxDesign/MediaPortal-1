@@ -117,6 +117,12 @@
     <Compile Include="Implementations\Analog\Graphs\Analog\TvCardAnalog.cs" />
     <Compile Include="Implementations\Analog\Graphs\HDPVR\TVCardHDPVR.cs" />
     <Compile Include="Implementations\BaseSubChannel.cs" />
+    <Compile Include="Implementations\Dri\Parser\LvctParser.cs" />
+    <Compile Include="Implementations\Dri\Parser\MgtParser.cs" />
+    <Compile Include="Implementations\Dri\Parser\NitParser.cs" />
+    <Compile Include="Implementations\Dri\Parser\NttParser.cs" />
+    <Compile Include="Implementations\Dri\Parser\ParserCommon.cs" />
+    <Compile Include="Implementations\Dri\Parser\SvctParser.cs" />
     <Compile Include="Implementations\Dri\Service\AuxService.cs" />
     <Compile Include="Implementations\Dri\Service\AvTransportService.cs" />
     <Compile Include="Implementations\Dri\Service\CasService.cs" />

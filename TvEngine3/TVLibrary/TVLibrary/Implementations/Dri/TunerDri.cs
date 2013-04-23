@@ -29,6 +29,8 @@ using System.Threading;
 using DirectShowLib;
 using DirectShowLib.BDA;
 using TvLibrary.Channels;
+using TvLibrary.Implementations.Dri.Parser;
+using TvLibrary.Implementations.Dri.Service;
 using TvLibrary.Implementations.DVB;
 using TvLibrary.Implementations.Helper;
 using TvLibrary.Interfaces;
@@ -80,7 +82,6 @@ namespace TvLibrary.Implementations.Dri
     private IDictionary<int, string> _menuLinks = new Dictionary<int, string>();
 
     private ManualResetEvent _eventSignalLock = null;
-    private bool _isSignalLocked = false;
 
     #endregion
 
@@ -272,7 +273,7 @@ namespace TvLibrary.Implementations.Dri
         Log.Log.Debug("DRI CC: setup services");
         _stateVariableDelegate = new StateVariableChangedDlgt(StateVariableChanged);
         _tunerService = new TunerService(_deviceConnection.Device, _stateVariableDelegate);
-        _fdcService = new FdcService(_deviceConnection.Device, null);//_stateVariableDelegate);
+        _fdcService = new FdcService(_deviceConnection.Device, _stateVariableDelegate);
         _auxService = new AuxService(_deviceConnection.Device, _stateVariableDelegate);
         _encoderService = new EncoderService(_deviceConnection.Device, _stateVariableDelegate);
         _casService = new CasService(_deviceConnection.Device, _stateVariableDelegate);
@@ -298,7 +299,10 @@ namespace TvLibrary.Implementations.Dri
         _avTransportService.GetTransportInfo((uint)_avTransportId, out transportState, out transportStatus, out speed);
         if (transportState != UpnpAvTransportState.STOPPED)
         {
-          throw new TvExceptionGraphBuildingFailed(string.Format("DRI CC: tuner appears to be in use, transport state = {0}", transportState));
+          // TODO need to find a reliable way to ensure we stop AVTransport
+          // after we're done with the tuner without interfering with other
+          // applications that might be using the tuner.
+          //throw new TvExceptionGraphBuildingFailed(string.Format("DRI CC: tuner appears to be in use, transport state = {0}", transportState));
         }
 
         Log.Log.Info("DRI CC: build graph");
@@ -331,6 +335,7 @@ namespace TvLibrary.Implementations.Dri
         _avTransportService.Stop((uint)_avTransportId);
       }
       base.StopGraph();
+      RemoveStreamSourceFilter();
     }
 
     private void ReadDeviceInfo()
@@ -614,17 +619,6 @@ namespace TvLibrary.Implementations.Dri
       }
     }
 
-    /// <summary>
-    /// Scan the specified channel.
-    /// </summary>
-    /// <param name="subChannelId">The sub channel id.</param>
-    /// <param name="channel">The channel.</param>
-    /// <returns>true if succeeded else false</returns>
-    public override ITvSubChannel Scan(int subChannelId, IChannel channel)
-    {
-      return null;
-    }
-
     protected override bool BeforeTune(IChannel channel)
     {
       ATSCChannel atscChannel = channel as ATSCChannel;
@@ -681,7 +675,7 @@ namespace TvLibrary.Implementations.Dri
           // get lock, however that is probably slower on average than
           // receiving asynchronous updates.
           _eventSignalLock.Reset();
-          _casService.SetChannel((uint)atscChannel.PhysicalChannel, 0, DriCasCaptureMode.Live, out _isSignalLocked);
+          _casService.SetChannel((uint)atscChannel.PhysicalChannel, 0, DriCasCaptureMode.Live, out _tunerLocked);
 
           Log.Log.Debug("DRI CC: get media info...");
           uint trackCount = 0;
@@ -723,17 +717,77 @@ namespace TvLibrary.Implementations.Dri
 
     public override void LockInOnSignal()
     {
-      if (_isSignalLocked)
+      if (_tunerLocked)
       {
         Log.Log.Info("DRI CC: signal locked immediately");
         return;
       }
       _eventSignalLock.WaitOne(_parameters.TimeOutTune * 1000);
-      if (!_isSignalLocked)
+      if (!_tunerLocked)
       {
         throw new TvExceptionNoSignal("DRI CC: failed to lock in on signal");
       }
       Log.Log.Info("DRI CC: signal locked");
+    }
+
+    /// <summary>
+    /// Updates the signal informations of the tv cards
+    /// </summary>
+    protected override void UpdateSignalQuality(bool force)
+    {
+      if (!force)
+      {
+        TimeSpan ts = DateTime.Now - _lastSignalUpdate;
+        if (ts.TotalMilliseconds < 5000)
+        {
+          return;
+        }
+      }
+      try
+      {
+        if (!GraphRunning() || CurrentChannel == null || _tunerService == null)
+        {
+          _tunerLocked = false;
+          _signalLevel = 0;
+          _signalPresent = false;
+          _signalQuality = 0;
+          return;
+        }
+
+        uint frequency = 0;
+        DriTunerModulation modulation = DriTunerModulation.All;
+        uint snr;
+        _tunerService.GetTunerParameters(out _signalPresent, out frequency, out modulation, out _tunerLocked, out _signalLevel, out snr);
+        _signalQuality = (int)snr;
+        /*Log.Log.Debug("  carrier lock = {0}", _signalPresent);
+        Log.Log.Debug("  frequency    = {0} kHz", frequency);
+        Log.Log.Debug("  modulation   = {0}", modulation.ToString());
+        Log.Log.Debug("  PCR lock     = {0}", _tunerLocked);
+        Log.Log.Debug("  signal level = {0} dBmV", _signalLevel);
+        Log.Log.Debug("  SNR          = {0} dB", _signalQuality);*/
+        // Ideally we shouldn'i touch these readings, however DVB tuners tend
+        // to use 0..100% ratings.
+        if (_signalLevel > 100)
+        {
+          _signalLevel = 100;
+        }
+        else if (_signalLevel < 0)
+        {
+          _signalLevel = 0;
+        }
+        if (_signalQuality > 100)
+        {
+          _signalQuality = 100;
+        }
+        else if (_signalQuality < 0)
+        {
+          _signalQuality = 0;
+        }
+      }
+      finally
+      {
+        _lastSignalUpdate = DateTime.Now;
+      }
     }
 
     /// <summary>
@@ -757,7 +811,7 @@ namespace TvLibrary.Implementations.Dri
       {
         if (stateVariable.Name.Equals("PCRLock") || stateVariable.Name.Equals("Lock"))
         {
-          _isSignalLocked = (bool)newValue;
+          _tunerLocked = (bool)newValue;
           if (_eventSignalLock != null)
           {
             _eventSignalLock.Set();
@@ -801,6 +855,17 @@ namespace TvLibrary.Implementations.Dri
             Log.Log.Info("DRI CC: device {0} pairing status update, old status = {1}, new status = {2}", _cardId, oldStatus, _pairingStatus);
           }
         }
+        else if (stateVariable.Name.Equals("TableSection"))
+        {
+          byte[] bytes = (byte[])newValue;
+          NitParser nitParser = new NitParser();
+          NttParser nttParser = new NttParser();
+          MgtParser mgtParser = new MgtParser();
+          DVB_MMI.DumpBinary(bytes, 0, bytes.Length);
+          nitParser.Decode(bytes);
+          nttParser.Decode(bytes);
+          mgtParser.Decode(bytes);
+        }
         else
         {
           Log.Log.Debug("DRI CC: device {0} state variable {1} for service {2} changed to {3}", _cardId, stateVariable.Name, stateVariable.ParentService.FullQualifiedName, newValue ?? "[null]");
@@ -816,7 +881,6 @@ namespace TvLibrary.Implementations.Dri
     {
       if (message == null || message.Length < 3)
       {
-        Log.Log.Error("DRI CC: device {0} received invalid MMI message", _cardId);
         return;
       }
 
@@ -901,20 +965,19 @@ namespace TvLibrary.Implementations.Dri
 
       // Reformat from pure HTML into title and menu items. This is quite
       // hacky, but we have no way to render HTML in MediaPortal.
-      /*if (_ciMenuCallbacks == null)
-      {
-        Log.Log.Debug(content);
-        return;
-      }*/
+      Log.Log.Debug(content);
       content = content.Replace("<b>", "").Replace("</b>", "").Replace("&nbsp;", " ");
       content = content.Substring(content.IndexOf("<body") + 5);
       content = content.Substring(content.IndexOf(">") + 1);
       content = content.Substring(0, content.IndexOf("</body>"));
       content = content.Trim();
-      Log.Log.Debug(content);
+      //Log.Log.Debug(content);
       _menuLinks.Clear();
       string[] sections = content.Split(new string[] { "<br>" }, StringSplitOptions.RemoveEmptyEntries);
-      //_ciMenuCallbacks.OnCiMenu(sections[0].Trim(), string.Empty, string.Empty, sections.Length - 1);
+      if (_ciMenuCallbacks != null)
+      {
+        _ciMenuCallbacks.OnCiMenu(sections[0].Trim(), string.Empty, string.Empty, sections.Length - 1);
+      }
       Log.Log.Debug("  title = {0}", sections[0].Trim());
       for (int i = 1; i < sections.Length; i++)
       {
@@ -932,7 +995,10 @@ namespace TvLibrary.Implementations.Dri
         {
           Log.Log.Debug("  item {0} = {1}", i, item);
         }
-        //_ciMenuCallbacks.OnCiMenuChoice(i - 1, item);
+        if (_ciMenuCallbacks != null)
+        {
+          _ciMenuCallbacks.OnCiMenuChoice(i - 1, item);
+        }
       }
     }
   }
