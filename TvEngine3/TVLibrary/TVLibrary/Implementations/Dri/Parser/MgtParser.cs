@@ -55,14 +55,14 @@ namespace TvLibrary.Implementations.Dri.Parser
       byte lastSectionNumber = section[9];
       byte protocolVersion = section[10];
       int tablesDefined = (section[11] << 8) + section[12];
-      Log.Log.Debug("MGT: map ID = 0x{0:x}, version number = {2}, section number = {3}, last section number {4}, protocol version = {5}, tables defined = 0x{6:x}",
+      Log.Log.Debug("MGT: map ID = 0x{0:x}, version number = {2}, section number = {3}, last section number {4}, protocol version = {5}, tables defined = {6}",
         mapId, versionNumber, sectionNumber, lastSectionNumber, protocolVersion, tablesDefined);
 
       int pointer = 13;
       int endOfSection = section.Length - 4;
       for (int i = 0; i < tablesDefined; i++)
       {
-        if (pointer + 11 + 2 > endOfSection)
+        if (pointer + 11 + 2 > endOfSection)  // + 2 for the fixed bytes after the loop
         {
           Log.Log.Error("MGT: detected tables defined {0} is invalid in loop {1}, pointer = {2}, end of section = {3}", tablesDefined, i, pointer, endOfSection);
           return;
@@ -72,11 +72,16 @@ namespace TvLibrary.Implementations.Dri.Parser
         int tableTypePid = ((section[pointer] & 0x1f) << 8) + section[pointer + 1];
         pointer += 2;
         int tableTypeVersionNumber = (section[pointer++] & 0x1f);
-        int numberBytes = (section[pointer] << 24) + (section[pointer + 1] << 16) + (section[pointer + 2] << 8) + section[pointer + 3];
-        pointer += 4;
+        uint numberBytes = 0;
+        for (byte b = 0; b < 3; b++)
+        {
+          numberBytes = numberBytes << 8;
+          numberBytes = section[pointer++];
+        }
         Log.Log.Debug("MGT: table type = 0x{0:x}, PID = 0x{1:x}, version number = {2}", tableType, tableTypePid, tableTypeVersionNumber);
 
         int tableTypeDescriptorsLength = ((section[pointer] & 0x0f) << 8) + section[pointer + 1];
+        pointer += 2;
         int endOfTableTypeDescriptors = pointer + tableTypeDescriptorsLength;
         if (endOfTableTypeDescriptors > endOfSection)
         {
@@ -97,12 +102,13 @@ namespace TvLibrary.Implementations.Dri.Parser
         }
         if (pointer != endOfTableTypeDescriptors)
         {
-          Log.Log.Error("MGT: corruption detected at end of table type descriptors, pointer = {0}, end of section = {1}, end of table type descriptors = {2}", pointer, endOfSection, endOfTableTypeDescriptors);
+          Log.Log.Error("MGT: corruption detected at end of table type descriptors loop {0}, pointer = {1}, end of section = {2}, end of table type descriptors = {3}", i, pointer, endOfSection, endOfTableTypeDescriptors);
           return;
         }
       }
 
       int descriptorsLength = ((section[pointer] & 0x0f) << 8) + section[pointer + 1];
+      pointer += 2;
       if (pointer + descriptorsLength != endOfSection)
       {
         Log.Log.Error("MGT: invalid descriptors length {0}, pointer = {1}, end of section = {2}", descriptorsLength, pointer, endOfSection);
@@ -112,10 +118,10 @@ namespace TvLibrary.Implementations.Dri.Parser
       {
         byte tag = section[pointer++];
         byte length = section[pointer++];
-        Log.Log.Debug("NTT: descriptor, tag = 0x{0:x}, length = {1}", tag, length);
+        Log.Log.Debug("MGT: descriptor, tag = 0x{0:x}, length = {1}", tag, length);
         if (pointer + length > endOfSection)
         {
-          Log.Log.Error("NTT: invalid descriptor length {0}, pointer = {1}, end of section = {2}", length, pointer, endOfSection);
+          Log.Log.Error("MGT: invalid descriptor length {0}, pointer = {1}, end of section = {2}", length, pointer, endOfSection);
           return;
         }
         pointer += length;

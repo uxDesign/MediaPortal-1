@@ -332,7 +332,7 @@ namespace TvLibrary.Implementations.Dri.Parser
         }
         if (pointer != endOfData)
         {
-          throw new Exception(string.Format("NTT: corruption detected at end of rating system data, pointer = {0}, end of section = {1}, end of data = {2}", pointer, endOfSection, endOfData));
+          throw new Exception(string.Format("NTT: corruption detected at end of rating system data in loop {0}, pointer = {1}, end of section = {2}, end of data = {3}", i, pointer, endOfSection, endOfData));
         }
       }
     }
@@ -380,7 +380,7 @@ namespace TvLibrary.Implementations.Dri.Parser
         }
         if (pointer != endOfData)
         {
-          throw new Exception(string.Format("NTT: corruption detected at end of currency system data, pointer = {0}, end of section = {1}, end of data = {2}", pointer, endOfSection, endOfData));
+          throw new Exception(string.Format("NTT: corruption detected at end of currency system data in loop {0}, pointer = {1}, end of section = {2}, end of data = {3}", i, pointer, endOfSection, endOfData));
         }
       }
     }
