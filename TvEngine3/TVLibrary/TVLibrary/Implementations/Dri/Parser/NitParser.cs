@@ -89,7 +89,6 @@ namespace TvLibrary.Implementations.Dri.Parser
     {
       if (section == null || section.Length < 13)
       {
-        Log.Log.Error("NIT: invalid section length");
         return;
       }
 
@@ -130,26 +129,23 @@ namespace TvLibrary.Implementations.Dri.Parser
       {
         try
         {
-          if (tableType == TableSubtype.CarrierDefinition)
+          switch (tableType)
           {
-            DecodeCarrierDefinition(section, endOfSection, ref pointer);
-          }
-          else if (tableType == TableSubtype.ModulationMode)
-          {
-            DecodeModulationMode(section, endOfSection, ref pointer);
-          }
-          else if (tableType == TableSubtype.SatelliteInformation)
-          {
-            DecodeSatelliteInformation(section, endOfSection, ref pointer);
-          }
-          else if (tableType == TableSubtype.TransponderData)
-          {
-            DecodeTransponderData(section, endOfSection, ref pointer);
-          }
-          else
-          {
-            Log.Log.Error("NIT: unsupported subtable type {0}", tableType);
-            return;
+            case TableSubtype.CarrierDefinition:
+              DecodeCarrierDefinition(section, endOfSection, ref pointer);
+              break;
+            case TableSubtype.ModulationMode:
+              DecodeModulationMode(section, endOfSection, ref pointer);
+              break;
+            case TableSubtype.SatelliteInformation:
+              DecodeSatelliteInformation(section, endOfSection, ref pointer);
+              break;
+            case TableSubtype.TransponderData:
+              DecodeTransponderData(section, endOfSection, ref pointer);
+              break;
+            default:
+              Log.Log.Error("NIT: unsupported subtable type {0}", tableType);
+              return;
           }
         }
         catch (Exception ex)
@@ -161,7 +157,7 @@ namespace TvLibrary.Implementations.Dri.Parser
         // subtable descriptors
         if (pointer >= endOfSection)
         {
-          Log.Log.Error("NIT: invalid section length at subtable descriptor count, pointer = {0}, end of section = {1}", pointer, endOfSection);
+          Log.Log.Error("NIT: invalid section length at subtable descriptor count, pointer = {0}, end of section = {1}, loop = {2}", pointer, endOfSection, i);
           return;
         }
         byte descriptorCount = section[pointer++];
@@ -169,7 +165,7 @@ namespace TvLibrary.Implementations.Dri.Parser
         {
           if (pointer + 2 > endOfSection)
           {
-            Log.Log.Error("NIT: detected subtable descriptor count {0} is invalid in loop {1}, pointer = {2}, end of section = {3}", descriptorCount, d, pointer, endOfSection);
+            Log.Log.Error("NIT: detected subtable descriptor count {0} is invalid, pointer = {1}, end of section = {2}, loop = {3}, inner loop = {4}", descriptorCount, pointer, endOfSection, i, d);
             return;
           }
           byte tag = section[pointer++];
@@ -177,7 +173,7 @@ namespace TvLibrary.Implementations.Dri.Parser
           Log.Log.Debug("NIT: subtable descriptor, tag = 0x{0:x}, length = {1}", tag, length);
           if (pointer + length > endOfSection)
           {
-            Log.Log.Error("NIT: invalid subtable descriptor length, pointer = {0}, end of section = {1}, descriptor length = {2}", pointer, endOfSection, length);
+            Log.Log.Error("NIT: invalid subtable descriptor length, pointer = {0}, end of section = {1}, descriptor length = {2}, loop = {3}, inner loop = {4}", pointer, endOfSection, length, i, d);
             return;
           }
           pointer += length;
@@ -378,7 +374,7 @@ namespace TvLibrary.Implementations.Dri.Parser
       pointer += 2;
       bool isCircularPolarisation = ((section[pointer] & 0x80) != 0);
       int numberOfTransponders = (section[pointer++] & 0x3f) + 1;
-      Log.Log.Debug("NIT: satellite information, satellite ID = 0x{0:x}, you are here = {1}, frequency band = {2}, out of service = {3}, is Eastern hemisphere = {4}, orbital position = {5}, is circular polarisation = {6}, number of transponders = {7}",
+      Log.Log.Debug("NIT: satellite information, satellite ID = {0}, you are here = {1}, frequency band = {2}, out of service = {3}, is Eastern hemisphere = {4}, orbital position = {5}, is circular polarisation = {6}, number of transponders = {7}",
         satelliteId, youAreHere, frequencyBand, outOfService, isEasternHemisphere, orbitalPosition, isCircularPolarisation, numberOfTransponders);
     }
 

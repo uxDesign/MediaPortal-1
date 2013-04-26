@@ -83,7 +83,6 @@ namespace TvLibrary.Implementations.Dri.Parser
     {
       if (section == null || section.Length < 18)
       {
-        Log.Log.Error("L-VCT: invalid section length");
         return;
       }
 
@@ -125,7 +124,7 @@ namespace TvLibrary.Implementations.Dri.Parser
       {
         if (pointer + 32 + 2 > endOfSection)  // + 2 for the fixed bytes after the loop
         {
-          Log.Log.Error("L-VCT: detected number of channels in section {0} is invalid in loop {1}, pointer = {2}, end of section = {3}", numChannelsInSection, i, pointer, endOfSection);
+          Log.Log.Error("L-VCT: detected number of channels in section {0} is invalid, pointer = {1}, end of section = {2}, loop = {3}", numChannelsInSection, pointer, endOfSection, i);
           return;
         }
 
@@ -146,7 +145,7 @@ namespace TvLibrary.Implementations.Dri.Parser
           onePartVirtualChannelNumber = ((majorChannelNumber & 0x0f) << 10) + minorChannelNumber;
         }
         ModulationMode modulationMode = (ModulationMode)section[pointer++];
-        int carrierFrequency = 0;
+        int carrierFrequency = 0;   // Hz
         for (byte b = 0; b < 3; b++)
         {
           carrierFrequency = carrierFrequency << 8;
@@ -165,12 +164,16 @@ namespace TvLibrary.Implementations.Dri.Parser
         AtscServiceType serviceType = (AtscServiceType)(section[pointer++] & 0x3f);
         int sourceId = (section[pointer] << 8) + section[pointer + 1];
         pointer += 2;
+        Log.Log.Debug("L-VCT: channel, short name = {0}, major channel number = {1}, minor channel number = {2}, one part channel number = {3}, modulation mode = {4}, carrier frequency = {5} Hz, TSID = 0x{6:x}, program number = 0x{7:x}, ETM location = {8}, access controlled = {9}, hidden = {10}, path select = {11}, out of band = {12}, hide guide = {13}, service type = {14}, source ID = 0x{15:x}",
+          shortName, majorChannelNumber, minorChannelNumber, onePartVirtualChannelNumber, modulationMode, carrierFrequency,
+          channelTsid, programNumber, etmLocation, accessControlled, hidden, pathSelect, outOfBand, hideGuide, serviceType, sourceId);
+
         int descriptorsLength = ((section[pointer] & 0x03) << 8) + section[pointer + 1];
         pointer += 2;
         int endOfDescriptors = pointer + descriptorsLength;
         if (endOfDescriptors > endOfSection)
         {
-          Log.Log.Error("L-VCT: invalid descriptors length {0}, pointer = {1}, end of section = {2}", descriptorsLength, pointer, endOfSection);
+          Log.Log.Error("L-VCT: invalid descriptors length {0}, pointer = {1}, end of section = {2}, loop = {3}", descriptorsLength, pointer, endOfSection, i);
           return;
         }
         while (pointer + 1 < endOfDescriptors)
@@ -180,14 +183,14 @@ namespace TvLibrary.Implementations.Dri.Parser
           Log.Log.Debug("L-VCT: descriptor, tag = 0x{0:x}, length = {1}", tag, length);
           if (pointer + length > endOfDescriptors)
           {
-            Log.Log.Error("L-VCT: invalid descriptor length {0}, pointer = {1}, end of descriptors = {2}", length, pointer, endOfDescriptors);
+            Log.Log.Error("L-VCT: invalid descriptor length {0}, pointer = {1}, end of descriptors = {2}, loop = {3}", length, pointer, endOfDescriptors, i);
             return;
           }
           pointer += length;
         }
         if (pointer != endOfDescriptors)
         {
-          Log.Log.Error("L-VCT: corruption detected at end of descriptors loop {0}, pointer = {1}, end of section = {2}, end of descriptors = {3}", i, pointer, endOfSection, endOfDescriptors);
+          Log.Log.Error("L-VCT: corruption detected at end of descriptors, pointer = {0}, end of section = {1}, end of descriptors = {2}, loop = {3}", pointer, endOfSection, endOfDescriptors, i);
           return;
         }
       }

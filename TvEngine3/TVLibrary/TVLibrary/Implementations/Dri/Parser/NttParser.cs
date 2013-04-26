@@ -41,7 +41,6 @@ namespace TvLibrary.Implementations.Dri.Parser
     {
       if (section == null || section.Length < 14)
       {
-        Log.Log.Error("NTT: invalid section length");
         return;
       }
 
@@ -68,38 +67,32 @@ namespace TvLibrary.Implementations.Dri.Parser
 
       try
       {
-        if (tableType == TableSubtype.TransponderName)
+        switch (tableType)
         {
-          DecodeTransponderName(section, endOfSection, ref pointer);
-        }
-        else if (tableType == TableSubtype.SatelliteText)
-        {
-          DecodeSatelliteText(section, endOfSection, ref pointer);
-        }
-        else if (tableType == TableSubtype.RatingsText)
-        {
-          DecodeRatingsText(section, endOfSection, ref pointer);
-        }
-        else if (tableType == TableSubtype.RatingSystem)
-        {
-          DecodeRatingSystem(section, endOfSection, ref pointer);
-        }
-        else if (tableType == TableSubtype.CurrencySystem)
-        {
-          DecodeCurrencySystem(section, endOfSection, ref pointer);
-        }
-        else if (tableType == TableSubtype.SourceName)
-        {
-          DecodeSourceName(section, endOfSection, ref pointer);
-        }
-        else if (tableType == TableSubtype.MapName)
-        {
-          DecodeMapName(section, endOfSection, ref pointer);
-        }
-        else
-        {
-          Log.Log.Error("NTT: unsupported subtable type {0}", tableType);
-          return;
+          case TableSubtype.TransponderName:
+            DecodeTransponderName(section, endOfSection, ref pointer);
+            break;
+          case TableSubtype.SatelliteText:
+            DecodeSatelliteText(section, endOfSection, ref pointer);
+            break;
+          case TableSubtype.RatingsText:
+            DecodeRatingsText(section, endOfSection, ref pointer);
+            break;
+          case TableSubtype.RatingSystem:
+            DecodeRatingSystem(section, endOfSection, ref pointer);
+            break;
+          case TableSubtype.CurrencySystem:
+            DecodeCurrencySystem(section, endOfSection, ref pointer);
+            break;
+          case TableSubtype.SourceName:
+            DecodeSourceName(section, endOfSection, ref pointer);
+            break;
+          case TableSubtype.MapName:
+            DecodeMapName(section, endOfSection, ref pointer);
+            break;
+          default:
+            Log.Log.Error("NTT: unsupported subtable type {0}", tableType);
+            return;
         }
       }
       catch (Exception ex)
@@ -144,19 +137,19 @@ namespace TvLibrary.Implementations.Dri.Parser
       byte satelliteId = section[pointer++];
       byte firstIndex = section[pointer++];
       byte numberOfTntRecords = section[pointer++];
-      Log.Log.Debug("NTT: transponder name, satellite ID = 0x{0:x}, first index = {1}, number of TNT records = {2}", satelliteId, firstIndex, numberOfTntRecords);
+      Log.Log.Debug("NTT: transponder name, satellite ID = {0}, first index = {1}, number of TNT records = {2}", satelliteId, firstIndex, numberOfTntRecords);
 
       for (byte i = 0; i < numberOfTntRecords; i++)
       {
         if (pointer + 3 > endOfSection)
         {
-          throw new Exception(string.Format("NTT: detected transponder name subtable number of TNT records {0} is invalid in loop {1}, pointer = {2}, end of section = {3}", numberOfTntRecords, i, pointer, endOfSection));
+          throw new Exception(string.Format("NTT: detected transponder name subtable number of TNT records {0} is invalid, pointer = {1}, end of section = {2}", numberOfTntRecords, pointer, endOfSection, i));
         }
         int transponderNumber = (section[pointer++] & 0x3f);
         int transponderNameLength = (section[pointer++] & 0x1f);
         if (pointer + transponderNameLength > endOfSection)
         {
-          throw new Exception(string.Format("NTT: invalid transponder name subtable transponder name length {0}, pointer = {1}, end of section = {2}", transponderNameLength, pointer, endOfSection));
+          throw new Exception(string.Format("NTT: invalid transponder name subtable transponder name length {0}, pointer = {1}, end of section = {2}, loop = {3}", transponderNameLength, pointer, endOfSection, i));
         }
         string transponderName = DecodeMultilingualText(section, pointer + transponderNameLength, ref pointer);
         Log.Log.Debug("NTT: transponder name, number = {0}, name = {1}", transponderNumber, transponderName);
@@ -164,21 +157,21 @@ namespace TvLibrary.Implementations.Dri.Parser
         // subtable descriptors
         if (pointer >= endOfSection)
         {
-          throw new Exception(string.Format("NTT: invalid section length at transponder name subtable descriptor count, pointer = {0}, end of section = {1}", pointer, endOfSection));
+          throw new Exception(string.Format("NTT: invalid section length at transponder name subtable descriptor count, pointer = {0}, end of section = {1}, loop = {2}", pointer, endOfSection, i));
         }
         byte descriptorCount = section[pointer++];
         for (byte d = 0; d < descriptorCount; d++)
         {
           if (pointer + 2 > endOfSection)
           {
-            throw new Exception(string.Format("NTT: detected transponder name subtable descriptor count {0} is invalid in loop {1}, pointer = {2}, end of section = {3}", descriptorCount, d, pointer, endOfSection));
+            throw new Exception(string.Format("NTT: detected transponder name subtable descriptor count {0} is invalid, pointer = {1}, end of section = {2}, loop = {3}, inner loop = {4}", descriptorCount, pointer, endOfSection, i, d));
           }
           byte tag = section[pointer++];
           byte length = section[pointer++];
           Log.Log.Debug("NTT: transponder name subtable descriptor, tag = 0x{0:x}, length = {1}", tag, length);
           if (pointer + length > endOfSection)
           {
-            throw new Exception(string.Format("NTT: invalid transponder name subtable descriptor length {0}, pointer = {1}, end of section = {2}", length, pointer, endOfSection));
+            throw new Exception(string.Format("NTT: invalid transponder name subtable descriptor length {0}, pointer = {1}, end of section = {2}, loop = {3}, inner loop = {4}", length, pointer, endOfSection, i, d));
           }
           pointer += length;
         }
@@ -200,47 +193,47 @@ namespace TvLibrary.Implementations.Dri.Parser
       {
         if (pointer + 4 > endOfSection)
         {
-          throw new Exception(string.Format("NTT: detected satellite text subtable number of STT records {0} is invalid in loop {1}, pointer = {2}, end of section = {3}", numberOfSttRecords, i, pointer, endOfSection));
+          throw new Exception(string.Format("NTT: detected satellite text subtable number of STT records {0} is invalid, pointer = {1}, end of section = {2}, loop = {3}", numberOfSttRecords, pointer, endOfSection, i));
         }
         byte satelliteId = section[pointer++];
         int satelliteReferenceNameLength = (section[pointer++] & 0x0f);
         if (pointer + satelliteReferenceNameLength > endOfSection)
         {
-          throw new Exception(string.Format("NTT: invalid satellite text subtable satellite reference name length {0}, pointer = {1}, end of section = {2}", satelliteReferenceNameLength, pointer, endOfSection));
+          throw new Exception(string.Format("NTT: invalid satellite text subtable satellite reference name length {0}, pointer = {1}, end of section = {2}, loop = {3}", satelliteReferenceNameLength, pointer, endOfSection, i));
         }
         string satelliteReferenceName = DecodeMultilingualText(section, pointer + satelliteReferenceNameLength, ref pointer);
 
         if (pointer >= endOfSection)
         {
-          throw new Exception(string.Format("NTT: corruption detected at satellite text subtable full satellite name, pointer = {0}, end of section = {1}", pointer, endOfSection));
+          throw new Exception(string.Format("NTT: corruption detected at satellite text subtable full satellite name, pointer = {0}, end of section = {1}, loop = {2}", pointer, endOfSection, i));
         }
         int fullSatelliteNameLength = (section[pointer++] & 0x1f);
         if (pointer + fullSatelliteNameLength > endOfSection)
         {
-          throw new Exception(string.Format("NTT: invalid satellite text subtable full satellite name length {0}, pointer = {1}, end of section = {2}", fullSatelliteNameLength, pointer, endOfSection));
+          throw new Exception(string.Format("NTT: invalid satellite text subtable full satellite name length {0}, pointer = {1}, end of section = {2}, loop = {3}", fullSatelliteNameLength, pointer, endOfSection, i));
         }
         string fullSatelliteName = DecodeMultilingualText(section, pointer + fullSatelliteNameLength, ref pointer);
 
-        Log.Log.Debug("NTT: satellite text, satellite ID = 0x{0:x}, reference name = {1}, full name = {2}", satelliteId, satelliteReferenceName, fullSatelliteName);
+        Log.Log.Debug("NTT: satellite text, satellite ID = {0}, reference name = {1}, full name = {2}", satelliteId, satelliteReferenceName, fullSatelliteName);
 
         // subtable descriptors
         if (pointer >= endOfSection)
         {
-          throw new Exception(string.Format("NTT: invalid section length at satellite text subtable descriptor count, pointer = {0}, end of section = {1}", pointer, endOfSection));
+          throw new Exception(string.Format("NTT: invalid section length at satellite text subtable descriptor count, pointer = {0}, end of section = {1}, loop = {2}", pointer, endOfSection, i));
         }
         byte descriptorCount = section[pointer++];
         for (byte d = 0; d < descriptorCount; d++)
         {
           if (pointer + 2 > endOfSection)
           {
-            throw new Exception(string.Format("NTT: detected satellite text subtable descriptor count {0} is invalid in loop {1}, pointer = {2}, end of section = {3}", descriptorCount, d, pointer, endOfSection));
+            throw new Exception(string.Format("NTT: detected satellite text subtable descriptor count {0} is invalid, pointer = {1}, end of section = {2}, loop = {3}, inner loop = {4}", descriptorCount, pointer, endOfSection, i, d));
           }
           byte tag = section[pointer++];
           byte length = section[pointer++];
           Log.Log.Debug("NTT: satellite text subtable descriptor, tag = 0x{0:x}, length = {1}", tag, length);
           if (pointer + length > endOfSection)
           {
-            throw new Exception(string.Format("NTT: invalid satellite text subtable descriptor length {0}, pointer = {1}, end of section = {2}", length, pointer, endOfSection));
+            throw new Exception(string.Format("NTT: invalid satellite text subtable descriptor length {0}, pointer = {1}, end of section = {2}, loop = {3}, inner loop = {4}", length, pointer, endOfSection, i, d));
           }
           pointer += length;
         }
@@ -259,19 +252,19 @@ namespace TvLibrary.Implementations.Dri.Parser
       {
         if (pointer >= endOfSection)
         {
-          throw new Exception(string.Format("NTT: corruption detected at ratings text subtable levels defined loop {0}, pointer = {1}, end of section = {2}", i, pointer, endOfSection));
+          throw new Exception(string.Format("NTT: corruption detected at ratings text subtable levels defined, pointer = {0}, end of section = {1}, loop = {2}", pointer, endOfSection, i));
         }
         byte levelsDefined = section[pointer++];
         if (levelsDefined > 0)
         {
           if (pointer >= endOfSection)
           {
-            throw new Exception(string.Format("NTT: corruption detected at ratings text subtable dimension name length, pointer = {0}, end of section = {1}", pointer, endOfSection));
+            throw new Exception(string.Format("NTT: corruption detected at ratings text subtable dimension name length, pointer = {0}, end of section = {1}, loop = {2}", pointer, endOfSection, i));
           }
           byte dimensionNameLength = section[pointer++];
           if (pointer + dimensionNameLength > endOfSection)
           {
-            throw new Exception(string.Format("NTT: invalid ratings text subtable dimension name length {0}, pointer = {1}, end of section = {2}", dimensionNameLength, pointer, endOfSection));
+            throw new Exception(string.Format("NTT: invalid ratings text subtable dimension name length {0}, pointer = {1}, end of section = {2}, loop = {3}", dimensionNameLength, pointer, endOfSection, i));
           }
           string dimensionName = DecodeMultilingualText(section, pointer + dimensionNameLength, ref pointer);
           Log.Log.Debug("NTT: ratings text, dimension name = {0}, levels defined = {1}", dimensionName, levelsDefined);
@@ -280,10 +273,10 @@ namespace TvLibrary.Implementations.Dri.Parser
             byte ratingNameLength = section[pointer++];
             if (pointer + ratingNameLength > endOfSection)
             {
-              throw new Exception(string.Format("NTT: invalid ratings text subtable rating name length {0}, pointer = {1}, end of section = {2}", ratingNameLength, pointer, endOfSection));
+              throw new Exception(string.Format("NTT: invalid ratings text subtable rating name length {0}, pointer = {1}, end of section = {2}, loop = {3}, inner loop = {4}", ratingNameLength, pointer, endOfSection, i, l));
             }
             string ratingName = DecodeMultilingualText(section, pointer + ratingNameLength, ref pointer);
-            Log.Log.Debug("  rating name = {0}", ratingName);
+            Log.Log.Debug("NTT: rating name = {0}", ratingName);
           }
         }
       }
@@ -301,19 +294,19 @@ namespace TvLibrary.Implementations.Dri.Parser
       {
         if (pointer + 3 > endOfSection)
         {
-          throw new Exception(string.Format("NTT: detected rating system subtable regions defined {0} is invalid in loop {1}, pointer = {2}, end of section = {3}", regionsDefined, i, pointer, endOfSection));
+          throw new Exception(string.Format("NTT: detected rating system subtable regions defined {0} is invalid, pointer = {1}, end of section = {2}, loop = {3}", regionsDefined, pointer, endOfSection, i));
         }
         byte dataLength = section[pointer++];
         int endOfData = pointer + dataLength;
         if (endOfData > endOfSection)
         {
-          throw new Exception(string.Format("NTT: invalid rating system subtable data length {0}, pointer = {1}, end of section = {2}", dataLength, pointer, endOfSection));
+          throw new Exception(string.Format("NTT: invalid rating system subtable data length {0}, pointer = {1}, end of section = {2}, loop = {3}", dataLength, pointer, endOfSection, i));
         }
         byte ratingRegion = section[pointer++];
         byte stringLength = section[pointer++];
         if (pointer + stringLength > endOfSection)
         {
-          throw new Exception(string.Format("NTT: invalid rating system subtable string length {0}, pointer = {1}, end of section = {2}", stringLength, pointer, endOfSection));
+          throw new Exception(string.Format("NTT: invalid rating system subtable string length {0}, pointer = {1}, end of section = {2}, loop = {3}", stringLength, pointer, endOfSection, i));
         }
         string ratingSystem = DecodeMultilingualText(section, pointer + stringLength, ref pointer);
         Log.Log.Debug("NTT: rating system, region = {0}, system = {1}", ratingRegion, ratingSystem);
@@ -326,13 +319,13 @@ namespace TvLibrary.Implementations.Dri.Parser
           Log.Log.Debug("NTT: rating system subtable descriptor, tag = 0x{0:x}, length = {1}", tag, length);
           if (pointer + length > endOfSection)
           {
-            throw new Exception(string.Format("NTT: invalid rating system subtable descriptor length {0}, pointer = {1}, end of section = {2}", length, pointer, endOfSection));
+            throw new Exception(string.Format("NTT: invalid rating system subtable descriptor length {0}, pointer = {1}, end of section = {2}, loop = {3}", length, pointer, endOfSection, i));
           }
           pointer += length;
         }
         if (pointer != endOfData)
         {
-          throw new Exception(string.Format("NTT: corruption detected at end of rating system data in loop {0}, pointer = {1}, end of section = {2}, end of data = {3}", i, pointer, endOfSection, endOfData));
+          throw new Exception(string.Format("NTT: corruption detected at end of rating system data, pointer = {0}, end of section = {1}, end of data = {2}, loop = {3}", pointer, endOfSection, endOfData, i));
         }
       }
     }
@@ -349,19 +342,19 @@ namespace TvLibrary.Implementations.Dri.Parser
       {
         if (pointer + 3 > endOfSection)
         {
-          throw new Exception(string.Format("NTT: detected currency system subtable regions defined {0} is invalid in loop {1}, pointer = {2}, end of section = {3}", regionsDefined, i, pointer, endOfSection));
+          throw new Exception(string.Format("NTT: detected currency system subtable regions defined {0} is invalid, pointer = {1}, end of section = {2}, loop = {3}", regionsDefined, pointer, endOfSection, i));
         }
         byte dataLength = section[pointer++];
         int endOfData = pointer + dataLength;
         if (endOfData > endOfSection)
         {
-          throw new Exception(string.Format("NTT: invalid currency system subtable data length {0}, pointer = {1}, end of section = {2}", dataLength, pointer, endOfSection));
+          throw new Exception(string.Format("NTT: invalid currency system subtable data length {0}, pointer = {1}, end of section = {2}, loop = {3}", dataLength, pointer, endOfSection, i));
         }
         byte currencyRegion = section[pointer++];
         byte stringLength = section[pointer++];
         if (pointer + stringLength > endOfSection)
         {
-          throw new Exception(string.Format("NTT: invalid currency system subtable string length {0}, pointer = {1}, end of section = {2}", stringLength, pointer, endOfSection));
+          throw new Exception(string.Format("NTT: invalid currency system subtable string length {0}, pointer = {1}, end of section = {2}, loop = {3}", stringLength, pointer, endOfSection, i));
         }
         string currencySystem = DecodeMultilingualText(section, pointer + stringLength, ref pointer);
         Log.Log.Debug("NTT: currency system, region = {0}, system = {1}", currencyRegion, currencySystem);
@@ -374,13 +367,13 @@ namespace TvLibrary.Implementations.Dri.Parser
           Log.Log.Debug("NTT: currency system subtable descriptor, tag = 0x{0:x}, length = {1}", tag, length);
           if (pointer + length > endOfSection)
           {
-            throw new Exception(string.Format("NTT: invalid currency system subtable descriptor length {0}, pointer = {1}, end of section = {2}", length, pointer, endOfSection));
+            throw new Exception(string.Format("NTT: invalid currency system subtable descriptor length {0}, pointer = {1}, end of section = {2}, loop = {3}", length, pointer, endOfSection, i));
           }
           pointer += length;
         }
         if (pointer != endOfData)
         {
-          throw new Exception(string.Format("NTT: corruption detected at end of currency system data in loop {0}, pointer = {1}, end of section = {2}, end of data = {3}", i, pointer, endOfSection, endOfData));
+          throw new Exception(string.Format("NTT: corruption detected at end of currency system data, pointer = {0}, end of section = {1}, end of data = {2}, loop = {3}", pointer, endOfSection, endOfData, i));
         }
       }
     }
@@ -397,7 +390,7 @@ namespace TvLibrary.Implementations.Dri.Parser
       {
         if (pointer + 5 > endOfSection)
         {
-          throw new Exception(string.Format("NTT: detected source name subtable number of SNT records {0} is invalid in loop {1}, pointer = {2}, end of section = {3}", numberOfSntRecords, i, pointer, endOfSection));
+          throw new Exception(string.Format("NTT: detected source name subtable number of SNT records {0} is invalid, pointer = {1}, end of section = {2}, loop = {3}", numberOfSntRecords, pointer, endOfSection, i));
         }
         bool isApplication = ((section[pointer++] & 0x80) != 0);
         int sourceId = (section[pointer] << 8) + section[pointer + 1];
@@ -405,7 +398,7 @@ namespace TvLibrary.Implementations.Dri.Parser
         byte nameLength = section[pointer++];
         if (pointer + nameLength > endOfSection)
         {
-          throw new Exception(string.Format("NTT: invalid source name subtable string length {0}, pointer = {1}, end of section = {2}", nameLength, pointer, endOfSection));
+          throw new Exception(string.Format("NTT: invalid source name subtable string length {0}, pointer = {1}, end of section = {2}, loop = {3}", nameLength, pointer, endOfSection, i));
         }
         string sourceName = DecodeMultilingualText(section, pointer + nameLength, ref pointer);
         Log.Log.Debug("NTT: source name, source ID = 0x{0:x}, name = {1}, is application = {2}", sourceId, sourceName, isApplication);
@@ -413,21 +406,21 @@ namespace TvLibrary.Implementations.Dri.Parser
         // subtable descriptors
         if (pointer >= endOfSection)
         {
-          throw new Exception(string.Format("NTT: invalid section length at source name subtable descriptor count, pointer = {0}, end of section = {1}", pointer, endOfSection));
+          throw new Exception(string.Format("NTT: invalid section length at source name subtable descriptor count, pointer = {0}, end of section = {1}, loop = {2}", pointer, endOfSection, i));
         }
         byte descriptorCount = section[pointer++];
         for (byte d = 0; d < descriptorCount; d++)
         {
           if (pointer + 2 > endOfSection)
           {
-            throw new Exception(string.Format("NTT: detected source name subtable descriptor count {0} is invalid in loop {1}, pointer = {2}, end of section = {3}", descriptorCount, d, pointer, endOfSection));
+            throw new Exception(string.Format("NTT: detected source name subtable descriptor count {0} is invalid, pointer = {1}, end of section = {2}, loop = {3}, inner loop = {4}", descriptorCount, pointer, endOfSection, i, d));
           }
           byte tag = section[pointer++];
           byte length = section[pointer++];
           Log.Log.Debug("NTT: source name subtable descriptor, tag = 0x{0:x}, length = {1}", tag, length);
           if (pointer + length > endOfSection)
           {
-            throw new Exception(string.Format("NTT: invalid source name subtable descriptor length {0}, pointer = {1}, end of section = {2}", length, pointer, endOfSection));
+            throw new Exception(string.Format("NTT: invalid source name subtable descriptor length {0}, pointer = {1}, end of section = {2}, loop = {3}, inner loop = {4}", length, pointer, endOfSection, i, d));
           }
           pointer += length;
         }
@@ -446,14 +439,14 @@ namespace TvLibrary.Implementations.Dri.Parser
       {
         if (pointer + 4 > endOfSection)
         {
-          throw new Exception(string.Format("NTT: detected map name subtable number of MNT records {0} is invalid in loop {1}, pointer = {2}, end of section = {3}", numberOfMntRecords, i, pointer, endOfSection));
+          throw new Exception(string.Format("NTT: detected map name subtable number of MNT records {0} is invalid, pointer = {1}, end of section = {2}, loop = {3}", numberOfMntRecords, pointer, endOfSection, i));
         }
         int vctId = (section[pointer] << 8) + section[pointer + 1];
         pointer += 2;
         byte mapNameLength = section[pointer++];
         if (pointer + mapNameLength > endOfSection)
         {
-          throw new Exception(string.Format("NTT: invalid map name subtable map name length {0}, pointer = {1}, end of section = {2}", mapNameLength, pointer, endOfSection));
+          throw new Exception(string.Format("NTT: invalid map name subtable map name length {0}, pointer = {1}, end of section = {2}, loop = {3}", mapNameLength, pointer, endOfSection, i));
         }
         string mapName = DecodeMultilingualText(section, pointer + mapNameLength, ref pointer);
         Log.Log.Debug("NTT: map name, VCT ID = 0x{0:x}, name = {1}", vctId, mapName);
@@ -461,21 +454,21 @@ namespace TvLibrary.Implementations.Dri.Parser
         // subtable descriptors
         if (pointer >= endOfSection)
         {
-          throw new Exception(string.Format("NTT: invalid section length at map name subtable descriptor count, pointer = {0}, end of section = {1}", pointer, endOfSection));
+          throw new Exception(string.Format("NTT: invalid section length at map name subtable descriptor count, pointer = {0}, end of section = {1}, loop = {2}", pointer, endOfSection, i));
         }
         byte descriptorCount = section[pointer++];
         for (byte d = 0; d < descriptorCount; d++)
         {
           if (pointer + 2 > endOfSection)
           {
-            throw new Exception(string.Format("NTT: detected map name subtable descriptor count {0} is invalid in loop {1}, pointer = {2}, end of section = {3}", descriptorCount, d, pointer, endOfSection));
+            throw new Exception(string.Format("NTT: detected map name subtable descriptor count {0} is invalid, pointer = {1}, end of section = {2}, loop = {3}, inner loop = {4}", descriptorCount, pointer, endOfSection, i, d));
           }
           byte tag = section[pointer++];
           byte length = section[pointer++];
           Log.Log.Debug("NTT: map name subtable descriptor, tag = 0x{0:x}, length = {1}", tag, length);
           if (pointer + length > endOfSection)
           {
-            throw new Exception(string.Format("NTT: invalid map name subtable descriptor length {0}, pointer = {1}, end of section = {2}", length, pointer, endOfSection));
+            throw new Exception(string.Format("NTT: invalid map name subtable descriptor length {0}, pointer = {1}, end of section = {2}, loop = {3}, inner loop = {4}", length, pointer, endOfSection, i, d));
           }
           pointer += length;
         }
