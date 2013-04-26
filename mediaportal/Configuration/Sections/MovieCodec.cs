@@ -189,9 +189,13 @@ namespace MediaPortal.Configuration.Sections
       {
         autoDecoderSettings.Checked = xmlreader.GetValueAsBool("movieplayer", "autodecodersettings", false);
         ForceSourceSplitter.Checked = xmlreader.GetValueAsBool("movieplayer", "forcesourcesplitter", false);
+        mpCheckBoxTS.Checked = xmlreader.GetValueAsBool("movieplayer", "usemoviecodects", false);
         UpdateDecoderSettings();
         audioRendererComboBox.SelectedItem = xmlreader.GetValueAsString("movieplayer", "audiorenderer",
                                                                         "Default DirectSound Device");
+        // Set Source Splitter check for first init to true.
+        string CheckSourceSplitter = xmlreader.GetValueAsString("movieplayer", "forcesourcesplitter", "");
+
         // Set codecs
         string videoCodec = xmlreader.GetValueAsString("movieplayer", "mpeg2videocodec", "");
         string h264videoCodec = xmlreader.GetValueAsString("movieplayer", "h264videocodec", "");
@@ -247,6 +251,11 @@ namespace MediaPortal.Configuration.Sections
         {
           ArrayList availableFileSyncFilters = FilterHelper.GetFilters(MediaType.Stream, MediaSubType.Null);
           splitterFileFilter = SetCodecBox(availableFileSyncFilters, "LAV Splitter", "", "");
+        }
+
+        if (CheckSourceSplitter == string.Empty && (splitterFilter == "LAV Splitter Source" || splitterFileFilter == "LAV Splitter"))
+        {
+          ForceSourceSplitter.Checked = true;
         }
 
         audioCodecComboBox.Text = audioCodec;
@@ -336,6 +345,7 @@ namespace MediaPortal.Configuration.Sections
       {
         xmlwriter.SetValueAsBool("movieplayer", "autodecodersettings", autoDecoderSettings.Checked);
         xmlwriter.SetValueAsBool("movieplayer", "forcesourcesplitter", ForceSourceSplitter.Checked);
+        xmlwriter.SetValueAsBool("movieplayer", "usemoviecodects", mpCheckBoxTS.Checked);
         xmlwriter.SetValue("movieplayer", "audiorenderer", audioRendererComboBox.Text);
         // Set codecs
         xmlwriter.SetValue("movieplayer", "mpeg2audiocodec", audioCodecComboBox.Text);

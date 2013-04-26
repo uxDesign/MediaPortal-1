@@ -25,6 +25,7 @@ using System.Drawing;
 using System.Windows.Forms;
 using MediaPortal.Dialogs;
 using MediaPortal.GUI.Library;
+using MediaPortal.GUI.Pictures;
 using MediaPortal.Player;
 using MediaPortal.Playlists;
 using MediaPortal.Video.Database;
@@ -117,6 +118,7 @@ namespace MediaPortal.GUI.Video
     private bool _immediateSeekIsRelative = true;
     private int _immediateSeekValue = 10;
     private bool _settingsLoaded;
+    private bool _usemoviecodects = false;
 
     public GUIVideoFullscreen()
     {
@@ -132,6 +134,7 @@ namespace MediaPortal.GUI.Video
       {
         _immediateSeekIsRelative = xmlreader.GetValueAsBool("movieplayer", "immediateskipstepsisrelative", true);
         _immediateSeekValue = xmlreader.GetValueAsInt("movieplayer", "immediateskipstepsize", 10);
+        _usemoviecodects = xmlreader.GetValueAsBool("movieplayer", "usemoviecodects", false);
       }
 
       SettingsLoaded = false;
@@ -160,10 +163,22 @@ namespace MediaPortal.GUI.Video
         key1 = "mytv";
         key2 = "mytv";
       }
+      if (_usemoviecodects && g_Player.CurrentFile.EndsWith(".ts"))
+      {
+        key1 = "movieplayer";
+        key2 = "movies";
+      }
 
       using (Profile.Settings xmlreader = new Profile.MPSettings())
       {
         m_iMaxTimeOSDOnscreen = 1000 * xmlreader.GetValueAsInt("movieplayer", "osdtimeout", 5);
+        bool BDInternalMenu = xmlreader.GetValueAsBool("bdplayer", "useInternalBDPlayer", true);
+
+        if (BDInternalMenu && g_Player.CurrentFile.EndsWith(".bdmv"))
+        {
+          key1 = "bdplayerAR";
+          key2 = "bdplayer";
+        }
 
         string aspectRatioText = xmlreader.GetValueAsString(key1, "defaultar", "Normal");
         GUIGraphicsContext.ARType = Util.Utils.GetAspectRatio(aspectRatioText);
@@ -418,23 +433,47 @@ namespace MediaPortal.GUI.Video
 
       switch (action.wID)
       {
-          // previous : play previous song from playlist
+          // previous : play previous song from playlist or previous item from MyPictures
+        case Action.ActionType.ACTION_PREV_CHAPTER:
         case Action.ActionType.ACTION_PREV_ITEM:
           {
-            //g_playlistPlayer.PlayPrevious();
+            if (g_Player.IsPicture)
+            {
+              GUISlideShow._slideDirection = -1;
+              g_Player.Stop();
+            }
+            else
+            {
+              //g_playlistPlayer.PlayNext();
+            }
           }
           break;
 
-          // next : play next song from playlist
+          // next : play next song from playlist or next item from MyPictures
+        case Action.ActionType.ACTION_NEXT_CHAPTER:
         case Action.ActionType.ACTION_NEXT_ITEM:
           {
-            //g_playlistPlayer.PlayNext();
+            if (g_Player.IsPicture)
+            {
+              GUISlideShow._slideDirection = 1;
+              g_Player.Stop();
+            }
+            else
+            {
+              //g_playlistPlayer.PlayNext();
+            }
           }
           break;
 
         case Action.ActionType.ACTION_PREVIOUS_MENU:
         case Action.ActionType.ACTION_SHOW_GUI:
           {
+            // Stop Video for MyPictures when going to home
+            if (g_Player.IsPicture)
+            {
+              GUISlideShow._slideDirection = 0;
+              g_Player.Stop();
+            }
             // switch back to the menu
             if ((g_Player.IsDVD) && (g_Player.IsDVDMenu))
             {
@@ -841,6 +880,10 @@ namespace MediaPortal.GUI.Video
 
         case Action.ActionType.ACTION_STOP:
           {
+            if (g_Player.IsPicture)
+            {
+              GUISlideShow._slideDirection = 0;
+            }
             Log.Info("GUIVideoFullscreen:stop");
             g_Player.Stop();
             GUIWindowManager.ShowPreviousWindow();
@@ -923,7 +966,7 @@ namespace MediaPortal.GUI.Video
         case Action.ActionType.ACTION_KEY_PRESSED:
           if (action.m_key != null)
           {
-            char chKey = (char)action.m_key.KeyChar;
+            char chKey = (char) action.m_key.KeyChar;
             if (chKey >= '0' && chKey <= '9') //Make sure it's only for the remote
             {
               if (g_Player.CanSeek)

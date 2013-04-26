@@ -298,6 +298,29 @@ namespace TvPlugin
       // replace g_player's ShowFullScreenWindowTV
       g_Player.ShowFullScreenWindowTV = ShowFullScreenWindowTVHandler;
 
+      // Delete tv thumbs from local thumbs folder and file existence cache
+      Log.Debug("TVHome.OnAdded: Delete thumb files in {0}", Thumbs.TVRecorded);
+      try
+      {
+        string[] strFiles = Directory.GetFiles(Thumbs.TVRecorded, @"*" + MediaPortal.Util.Utils.GetThumbExtension());
+        foreach (string strFile in strFiles)
+        {
+          try
+          {
+            File.Delete(strFile);
+            Utils.DoInsertNonExistingFileIntoCache(strFile);
+          }
+          catch (Exception delex)
+          {
+            Log.Error("TVHome.OnAdded: Cannot delete file {0} - {1}", strFile, delex.Message);
+          }
+        }
+      }
+      catch (Exception direx)
+      {
+        Log.Error("TVHome.OnAdded: Cannot get files from directory {0} - {1}", Thumbs.TVRecorded, direx.Message);
+      }
+
       try
       {
         // Make sure that we have valid hostname for the TV server
@@ -1081,7 +1104,7 @@ namespace TvPlugin
       {
         if (_card == null)
         {
-          User user = new User();
+          IUser user = new User();
           _card = TvServer.CardByIndex(user, 0);
         }
         return _card;
@@ -1090,19 +1113,6 @@ namespace TvPlugin
       {
         if (_card != null)
         {
-          bool stop = true;
-          if (value != null)
-          {
-            if (value.Id == _card.Id || value.Id == -1)
-            {
-              stop = false;
-            }
-          }
-          if (stop)
-          {
-            _card.User.Name = new User().Name;
-            _card.StopTimeShifting();
-          }
           _card = value;
         }
       }
@@ -3650,7 +3660,8 @@ namespace TvPlugin
         }
       }
 
-      if (!g_Player.Play(timeshiftFileName, mediaType))
+      // Force use TsReader
+      if (!g_Player.Play(timeshiftFileName, mediaType, null, false))
       {
         StopPlayback();
       }

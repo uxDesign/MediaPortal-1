@@ -110,6 +110,8 @@ namespace MediaPortal
     // Main objects used for creating and rendering the 3D scene
     protected PresentParameters presentParams = new PresentParameters(); // Parameters for CreateDevice/Reset
     private Caps graphicsCaps; // Caps for the device
+		private DeviceType _deviceType;
+		private CreateFlags _createFlags;
     internal static bool _fullscreenOverride = false;
     internal static bool _windowedOverride = false;
     internal static int _screenNumberOverride = -1; // 0 or higher means it is set
@@ -260,6 +262,7 @@ namespace MediaPortal
     protected bool useExclusiveDirectXMode;
     protected bool useEnhancedVideoRenderer;
     private bool _disableMouseEvents = false;
+    private bool _doNotWaitForVSync = false;
 
     [DllImport("winmm.dll")]
     internal static extern uint timeBeginPeriod(uint period);
@@ -322,6 +325,7 @@ namespace MediaPortal
         alwaysOnTopConfig = alwaysOnTop = xmlreader.GetValueAsBool("general", "alwaysontop", false);
         debugChangeDeviceHack = xmlreader.GetValueAsBool("debug", "changedevicehack", false);
         _disableMouseEvents = xmlreader.GetValueAsBool("remote", "CentareaJoystickMap", false);
+        _doNotWaitForVSync =  xmlreader.GetValueAsBool("debug", "donotwaitforvsync", false);
       }
 
       // When clipCursorWhenFullscreen is TRUE, the cursor is limited to
@@ -584,7 +588,7 @@ namespace MediaPortal
       graphicsSettings.WindowedMultisampleQuality = 0; //(int)bestDeviceCombo.MultiSampleQualityList[iQuality];
 
       graphicsSettings.WindowedVertexProcessingType = (VertexProcessingType)bestDeviceCombo.VertexProcessingTypeList[0];
-      graphicsSettings.WindowedPresentInterval = (PresentInterval)bestDeviceCombo.PresentIntervalList[0];
+      graphicsSettings.WindowedPresentInterval = _doNotWaitForVSync ? PresentInterval.Immediate : (PresentInterval)bestDeviceCombo.PresentIntervalList[0];
 
       return true;
     }
@@ -733,7 +737,7 @@ namespace MediaPortal
       graphicsSettings.FullscreenMultisampleQuality = 0;
       graphicsSettings.FullscreenVertexProcessingType =
         (VertexProcessingType)bestDeviceCombo.VertexProcessingTypeList[0];
-      graphicsSettings.FullscreenPresentInterval = PresentInterval.Default;
+      graphicsSettings.FullscreenPresentInterval = _doNotWaitForVSync ? PresentInterval.Immediate : PresentInterval.Default;
 
       return true;
     }
@@ -764,9 +768,31 @@ namespace MediaPortal
     /// </summary>
     public void BuildPresentParamsFromSettings(bool bwindowed)
     {
-      presentParams.BackBufferCount = 2;
+      bool isWindows7OrLater = OSInfo.OSInfo.Win7OrLater();
       presentParams.EnableAutoDepthStencil = false;
       presentParams.ForceNoMultiThreadedFlag = false;
+
+      if (isWindows7OrLater)
+      {
+        if (_doNotWaitForVSync)
+        {
+          // Allow performance measorements when DWM is not blocking Present()
+          presentParams.BackBufferCount = 20;
+          int hr = DXNative.FontEngineSetMaximumFrameLatency(20);
+          if (hr != 0)
+          {
+            Log.Info("D3D: BuildPresentParamsFromSettings failed to set max frame latency - error: {0}", hr);
+          }
+        }
+        else
+        {  
+          presentParams.BackBufferCount = 4;    // FLIPEX will benefit from more backbuffers
+        }
+      }
+      else
+      {
+        presentParams.BackBufferCount = 2;
+      }
 
       if (bwindowed)
       {
@@ -777,9 +803,9 @@ namespace MediaPortal
         presentParams.BackBufferWidth = ourRenderTarget.ClientRectangle.Right - ourRenderTarget.ClientRectangle.Left;
         presentParams.BackBufferHeight = ourRenderTarget.ClientRectangle.Bottom - ourRenderTarget.ClientRectangle.Top;
         presentParams.BackBufferFormat = graphicsSettings.BackBufferFormat;
-        presentParams.PresentationInterval = PresentInterval.Default;
+        presentParams.PresentationInterval = _doNotWaitForVSync ? PresentInterval.Immediate : PresentInterval.Default;
         presentParams.FullScreenRefreshRateInHz = 0;
-        presentParams.SwapEffect = SwapEffect.Discard;
+        presentParams.SwapEffect = isWindows7OrLater ? (SwapEffect)5 : SwapEffect.Discard; // 5 == FLIPEX
         presentParams.PresentFlag = PresentFlag.Video; //PresentFlag.LockableBackBuffer;
         presentParams.DeviceWindow = ourRenderTarget;
         presentParams.Windowed = true;
@@ -795,9 +821,9 @@ namespace MediaPortal
         presentParams.BackBufferWidth = graphicsSettings.DisplayMode.Width;
         presentParams.BackBufferHeight = graphicsSettings.DisplayMode.Height;
         presentParams.BackBufferFormat = graphicsSettings.DeviceCombo.BackBufferFormat;
-        presentParams.PresentationInterval = PresentInterval.Default;
+        presentParams.PresentationInterval = _doNotWaitForVSync ? PresentInterval.Immediate : PresentInterval.Default;
         presentParams.FullScreenRefreshRateInHz = graphicsSettings.DisplayMode.RefreshRate;
-        presentParams.SwapEffect = SwapEffect.Discard;
+        presentParams.SwapEffect = isWindows7OrLater ? (SwapEffect)5 : SwapEffect.Discard; // 5 == FLIPEX
         presentParams.PresentFlag = PresentFlag.Video; //|PresentFlag.LockableBackBuffer;
         presentParams.DeviceWindow = this;
         presentParams.Windowed = false;
@@ -977,9 +1003,6 @@ namespace MediaPortal
         }
 
         // Cache our local objects
-        //renderState = GUIGraphicsContext.DX9Device.RenderState;
-        //sampleState = GUIGraphicsContext.DX9Device.SamplerState;
-        //textureStates = GUIGraphicsContext.DX9Device.TextureState;
         // When moving from fullscreen to windowed mode, it is important to
         // adjust the window size after recreating the device rather than
         // beforehand to ensure that you get the window size you want.  For
@@ -1185,9 +1208,57 @@ namespace MediaPortal
       IntPtr prt = Marshal.AllocHGlobal(Marshal.SizeOf(displaymodeEx));
       Marshal.StructureToPtr(displaymodeEx, prt, true);
 
-      int hr = m_d3dEx.CreateDeviceEx(graphicsSettings.AdapterOrdinal, graphicsSettings.DevType,
+			Caps capabilities = Manager.GetDeviceCaps(GUIGraphicsContext.currentScreenNumber, DeviceType.Hardware);
+
+			// default to reference rasterizer and software vertex processing
+			_deviceType = DeviceType.Reference;
+			_createFlags = CreateFlags.SoftwareVertexProcessing;
+
+			// check if GPU supports rasterization in hardware
+			if (capabilities.DeviceCaps.SupportsHardwareRasterization)
+			{
+				Log.Info("D3D: GPU supports rasterization in hardware");
+				_deviceType = DeviceType.Hardware;
+			}
+
+			//  check if GPU supports shader model 2.0
+			if (capabilities.VertexShaderVersion >= new Version(2, 0) && capabilities.PixelShaderVersion >= new Version(2, 0))
+			{
+				// check if GPU supports rasterization, transformation, lightning in hardware
+				if (capabilities.DeviceCaps.SupportsHardwareTransformAndLight)
+				{
+					Log.Info("D3D: GPU supports rasterization, transformation, lightning in hardware");
+					_createFlags = CreateFlags.HardwareVertexProcessing;
+				}
+				// check if GPU supports rasterization, transformations, lighting, and shading in hardware
+				if (capabilities.DeviceCaps.SupportsPureDevice)
+				{
+					Log.Info("D3D: GPU supports rasterization, transformations, lighting, and shading in hardware");
+					_createFlags |= CreateFlags.PureDevice;
+				}
+			}
+
+			// Log some interesting capabilities
+			if (!capabilities.TextureCaps.SupportsPower2 && !capabilities.TextureCaps.SupportsNonPower2Conditional)
+			{
+				Log.Info("D3D: GPU unconditionally supports textures with dimensions that are not powers of two");
+			}
+			else if (capabilities.TextureCaps.SupportsPower2 && capabilities.TextureCaps.SupportsNonPower2Conditional)
+			{
+				Log.Info("D3D: GPU conditionally supports textures with dimensions that are not powers of two");
+			}
+			else if (capabilities.TextureCaps.SupportsPower2 && !capabilities.TextureCaps.SupportsNonPower2Conditional)
+			{
+				Log.Info("D3D: GPU does not support textures with dimensions that are not powers of two");
+			}
+
+			// TODO: check for any capabilities that would not allow MP to run
+
+      int hr = m_d3dEx.CreateDeviceEx(graphicsSettings.AdapterOrdinal, 
+																			_deviceType,
                                       windowed ? ourRenderTarget.Handle : this.Handle,
-                                      createFlags | CreateFlags.MultiThreaded | CreateFlags.FpuPreserve, ref param,
+                                      _createFlags | CreateFlags.MultiThreaded | CreateFlags.FpuPreserve, 
+																			ref param,
                                       windowed ? IntPtr.Zero : prt, out dev);
       GUIGraphicsContext.DX9Device = new Device(dev);
 
@@ -1374,7 +1445,7 @@ namespace MediaPortal
           byte[] resumeData = null;
           if ((idMovie >= 0) && (idFile >= 0))
           {
-            timeMovieStopped = VideoDatabase.GetMovieStopTimeAndResumeData(idFile, out resumeData);
+            timeMovieStopped = VideoDatabase.GetMovieStopTimeAndResumeData(idFile, out resumeData, g_Player.SetResumeBDTitleState);
             g_Player.PlayDVD(fileName);
             if (g_Player.Playing)
             {
@@ -2722,12 +2793,18 @@ namespace MediaPortal
 
     private void StartFrameClock()
     {
+      if (_doNotWaitForVSync)
+        return; 
+
       clockWatch.Reset();
       clockWatch.Start();
     }
 
     private void WaitForFrameClock()
     {
+      if (_doNotWaitForVSync)
+        return; 
+
       long milliSecondsLeft;
       long timeElapsed = 0;
 

@@ -140,7 +140,6 @@ namespace MediaPortal.Player
 
       using (Settings xmlreader = new MPSettings())
       {
-
         // get pre-defined filter setup
         filterConfig.bAutoDecoderSettings = xmlreader.GetValueAsBool("movieplayer", "autodecodersettings", false);
         filterConfig.bForceSourceSplitter = xmlreader.GetValueAsBool("movieplayer", "forcesourcesplitter", false);
@@ -167,6 +166,36 @@ namespace MediaPortal.Player
           if (xmlreader.GetValueAsBool("movieplayer", "usefilter" + i, false))
           {
             filterConfig.OtherFilters.Add(xmlreader.GetValueAsString("movieplayer", "filter" + i, "undefined"));
+          }
+          i++;
+        }
+      }
+      return filterConfig;
+    }
+
+    protected virtual FilterConfig GetFilterConfigurationBD()
+    {
+      using (Settings xmlreader = new MPSettings())
+      {
+        // get BD Audio/Video Codec configuration settings
+        filterConfig.Video = xmlreader.GetValueAsString("bdplayer", "mpeg2videocodec", "");
+        filterConfig.Audio = xmlreader.GetValueAsString("bdplayer", "mpeg2audiocodec", "");
+        filterConfig.VideoH264 = xmlreader.GetValueAsString("bdplayer", "h264videocodec", "");
+        filterConfig.VideoVC1 = xmlreader.GetValueAsString("bdplayer", "vc1videocodec", "");
+        filterConfig.VideoVC1I = xmlreader.GetValueAsString("bdplayer", "vc1videocodec", "");
+        filterConfig.AudioRenderer = xmlreader.GetValueAsString("bdplayer", "audiorenderer",
+                                                                "Default DirectSound Device");
+
+        // Clear Post Process filter.
+        filterConfig.OtherFilters.Clear();
+
+        // get BD post-processing filter setup
+        int i = 0;
+        while (xmlreader.GetValueAsString("bdplayer", "filter" + i, "undefined") != "undefined")
+        {
+          if (xmlreader.GetValueAsBool("bdplayer", "usefilter" + i, false))
+          {
+            filterConfig.OtherFilters.Add(xmlreader.GetValueAsString("bdplayer", "filter" + i, "undefined"));
           }
           i++;
         }
@@ -393,58 +422,65 @@ namespace MediaPortal.Player
 
     protected void RebuildMediaType(IPin pPin)
     {
-      //Detection if the Video Stream is VC-1 on output pin of the splitter
-      IEnumMediaTypes enumMediaTypesAudioVideo;
-      int hr = pPin.EnumMediaTypes(out enumMediaTypesAudioVideo);
-      while (true)
+      if (pPin != null)
       {
+        //Detection if the Video Stream is VC-1 on output pin of the splitter
+        IEnumMediaTypes enumMediaTypesAudioVideo;
+        int hr = pPin.EnumMediaTypes(out enumMediaTypesAudioVideo);
         AMMediaType[] mediaTypes = new AMMediaType[1];
         int typesFetched;
-        hr = enumMediaTypesAudioVideo.Next(1, mediaTypes, out typesFetched);
-        if (hr != 0 || typesFetched == 0) break;
-        if (mediaTypes[0].majorType == MediaType.Video)
+        PinInfo pinInfo;
+        pPin.QueryPinInfo(out pinInfo);
+
+        while (0 == enumMediaTypesAudioVideo.Next(1, mediaTypes, out typesFetched))
         {
-          if (mediaTypes[0].subType == MediaSubType.VC1)
+          if (typesFetched == 0)
+            break;
+
+          if (mediaTypes[0].majorType == MediaType.Video && !pinInfo.name.ToLowerInvariant().Contains("sub"))
           {
-            Log.Info("VideoPlayer9: found VC-1 video out pin");
-            vc1Codec = true;
+            if (mediaTypes[0].subType == MediaSubType.VC1)
+            {
+              Log.Info("VideoPlayer9: found VC-1 video out pin");
+              vc1Codec = true;
+            }
+            if (mediaTypes[0].subType == MediaSubType.H264 || mediaTypes[0].subType == MediaSubType.AVC1)
+            {
+              Log.Info("VideoPlayer9: found H264 video out pin");
+              h264Codec = true;
+            }
+            if (mediaTypes[0].subType == MediaSubType.XVID || mediaTypes[0].subType == MediaSubType.xvid ||
+                mediaTypes[0].subType == MediaSubType.dx50 || mediaTypes[0].subType == MediaSubType.DX50 ||
+                mediaTypes[0].subType == MediaSubType.divx || mediaTypes[0].subType == MediaSubType.DIVX)
+            {
+              Log.Info("VideoPlayer9: found XVID video out pin");
+              xvidCodec = true;
+            }
+            MediatypeVideo = true;
           }
-          if (mediaTypes[0].subType == MediaSubType.H264 || mediaTypes[0].subType == MediaSubType.AVC1)
+          else if (mediaTypes[0].majorType == MediaType.Audio)
           {
-            Log.Info("VideoPlayer9: found H264 video out pin");
-            h264Codec = true;
+            //Detection if the Audio Stream is AAC on output pin of the splitter
+            if (mediaTypes[0].subType == MediaSubType.LATMAAC || mediaTypes[0].subType == MediaSubType.AAC)
+            {
+              Log.Info("VideoPlayer9: found AAC Audio out pin");
+              aacCodec = true;
+            }
+            if (mediaTypes[0].subType == MediaSubType.LATMAACLAF)
+            {
+              Log.Info("VideoPlayer9: found AAC LAVF Audio out pin");
+              aacCodecLav = true;
+            }
+            MediatypeAudio = true;
           }
-          if (mediaTypes[0].subType == MediaSubType.XVID || mediaTypes[0].subType == MediaSubType.xvid ||
-              mediaTypes[0].subType == MediaSubType.dx50 || mediaTypes[0].subType == MediaSubType.DX50 ||
-              mediaTypes[0].subType == MediaSubType.divx || mediaTypes[0].subType == MediaSubType.DIVX)
+          else if (mediaTypes[0].majorType == MediaType.Subtitle)
           {
-            Log.Info("VideoPlayer9: found XVID video out pin");
-            xvidCodec = true;
+            MediatypeSubtitle = true;
           }
-          MediatypeVideo = true;
         }
-        else if (mediaTypes[0].majorType == MediaType.Audio)
-        {
-          //Detection if the Audio Stream is AAC on output pin of the splitter
-          if (mediaTypes[0].subType == MediaSubType.LATMAAC || mediaTypes[0].subType == MediaSubType.AAC)
-          {
-            Log.Info("VideoPlayer9: found AAC Audio out pin");
-            aacCodec = true;
-          }
-          if (mediaTypes[0].subType == MediaSubType.LATMAACLAF)
-          {
-            Log.Info("VideoPlayer9: found AAC LAVF Audio out pin");
-            aacCodecLav = true;
-          }
-          MediatypeAudio = true;
-        }
-        else if (mediaTypes[0].majorType == MediaType.Subtitle)
-        {
-          MediatypeSubtitle = true;
-        }
+        DirectShowUtil.ReleaseComObject(enumMediaTypesAudioVideo);
+        enumMediaTypesAudioVideo = null;
       }
-      DirectShowUtil.ReleaseComObject(enumMediaTypesAudioVideo);
-      enumMediaTypesAudioVideo = null;
     }
 
     protected void LoadLAVSplitter(string LAVFilter)
@@ -497,10 +533,17 @@ namespace MediaPortal.Player
         //Get video/audio Info
         _mediaInfo = new MediaInfoWrapper(m_strCurrentFile);
 
+        GUIMessage msg;
+        if (extension == ".mpls" || extension == ".bdmv")
+        {
+          filterConfig.bForceSourceSplitter = false;
+          filterConfig = GetFilterConfigurationBD();
+        }
+
         //Manually add codecs based on file extension if not in auto-settings
         // switch back to directx fullscreen mode
         Log.Info("VideoPlayer9: Enabling DX9 exclusive mode");
-        GUIMessage msg = new GUIMessage(GUIMessage.MessageType.GUI_MSG_SWITCH_FULL_WINDOWED, 0, 0, 0, 1, 0, null);
+        msg = new GUIMessage(GUIMessage.MessageType.GUI_MSG_SWITCH_FULL_WINDOWED, 0, 0, 0, 1, 0, null);
         GUIWindowManager.SendMessage(msg);
 
         // add the VMR9 in the graph
@@ -515,9 +558,6 @@ namespace MediaPortal.Player
         {
           AudioOnly = true;
         }
-
-        if (extension == ".mpls" || extension == ".bdmv")
-          filterConfig.bForceSourceSplitter = false;
 
         if (filterConfig.strsplitterfilter == LAV_SPLITTER_FILTER_SOURCE && filterConfig.bForceSourceSplitter)
         {
@@ -1169,9 +1209,9 @@ namespace MediaPortal.Player
       //Detection of VC1 Video if Splitter detection Failed, true for all type except .bdmv .mpls
       else if (string.Equals(_mediaInfo.VideoCodec, VC1Codec))
         vc1Codec = true;
-      //Detection of AAC Audio
-      if (_mediaInfo.AudioCodec.Contains(AACCodec))
-        aacCodec = true;
+      //Detection of AAC Audio //Disable the Detection to enable correct audio filter detection rules.
+      //if (_mediaInfo.AudioCodec.Contains(AACCodec))
+        //aacCodec = true;
       if (_mediaInfo.VideoCodec.Equals("AVC"))
         h264Codec = true;
       if (_mediaInfo.VideoCodec.Equals("XVID") || _mediaInfo.VideoCodec.Equals("DIVX") || _mediaInfo.VideoCodec.Equals("DX50"))
@@ -1420,7 +1460,7 @@ namespace MediaPortal.Player
           if (ppFilter.Value != null) DirectShowUtil.ReleaseComObject(ppFilter.Value);//, 5000);
         }
         PostProcessFilterMPAudio.Clear();
-        Log.Info("VideoPlayer9: Cleanup MP Audio Swither");
+        Log.Info("VideoPlayer9: Cleanup PostProcess MediaPortal AudioSwitcher");
 
         if (_FFDShowAudio != null)
         {
@@ -1432,7 +1472,7 @@ namespace MediaPortal.Player
         {
           DirectShowUtil.ReleaseComObject(_audioSwitcher);
           _audioSwitcher = null;
-          Log.Info("VideoPlayer9: Cleanup _AudioSwitcher");
+          Log.Info("VideoPlayer9: Cleanup MediaPortal AudioSwitcher (for external audio files)");
         }
 
         #endregion
@@ -1458,7 +1498,6 @@ namespace MediaPortal.Player
         GC.Collect();
         GC.Collect();
         GC.Collect();
-        GC.WaitForPendingFinalizers();
 
         GUIGraphicsContext.form.Invalidate(true);
         m_state = PlayState.Init;
