@@ -281,7 +281,7 @@ namespace MediaPortal.GUI.Music
 
     protected MusicSort.SortMethod GetSortMethod(string s)
     {
-      switch (s.Trim().ToLower())
+      switch (s.Trim().ToLowerInvariant())
       {
         case "name":
           return MusicSort.SortMethod.Name;
@@ -1755,7 +1755,7 @@ namespace MediaPortal.GUI.Music
         return true;
       }
 
-      switch (selection.ToLower())
+      switch (selection.ToLowerInvariant())
       {
         case "timesplayed":
           return false;

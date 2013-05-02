@@ -147,6 +147,14 @@ namespace MediaPortal.MusicPlayer.BASS
       get { return _disposed; }
     }
 
+    /// <summary>
+    /// Returns the FileType of the Stream
+    /// </summary>
+    public FileType Filetype
+    {
+      get { return _fileType; }
+    }
+
     #region Playback Related Properties
 
     /// <summary>
@@ -207,8 +215,7 @@ namespace MediaPortal.MusicPlayer.BASS
     }
 
     #endregion
-
-
+    
     #endregion
 
     #region Constructor
@@ -869,12 +876,12 @@ namespace MediaPortal.MusicPlayer.BASS
       {
         foreach (string item in tags)
         {
-          if (item.ToLower().StartsWith("icy-name:"))
+          if (item.ToLowerInvariant().StartsWith("icy-name:"))
           {
             GUIPropertyManager.SetProperty("#Play.Current.Album", item.Substring(9));
           }
 
-          if (item.ToLower().StartsWith("icy-genre:"))
+          if (item.ToLowerInvariant().StartsWith("icy-genre:"))
           {
             GUIPropertyManager.SetProperty("#Play.Current.Genre", item.Substring(10));
           }
