@@ -25,23 +25,20 @@ using TagLib;
 namespace MediaPortal.TagReader
 {
   /// <summary>
-  /// This class will manage all tagreader plugins
-  /// See the ITag.cs for more information about tagreader plugins
-  /// It will load all tagreader plugins and when Mediaportal wants information for a given music file
-  /// it will check which tagreader plugin supports it and ask it to read the information
-  /// which is then returned to mediaportal
+  /// This class uses taglib-sharp to read the tags from a given music file
   /// </summary>
   public class TagReader
   {
-    /// <summary>
-    /// Constructor
-    /// This will load all tagreader plugins from plugins/tagreaders
-    /// </summary>
+    #region ctor
+
     static TagReader() { }
+
+    #endregion
+
+    #region Public Methods
 
     /// <summary>
     /// This method is called by mediaportal when it wants information for a music file
-    /// The method will check which tagreader supports the file and ask it to extract the information from it
     /// </summary>
     /// <param name="strFile">filename of the music file</param>
     /// <returns>
@@ -50,7 +47,8 @@ namespace MediaPortal.TagReader
     /// </returns>
     public static MusicTag ReadTag(string strFile)
     {
-      // Read Cue info
+      // If a "Fake Track" from a Cue file is processed, then we get information from the Base file used
+      // inside the Cue
       if (CueUtil.isCueFakeTrackFile(strFile))
       {
         try
@@ -81,18 +79,16 @@ namespace MediaPortal.TagReader
         }
 
         MusicTag musictag = new MusicTag();
-        string[] artists = tag.Tag.Performers;
-        if (artists.Length > 0)
-        {
-          musictag.Artist = String.Join(";", artists).Trim(trimChars);
-          // The AC/DC exception
-          if (musictag.Artist.Contains("AC;DC"))
-          {
-            musictag.Artist = musictag.Artist.Replace("AC;DC", "AC/DC");
-          }
-        }
+
+        #region Tags
 
         musictag.Album = tag.Tag.Album == null ? "" : tag.Tag.Album.Trim(trimChars);
+        musictag.AlbumSort = tag.Tag.AlbumSort ?? "";
+        if (musictag.AlbumSort.Length == 0)
+        {
+          musictag.AlbumSort = musictag.Album;
+        }
+        
         musictag.HasAlbumArtist = false;
         string[] albumartists = tag.Tag.AlbumArtists;
         if (albumartists.Length > 0)
@@ -105,36 +101,90 @@ namespace MediaPortal.TagReader
             musictag.AlbumArtist = musictag.AlbumArtist.Replace("AC;DC", "AC/DC");
           }
         }
-        musictag.BitRate = tag.Properties.AudioBitrate;
+        musictag.AlbumArtistSort = tag.Tag.FirstAlbumArtistSort ?? "";
+        if (musictag.AlbumArtistSort.Length == 0)
+        {
+          musictag.AlbumArtistSort = musictag.AlbumArtist;
+        }
+
+        string[] artists = tag.Tag.Performers;
+        if (artists.Length > 0)
+        {
+          musictag.Artist = String.Join(";", artists).Trim(trimChars);
+          // The AC/DC exception
+          if (musictag.Artist.Contains("AC;DC"))
+          {
+            musictag.Artist = musictag.Artist.Replace("AC;DC", "AC/DC");
+          }
+        }
+        musictag.ArtistSort = tag.Tag.FirstPerformerSort ?? "";
+        if (musictag.ArtistSort.Length == 0)
+        {
+          musictag.ArtistSort = musictag.Artist;
+        }
+
+        musictag.AmazonId = tag.Tag.AmazonId ?? "";
+        musictag.BPM = (int)tag.Tag.BeatsPerMinute;
         musictag.Comment = tag.Tag.Comment == null ? "" : tag.Tag.Comment.Trim(trimChars);
+
         string[] composer = tag.Tag.Composers;
         if (composer.Length > 0)
         {
           musictag.Composer = string.Join(";", composer).Trim(trimChars);
         }
+        musictag.ComposerSort = tag.Tag.FirstComposerSort ?? "";
+        if (musictag.ComposerSort.Length == 0)
+        {
+          musictag.ComposerSort = musictag.Composer;
+        }
+
         musictag.Conductor = tag.Tag.Conductor == null ? "" : tag.Tag.Conductor.Trim(trimChars);
-        IPicture[] pics = new IPicture[] { };
+        musictag.Copyright = tag.Tag.Copyright ?? "";
+        
+          IPicture[] pics = new IPicture[] { };
         pics = tag.Tag.Pictures;
         if (pics.Length > 0)
         {
           musictag.CoverArtImageBytes = pics[0].Data.Data;
         }
-        musictag.Duration = (int)tag.Properties.Duration.TotalSeconds;
-        musictag.FileName = strFile;
-        musictag.FileType = tag.MimeType.Substring(tag.MimeType.IndexOf("/") + 1);
+
+
+        musictag.DiscID = (int)tag.Tag.Disc;
+        musictag.DiscTotal = (int)tag.Tag.DiscCount;
+
         string[] genre = tag.Tag.Genres;
         if (genre.Length > 0)
         {
           musictag.Genre = String.Join(";", genre).Trim(trimChars);
         }
-        string lyrics = tag.Tag.Lyrics == null ? "" : tag.Tag.Lyrics.Trim(trimChars);
+
+        musictag.Grouping = tag.Tag.Grouping ?? "";
+        musictag.MusicBrainzArtistId = tag.Tag.MusicBrainzArtistId ?? "";
+        musictag.MusicBrainzDiscId = tag.Tag.MusicBrainzDiscId ?? "";
+        musictag.MusicBrainzReleaseArtistId = tag.Tag.MusicBrainzReleaseArtistId ?? "";
+        musictag.MusicBrainzReleaseCountry = tag.Tag.MusicBrainzReleaseCountry ?? "";
+        musictag.MusicBrainzReleaseId = tag.Tag.MusicBrainzReleaseCountry ?? "";
+        musictag.MusicBrainzReleaseStatus = tag.Tag.MusicBrainzReleaseStatus ?? "";
+        musictag.MusicBrainzReleaseTrackId = tag.Tag.MusicBrainzTrackId ?? "";
+        musictag.MusicBrainzReleaseType = tag.Tag.MusicBrainzReleaseType ?? "";
+        musictag.MusicIpid = tag.Tag.MusicIpId ?? "";
+        musictag.Lyrics = tag.Tag.Lyrics == null ? "" : tag.Tag.Lyrics.Trim(trimChars);
+        musictag.ReplayGainTrack = tag.Tag.ReplayGainTrack ?? "";
+        musictag.ReplayGainTrackPeak = tag.Tag.ReplayGainTrackPeak ?? "";
+        musictag.ReplayGainAlbum = tag.Tag.ReplayGainAlbum ?? "";
+        musictag.ReplayGainAlbumPeak = tag.Tag.ReplayGainAlbumPeak ?? "";
         musictag.Title = tag.Tag.Title == null ? "" : tag.Tag.Title.Trim(trimChars);
-        // Prevent Null Ref execption, when Title is not set
         musictag.Track = (int)tag.Tag.Track;
         musictag.TrackTotal = (int)tag.Tag.TrackCount;
-        musictag.DiscID = (int)tag.Tag.Disc;
-        musictag.DiscTotal = (int)tag.Tag.DiscCount;
-        musictag.Codec = tag.Properties.Description;
+        musictag.Year = (int)tag.Tag.Year;
+
+        #endregion
+
+
+        #region File Properties
+
+        musictag.BitRate = tag.Properties.AudioBitrate;
+
         if (tag.MimeType == "taglib/mp3")
         {
           musictag.BitRateMode = tag.Properties.Description.IndexOf("VBR") > -1 ? "VBR" : "CBR";
@@ -143,15 +193,17 @@ namespace MediaPortal.TagReader
         {
           musictag.BitRateMode = "";
         }
-        musictag.BPM = (int)tag.Tag.BeatsPerMinute;
-        musictag.Channels = tag.Properties.AudioChannels;
-        musictag.SampleRate = tag.Properties.AudioSampleRate;
-        musictag.Year = (int)tag.Tag.Year;
-        musictag.ReplayGainTrack = tag.Tag.ReplayGainTrack ?? "";
-        musictag.ReplayGainTrackPeak = tag.Tag.ReplayGainTrackPeak ?? "";
-        musictag.ReplayGainAlbum = tag.Tag.ReplayGainAlbum ?? "";
-        musictag.ReplayGainAlbumPeak = tag.Tag.ReplayGainAlbumPeak ?? "";
 
+        musictag.Channels = tag.Properties.AudioChannels;
+        musictag.Codec = tag.Properties.Description;
+        musictag.Duration = (int)tag.Properties.Duration.TotalSeconds;
+        musictag.FileName = strFile;
+        musictag.FileType = tag.MimeType.Substring(tag.MimeType.IndexOf("/") + 1);
+        musictag.SampleRate = tag.Properties.AudioSampleRate;
+
+        #endregion
+
+        #region Ratings 
         if (tag.MimeType == "taglib/mp3")
         {
           bool foundPopm = false;
@@ -272,6 +324,8 @@ namespace MediaPortal.TagReader
           }
         }
 
+        #endregion
+
         // if we didn't get a title, use the Filename without extension to prevent the file to appear as "unknown"
         if (musictag.Title == "")
         {
@@ -292,6 +346,13 @@ namespace MediaPortal.TagReader
       return null;
     }
 
+    /// <summary>
+    /// Write Lyrics to File
+    /// Used by Lyrics Plugin
+    /// </summary>
+    /// <param name="strFile"></param>
+    /// <param name="strLyrics"></param>
+    /// <returns></returns>
     public static bool WriteLyrics(string strFile, string strLyrics)
     {
       if (!IsAudio(strFile))
@@ -318,6 +379,15 @@ namespace MediaPortal.TagReader
       return false;
     }
 
+    #endregion
+
+    #region Private Methods
+
+    /// <summary>
+    /// Checks, if the file has an extension supported by taglib-sharp
+    /// </summary>
+    /// <param name="fileName"></param>
+    /// <returns></returns>
     private static bool IsAudio(string fileName)
     {
       string ext = System.IO.Path.GetExtension(fileName).ToLowerInvariant();
@@ -344,5 +414,7 @@ namespace MediaPortal.TagReader
 
       return false;
     }
+
+    #endregion
   }
 }
