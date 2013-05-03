@@ -69,6 +69,7 @@ namespace MediaPortal.TagReader
       ReplayGainTrackPeak = string.Empty;
       ReplayGainTrack = string.Empty;
       Title = string.Empty;
+      TitleSort = string.Empty;
       TimesPlayed = 0;
       TrackTotal = 0;
       Track = 0;
@@ -133,6 +134,7 @@ namespace MediaPortal.TagReader
       ReplayGainTrackPeak = string.Empty;
       ReplayGainTrack = string.Empty;
       Title = string.Empty;
+      TitleSort = string.Empty;
       TimesPlayed = 0;
       TrackTotal = 0;
       Track = 0;
@@ -193,6 +195,7 @@ namespace MediaPortal.TagReader
       ReplayGainTrackPeak = tag.ReplayGainTrackPeak;
       ReplayGainTrack = tag.ReplayGainTrack;
       Title = tag.Title;
+      TitleSort = tag.TitleSort;
       TimesPlayed = tag.TimesPlayed;
       TrackTotal = tag.TrackTotal;
       Track = tag.Track;
@@ -260,6 +263,7 @@ namespace MediaPortal.TagReader
       ReplayGainTrackPeak = string.Empty;
       ReplayGainTrack = string.Empty;
       Title = string.Empty;
+      TitleSort = string.Empty;
       TimesPlayed = 0;
       TrackTotal = 0;
       Track = 0;
@@ -491,6 +495,11 @@ namespace MediaPortal.TagReader
     /// Property to get/set the Title 
     /// </summary>
     public string Title { get; set; }
+
+    /// <summary>
+    /// Property to get/set the TitleSort 
+    /// </summary>
+    public string TitleSort { get; set; }
 
     /// <summary>
     /// Property to get/set the number of times this file has been played

@@ -174,6 +174,11 @@ namespace MediaPortal.TagReader
         musictag.ReplayGainAlbum = tag.Tag.ReplayGainAlbum ?? "";
         musictag.ReplayGainAlbumPeak = tag.Tag.ReplayGainAlbumPeak ?? "";
         musictag.Title = tag.Tag.Title == null ? "" : tag.Tag.Title.Trim(trimChars);
+        musictag.TitleSort = tag.Tag.TitleSort ?? "";
+        if (musictag.TitleSort.Length == 0)
+        {
+          musictag.TitleSort = musictag.Title;
+        }
         musictag.Track = (int)tag.Tag.Track;
         musictag.TrackTotal = (int)tag.Tag.TrackCount;
         musictag.Year = (int)tag.Tag.Year;
