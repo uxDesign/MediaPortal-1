@@ -336,6 +336,7 @@ namespace MediaPortal.TagReader
         {
           Log.Warn("TagReader: Empty Title found in file: {0}. Please retag.", strFile);
           musictag.Title = System.IO.Path.GetFileNameWithoutExtension(strFile);
+          musictag.TitleSort = musictag.Title;
         }
 
         return musictag;
