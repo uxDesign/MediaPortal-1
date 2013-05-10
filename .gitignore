@@ -7,3 +7,6 @@ obj
 *.resharper
 *.user
 _ReSharper.*
+[Pp]ackages
+NuGet.exe
+
