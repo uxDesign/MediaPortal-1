@@ -42,14 +42,6 @@
 // For more details for memory leak detection see the alloctracing.h header
 #include "..\..\alloctracing.h"
 
-#define MAX_AUD_BUF_SIZE 1024
-#define MAX_VID_BUF_SIZE 640
-#define MAX_SUB_BUF_SIZE 640
-#define BUFFER_LENGTH 0x1000
-#define READ_SIZE (65536)
-#define MIN_READ_SIZE (READ_SIZE/8)
-#define MIN_READ_SIZE_UNC (READ_SIZE/4)
-#define INITIAL_READ_SIZE (READ_SIZE * 512)
 
 //Macro borrowed from MPC-HC/LAV splitter...
 #define MOVE_TO_H264_START_CODE(b, e) while(b <= e-4 && !((*(DWORD *)b == 0x01000000) || ((*(DWORD *)b & 0x00FFFFFF) == 0x00010000))) b++; if((b <= e-4) && *(DWORD *)b == 0x01000000) b++;
@@ -142,7 +134,10 @@ CDeMultiplexer::CDeMultiplexer(CTsDuration& duration,CTsReaderFilter& filter)
 
   m_mpegPesParser = new CMpegPesParser();
   
-  LogDebug("============================================================");
+  LogDebug(" ");
+  LogDebug("=================== New filter instance =========================");
+  LogDebug("  Logging format: Date Time [InstanceID] [ThreadID] Message....  ");
+  LogDebug("=================================================================");
   LogDebug("demux: Start file read thread");
   StartThread();
 }
@@ -546,7 +541,10 @@ void CDeMultiplexer::FlushVideo()
   m_bVideoAtEof=false;
   m_MinVideoDelta = 10.0 ;
   _InterlockedAnd(&m_AVDataLowCount, 0) ;
-  m_filter.m_bRenderingClockTooFast=false ;
+  if (!m_bShuttingDown)
+  {
+    m_filter.m_bRenderingClockTooFast=false ;
+  }
   m_bSetVideoDiscontinuity=true;
   m_bVideoSampleLate=false;
   
@@ -584,7 +582,10 @@ void CDeMultiplexer::FlushAudio()
   m_bAudioAtEof = false;
   m_MinAudioDelta = 10.0;
   _InterlockedAnd(&m_AVDataLowCount, 0);
-  m_filter.m_bRenderingClockTooFast=false;
+  if (!m_bShuttingDown)
+  {
+    m_filter.m_bRenderingClockTooFast=false;
+  }
   m_bSetAudioDiscontinuity=true;
   m_bAudioSampleLate=false;
 
@@ -1053,32 +1054,26 @@ int CDeMultiplexer::ReadFromFile(bool isAudio, bool isVideo)
   CAutoLock lock (&m_sectionRead);
   byte buffer[READ_SIZE];
   int dwReadBytes=0;
-  bool result=false;
   //if we are playing a RTSP stream
   if (m_reader->IsBuffer())
-  {
-    // and, the current buffer holds data
-    int nBytesToRead = m_reader->HasData();
-    if (nBytesToRead > sizeof(buffer))
+  {    
+    if (m_reader->HasData() < 0)
     {
-        nBytesToRead=sizeof(buffer);
+      //Buffer not running
+      return -1;
+    }      
+    //Read raw data from the buffer
+    m_reader->Read(buffer, sizeof(buffer), (DWORD*)&dwReadBytes);
+    if (dwReadBytes < sizeof(buffer))
+    {
+      m_bAudioAtEof = true;
+      m_bVideoAtEof = true;
     }
-    else
+    if (dwReadBytes > 0)
     {
-        m_bAudioAtEof = true ;
-        m_bVideoAtEof = true ;
-    }
-    if (nBytesToRead)
-    {
-      //then read raw data from the buffer
-      m_reader->Read(buffer, nBytesToRead, (DWORD*)&dwReadBytes);
-      if (dwReadBytes > 0)
-      {
-        //yes, then process the raw data
-        result=true;
-        OnRawData2(buffer,(int)dwReadBytes);
-        m_LastDataFromRtsp = GET_TIME_NOW();
-      }
+      //yes, then process the raw data
+      OnRawData2(buffer,(int)dwReadBytes);
+      m_LastDataFromRtsp = GET_TIME_NOW();
     }
     else
     {
@@ -1136,6 +1131,8 @@ int CDeMultiplexer::ReadFromFile(bool isAudio, bool isVideo)
   //Failed to read any data
   return 0;
 }
+
+
 /// This method gets called via ReadFile() when a new TS packet has been received
 /// if will :
 ///  - decode any new pat/pmt/sdt
@@ -1296,8 +1293,8 @@ void CDeMultiplexer::FillAudio(CTsHeader& header, byte* tsPacket)
       //Discard this new/current PES packet
       m_AudioValidPES=false;  
       m_bSetAudioDiscontinuity=true;
-      //LogDebug("PES audio 0-0-1 fail");
-      LogDebug("PES audio 0-0-1 fail, %x-%x-%x-%x-%x-%x-%x-%x", tsPacket[posn+0], tsPacket[posn+1], tsPacket[posn+2], tsPacket[posn+3], tsPacket[posn+4], tsPacket[posn+5], tsPacket[posn+6], tsPacket[posn+7]);
+      LogDebug("PES audio 0-0-1 fail");
+      //LogDebug("PES audio 0-0-1 fail, %x-%x-%x-%x-%x-%x-%x-%x", tsPacket[posn+0], tsPacket[posn+1], tsPacket[posn+2], tsPacket[posn+3], tsPacket[posn+4], tsPacket[posn+5], tsPacket[posn+6], tsPacket[posn+7]);
       if (!m_filter.m_bDisablePESFailFlush || !m_filter.m_bStreamCompensated)
       {
         //Flushing is delegated to CDeMultiplexer::ThreadProc()
@@ -1604,8 +1601,8 @@ void CDeMultiplexer::FillVideoH264(CTsHeader& header, byte* tsPacket)
         || ((start[6] & 0x20)==0x20) //Payload scrambled
        )
     {
-      //LogDebug("PES H264 0-0-1 fail");
-      LogDebug("PES H264 0-0-1 fail, %x-%x-%x-%x-%x-%x-%x-%x", start[0], start[1], start[2], start[3], start[4], start[5], start[6], start[7]);
+      LogDebug("PES H264 0-0-1 fail");
+      //LogDebug("PES H264 0-0-1 fail, %x-%x-%x-%x-%x-%x-%x-%x", start[0], start[1], start[2], start[3], start[4], start[5], start[6], start[7]);
       m_VideoValidPES=false;
       m_mVideoValidPES = false;
       m_p->rtStart = Packet::INVALID_TIME;
@@ -2176,8 +2173,8 @@ void CDeMultiplexer::FillVideoMPEG2(CTsHeader& header, byte* tsPacket)
         || ((start[6] & 0x20)==0x20) //Payload scrambled
        )
     {
-      //LogDebug("PES MPEG2 0-0-1 fail");
-      LogDebug("PES MPEG2 0-0-1 fail, %x-%x-%x-%x-%x-%x-%x-%x", start[0], start[1], start[2], start[3], start[4], start[5], start[6], start[7]);
+      LogDebug("PES MPEG2 0-0-1 fail");
+      //LogDebug("PES MPEG2 0-0-1 fail, %x-%x-%x-%x-%x-%x-%x-%x", start[0], start[1], start[2], start[3], start[4], start[5], start[6], start[7]);
       m_VideoValidPES = false;
       m_mVideoValidPES = false;
       m_p->rtStart = Packet::INVALID_TIME;
@@ -2681,11 +2678,11 @@ int CDeMultiplexer::GetVideoBuffCntFt(double* frameTime)
 bool CDeMultiplexer::CheckPrefetchState(bool isNormal, bool isForced)
 {  
   //Check for near-overflow conditions first
-  if (m_filter.GetAudioPin()->IsConnected() && (m_vecAudioBuffers.size() > (MAX_AUD_BUF_SIZE - 50)))
+  if (m_filter.GetAudioPin()->IsConnected() && (m_vecAudioBuffers.size() > AUD_BUF_SIZE_PREFETCH_LIM))
   {
     return false;
   }
-  if (m_filter.GetVideoPin()->IsConnected() && (m_vecVideoBuffers.size() > (MAX_VID_BUF_SIZE - 20)))
+  if (m_filter.GetVideoPin()->IsConnected() && (m_vecVideoBuffers.size() > VID_BUF_SIZE_PREFETCH_LIM))
   {
     return false;
   }
@@ -2714,6 +2711,17 @@ bool CDeMultiplexer::CheckPrefetchState(bool isNormal, bool isForced)
   return false;
 }
 
+int CDeMultiplexer::GetRTSPBufferSize()
+{
+  if (m_reader)
+  {
+    if (m_reader->IsBuffer()) //RTSP mode
+    {
+      return (m_reader->HasData());
+    }
+  }
+  return -1;
+}
 void CDeMultiplexer::GetBufferCounts(int* ACnt, int* VCnt)
 {
   *ACnt = m_vecAudioBuffers.size();
@@ -3187,6 +3195,7 @@ void CDeMultiplexer::ThreadProc()
   DWORD timeNow = GET_TIME_NOW();
   DWORD  lastFlushTime = timeNow;
   DWORD  lastFileReadTime = timeNow;
+  int sizeRead = 0;
 
   ::SetThreadPriority(GetCurrentThread(),THREAD_PRIORITY_NORMAL);
   do
@@ -3217,14 +3226,22 @@ void CDeMultiplexer::ThreadProc()
     if (m_bReadAheadFromFile && (timeNow > (lastFileReadTime + (m_filter.IsUNCfile() ? 10 : 5))) )
     {
       lastFileReadTime = timeNow; 
-      ReadAheadFromFile();
-      m_bReadAheadFromFile = false;
+      int sizeReadTemp = ReadAheadFromFile();      
+      if ((sizeReadTemp < 0) || !m_filter.IsRTSP() || (sizeRead >= READ_SIZE))
+      {
+        sizeRead = 0;
+        m_bReadAheadFromFile = false;
+      }
+      else
+      {
+        sizeRead += sizeReadTemp;
+      }
     }
-     
-     
+              
     Sleep(1);
   }
   while (!ThreadIsStopping(11)) ;
   LogDebug("CDeMultiplexer::ThreadProc stopped()");
 }
+
 

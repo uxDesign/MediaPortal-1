@@ -53,8 +53,8 @@ DEFINE_MP_DEBUG_SETTING(DoNotAllowSlowMotionDuringZapping)
 
 //-------------------- Async logging methods -------------------------------------------------
 
+
 WORD logFileParsed = -1;
-int instCount = 0;
 WORD logFileDate = -1;
 
 CTsReaderFilter* instanceID = 0;
@@ -80,7 +80,7 @@ void LogRotate()
     
   TCHAR fileName[MAX_PATH];
   LogPath(fileName, _T("log"));
-    
+  
   try
   {
     // Get the last file write date
@@ -243,7 +243,6 @@ void LogDebug(const char *fmt, ...)
 //------------------------------------------------------------------------------------
 
 
-
 const AMOVIESETUP_MEDIATYPE acceptAudioPinTypes =
 {
   &MEDIATYPE_Audio,             // major type
@@ -320,13 +319,10 @@ CTsReaderFilter::CTsReaderFilter(IUnknown *pUnk, HRESULT *phr):
 //  GetLogFile(filename);
 //  ::DeleteFile(filename);
   
-  instCount++;
   instanceID = this;  
 
-  LogDebug("----- Experimental noStopMod version ----- instance 0x%x", this);
-  LogDebug("---------- v0.0.%d XXX -------------------", TSREADER_VERSION);
-  LogDebug("---- Logging format: Date Time [InstanceID] [ThreadID] Message...");
-  LogDebug("---- logFileParsed = %d, logger handle = %x, instCount = %d, logFileDate = %d", logFileParsed, m_hLogger, instCount, logFileDate);
+  LogDebug("----- Experimental MPAR control version ----- instance 0x%x", this);
+  LogDebug("---------------- v0.0.%d XXX -------------------", TSREADER_VERSION);
     
   
   m_fileReader=NULL;
@@ -543,6 +539,10 @@ CTsReaderFilter::~CTsReaderFilter()
   //stop duration thread
   StopThread(5000);
   
+  //stop demux flush/read ahead thread
+  m_demultiplexer.m_bShuttingDown = true;
+  m_demultiplexer.StopThread(5000);
+
   HRESULT hr = m_pAudioPin->Disconnect();
   delete m_pAudioPin;
 
@@ -560,7 +560,6 @@ CTsReaderFilter::~CTsReaderFilter()
   if (m_fileDuration != NULL)
     delete m_fileDuration;
   LogDebug("CTsReaderFilter::dtor - finished");
-  LogDebug("---- logFileParsed = %d, logger handle = %x, instCount = %d, logFileDate = %d", logFileParsed, m_hLogger, instCount, logFileDate);
   //StopLogger();
 }
 
@@ -1537,11 +1536,12 @@ HRESULT CTsReaderFilter::SeekPreStart(CRefTime& rtAbsSeek)
       bool eof = Seek(rtSeek);
       if (eof)
       {
+        REFERENCE_TIME rollBackTime = m_bTimeShifting ? 5000000 : 30000000;  // 0.5s/3s      
         //reached end-of-file, try to seek to an earlier position
-        if ((rtSeek.m_time - (3*10000000)) > 0)
+        if ((rtSeek.m_time - rollBackTime) > 0)
         {
-          rtSeek.m_time -= (3*10000000); //3 seconds earlier
-          rtAbsSeek.m_time -= (3*10000000); //3 seconds earlier
+          rtSeek.m_time -= rollBackTime;
+          rtAbsSeek.m_time -= rollBackTime;
           m_seekTime=rtSeek ;
           m_absSeekTime=rtAbsSeek ;
         }
@@ -2045,19 +2045,20 @@ void CTsReaderFilter::ThreadProc()
           int cntA, cntV;
           m_demultiplexer.GetBufferCounts(&cntA, &cntV);
          
-          if ((cntA > 300) || (cntV > 300) || m_bEnableBufferLogging)
+          if ((cntA > AUD_BUF_SIZE_LOG_LIM) || (cntV > VID_BUF_SIZE_LOG_LIM) || m_bEnableBufferLogging)
           {            
             CRefTime firstAudio, lastAudio;
             CRefTime firstVideo, lastVideo;
             m_demultiplexer.GetAudioBufferPts(firstAudio, lastAudio);
             m_demultiplexer.GetVideoBufferPts(firstVideo, lastVideo);
+            long rtspBuffSize = m_demultiplexer.GetRTSPBufferSize();
             
             REFERENCE_TIME MediaPos, ClockPos;
             GetMediaPosition(&MediaPos);
             m_pClock->GetTime(&ClockPos);
 
-            LogDebug("Buffers : A/V = %d/%d, A last : %03.3f, V Last : %03.3f, MediaPos: %03.3f, Media-Clock: %03.3f", 
-                      cntA, cntV, (float)lastAudio.Millisecs()/1000.0f, (float)lastVideo.Millisecs()/1000.0f,
+            LogDebug("Buffers : A/V = %d/%d, RTSP = %d, A last : %03.3f, V Last : %03.3f, MediaPos: %03.3f, Media-Clock: %03.3f", 
+                      cntA, cntV, rtspBuffSize, (float)lastAudio.Millisecs()/1000.0f, (float)lastVideo.Millisecs()/1000.0f,
                       (float)MediaPos/10000000.0, (float)(MediaPos-ClockPos)/10000000.0);
           }
         }
