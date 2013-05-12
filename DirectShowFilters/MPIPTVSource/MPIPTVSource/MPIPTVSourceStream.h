@@ -44,6 +44,9 @@
 #define     PID_PAT                                                   0x0000
 #define     PID_NULL                                                  0x1FFF
 
+#define     KEEP_PID                                                  0x01
+#define     NOT_KEEP_PID                                              0x00
+
 struct ProtocolImplementation
 {
   TCHAR *protocol;
@@ -130,6 +133,9 @@ private:
 
   // instance of CRC32 to compute CRC32 checksum
   Crc32 crc32;
+
+  // pointer to array of PID to keep in PMT
+  unsigned int *keepPidValues;
 };
 
 #endif

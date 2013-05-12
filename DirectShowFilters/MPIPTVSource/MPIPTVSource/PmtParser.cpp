@@ -562,3 +562,45 @@ bool PmtParser::SetCrc32(unsigned int crc32)
   return result;
 }
 
+PmtStreamDescriptionCollection *PmtParser::GetPmtStreamDescriptions(void)
+{
+  return this->streamDescriptions;
+}
+
+bool PmtParser::RecalculateSectionLength(void)
+{
+  bool result = false;
+
+  if ((this->packet != NULL) && (this->packetLength >= 17))
+  {
+    // remove first 8 bytes, plus 4 bytes CRC32
+    unsigned int sectionLength = this->packetLength - 4;
+
+    unsigned int count = this->streamDescriptions->Count();
+    for (unsigned int i = 0; i < count; i++)
+    {
+      sectionLength += this->streamDescriptions->GetItem(i)->GetDescriptionLength();
+    }
+    
+    result = this->SetSectionLength(sectionLength);
+  }
+
+  return result;
+}
+
+bool PmtParser::SetSectionLength(unsigned int length)
+{
+  bool result = false;
+
+  if ((this->packet != NULL) && (this->packetLength >= 8) && (length <= 0x00000FFF))
+  {
+    this->packet[7] = length & 0xFF;
+    length >>= 8;
+    this->packet[6] &= 0xF0;
+    this->packet[6] |= length &0x0F;
+
+    result = true;
+  }
+
+  return result;
+}

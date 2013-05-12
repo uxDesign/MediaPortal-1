@@ -162,6 +162,19 @@ public:
   // @return : true if successful, false otherwise
   bool RecalculateCrc32();
 
+  // gets PMT stream description collection
+  // @return : PMT stream description collection
+  PmtStreamDescriptionCollection *GetPmtStreamDescriptions(void);
+
+  // recalculates section length, must be called after changing stream description collection
+  // @ return : true if successful, false otherwise
+  bool RecalculateSectionLength();
+
+  // sets section length
+  // @param length : the length of section
+  // @return : true if successful, false otherwise
+  bool SetSectionLength(unsigned int length);
+
 private:
   unsigned char *packet;
   unsigned int packetLength;
