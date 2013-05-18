@@ -30,6 +30,7 @@ xcopy %1\core\bin\%2\Core.* . /Y /D
 
 REM Databases
 xcopy %1\databases\bin\%2\databases.* . /Y /D
+xcopy %1\databases\bin\%2\System.Data.SQLite.* . /Y /D
 
 REM Common Utils
 xcopy %1\..\Common-MP-TVE3\Common.Utils\bin\%2\Common.Utils.* . /Y /D
