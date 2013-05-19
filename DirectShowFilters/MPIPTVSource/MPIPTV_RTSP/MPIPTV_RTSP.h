@@ -95,7 +95,7 @@ protected:
   MediaSession* rtspSession;
   FramedSource *rtspSource;
   Groupsock *rtspUdpGroupsock;
-  BasicUDPSink *rtspUdpSink;
+  MediaSink *rtspUdpSink;
   unsigned int rtspUdpSinkMaxPayloadSize;
   unsigned int rtspUdpPortRangeStart;
   unsigned int rtspUdpPortRangeEnd;

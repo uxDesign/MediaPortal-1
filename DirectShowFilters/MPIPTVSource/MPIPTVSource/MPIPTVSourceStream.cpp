@@ -67,7 +67,7 @@ CMPIPTVSourceStream::CMPIPTVSourceStream(HRESULT *phr, CSource *pFilter, CParame
   this->oldPid = PID_DEFAULT;
   this->oldSid = SID_DEFAULT;
 
-  this->keepPidValues = ALLOC_MEM_SET(this->keepPidValues, unsigned int, PID_COUNT, KEEP_PID);
+  this->keepPidValues = ALLOC_MEM_SET(this->keepPidValues, unsigned int, PID_COUNT, KEEP_PID_IN_STREAM);
   if (this->keepPidValues == NULL)
   {
     this->logger.Log(LOGGER_WARNING, METHOD_MESSAGE_FORMAT, MODULE_NAME, METHOD_CONSTRUCTOR_NAME, _T("cannot allocate enough memory for keeped PID values, PID keeping disabled"));
@@ -480,48 +480,79 @@ HRESULT CMPIPTVSourceStream::FillBuffer(IMediaSample *pSamp)
         unsigned int expectedSize = (postedData / DVB_PACKET_SIZE) * DVB_PACKET_SIZE;
         if (expectedSize == postedData)
         {
-          for(unsigned int i = 0; (i < ((postedData / DVB_PACKET_SIZE))); i++)
+          ALLOC_MEM_DEFINE_SET(tempBuffer, char, postedData, 0);
+          unsigned int tempPostedData = 0;
+
+          if (tempBuffer != NULL)
           {
-            unsigned char *tsPacket = (unsigned char *)pData + i * DVB_PACKET_SIZE;
-            if (tsPacket[0] == SYNC_BYTE)
+            for(unsigned int i = 0; (i < ((postedData / DVB_PACKET_SIZE))); i++)
             {
-              PmtParser *pmtParser = new PmtParser(&this->crc32);
-              if (pmtParser != NULL)
+              unsigned char *tsPacket = (unsigned char *)pData + i * DVB_PACKET_SIZE;
+              if (tsPacket[0] == SYNC_BYTE)
               {
-                if (pmtParser->SetPmtData(tsPacket, DVB_PACKET_SIZE))
+                PmtParser *pmtParser = new PmtParser(&this->crc32);
+                if (pmtParser != NULL)
                 {
-                  if (pmtParser->IsValidPacket())
+                  if (pmtParser->SetPmtData(tsPacket, DVB_PACKET_SIZE))
                   {
-                    unsigned int j = 0;
-                    while (j < pmtParser->GetPmtStreamDescriptions()->Count())
+                    if (pmtParser->IsValidPacket())
                     {
-                      PmtStreamDescription *streamDescription = pmtParser->GetPmtStreamDescriptions()->GetItem(j);
+                      this->keepPidValues[pmtParser->GetPacketPid()] |= KEEP_PID_IN_STREAM;
+                      if (pmtParser->GetPcrPid() != UINT_MAX)
+                      {
+                        this->keepPidValues[pmtParser->GetPcrPid()] |= KEEP_PID_IN_STREAM;
+                      }
 
-                      if (this->keepPidValues[streamDescription->GetStreamPid()] != KEEP_PID)
+                      unsigned int j = 0;
+                      while (j < pmtParser->GetPmtStreamDescriptions()->Count())
                       {
-                        pmtParser->GetPmtStreamDescriptions()->Remove(j);
-                      }
-                      else
-                      {
-                        j++;
-                      }
-                    }
+                        PmtStreamDescription *streamDescription = pmtParser->GetPmtStreamDescriptions()->GetItem(j);
 
-                    if (pmtParser->RecalculateSectionLength())
-                    {
-                      unsigned char *pmtPacket = pmtParser->GetPmtPacket();
-                      if (pmtPacket != NULL)
-                      {
-                        memcpy(tsPacket, pmtPacket, DVB_PACKET_SIZE);
+                        if ((this->keepPidValues[streamDescription->GetStreamPid()] & KEEP_PID_IN_PMT) == 0)
+                        {
+                          pmtParser->GetPmtStreamDescriptions()->Remove(j);
+                        }
+                        else
+                        {
+                          j++;
+                        }
                       }
-                      FREE_MEM(pmtPacket);
+
+                      if (pmtParser->RecalculateSectionLength())
+                      {
+                        unsigned char *pmtPacket = pmtParser->GetPmtPacket();
+                        if (pmtPacket != NULL)
+                        {
+                          memcpy(tsPacket, pmtPacket, DVB_PACKET_SIZE);
+                        }
+                        FREE_MEM(pmtPacket);
+                      }
                     }
                   }
+
+                  delete pmtParser;
                 }
 
-                delete pmtParser;
+                unsigned int tsPacketPid = (tsPacket[1] & 0x1F) << 8;
+                tsPacketPid |= tsPacket[2];
+
+                if (((this->keepPidValues[tsPacketPid] & KEEP_PID_IN_STREAM) != 0) || (tsPacketPid == 68))
+                {
+                  // copy TS packet if its PID is allowed
+                  memcpy(tempBuffer + tempPostedData, tsPacket, DVB_PACKET_SIZE);
+                  tempPostedData += DVB_PACKET_SIZE;
+                }
               }
             }
+
+            if (tempPostedData > 0)
+            {
+              memcpy(pData, tempBuffer, tempPostedData);
+            }
+            pSamp->SetActualDataLength(tempPostedData);
+            postedData = tempPostedData;
+
+            FREE_MEM(tempBuffer);
           }
         }
       }
@@ -1070,7 +1101,7 @@ bool CMPIPTVSourceStream::Load(const TCHAR *url, const CParameterCollection *par
   {
     for (unsigned int i = 0; i < PID_COUNT; i++)
     {
-      this->keepPidValues[i] = KEEP_PID;
+      this->keepPidValues[i] = KEEP_PID_IN_PMT | KEEP_PID_IN_STREAM;
     }
   }
 
@@ -1090,7 +1121,15 @@ bool CMPIPTVSourceStream::Load(const TCHAR *url, const CParameterCollection *par
       {
         for (unsigned int i = 0; i < PID_COUNT; i++)
         {
-          this->keepPidValues[i] = NOT_KEEP_PID;
+          if ((i <= MAX_RESERVED_PID) || (i == PID_NULL))
+          {
+            // reserved PIDs and NULL packets will be transmitted always
+            this->keepPidValues[i] = KEEP_PID_IN_STREAM;
+          }
+          else
+          {
+            this->keepPidValues[i] = NOT_KEEP_PID;
+          }
         }
 
         for (unsigned int i = 0; i < ((CParameterCollection *)parameters)->Count(); i++)
@@ -1111,7 +1150,7 @@ bool CMPIPTVSourceStream::Load(const TCHAR *url, const CParameterCollection *par
 
               if (valueLong != UINT_MAX)
               {
-                this->keepPidValues[(unsigned int)valueLong] = KEEP_PID;
+                this->keepPidValues[(unsigned int)valueLong] = KEEP_PID_IN_PMT | KEEP_PID_IN_STREAM;
                 this->logger.Log(LOGGER_VERBOSE, _T("%s: %s: keeping PID: %u"), MODULE_NAME, _T("Load()"), (unsigned int)valueLong);
               }
             }

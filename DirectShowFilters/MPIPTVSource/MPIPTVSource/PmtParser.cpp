@@ -597,7 +597,7 @@ bool PmtParser::SetSectionLength(unsigned int length)
     this->packet[7] = length & 0xFF;
     length >>= 8;
     this->packet[6] &= 0xF0;
-    this->packet[6] |= length &0x0F;
+    this->packet[6] |= length & 0x0F;
 
     result = true;
   }
