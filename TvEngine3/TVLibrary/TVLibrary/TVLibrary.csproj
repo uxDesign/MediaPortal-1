@@ -125,6 +125,7 @@
     <Compile Include="Implementations\Dri\Parser\SvctParser.cs" />
     <Compile Include="Implementations\Dri\Service\AuxService.cs" />
     <Compile Include="Implementations\Dri\Service\AvTransportService.cs" />
+    <Compile Include="Implementations\Dri\Service\BaseService.cs" />
     <Compile Include="Implementations\Dri\Service\CasService.cs" />
     <Compile Include="Implementations\Dri\Service\ConnectionManagerService.cs" />
     <Compile Include="Implementations\Dri\Service\DiagService.cs" />
