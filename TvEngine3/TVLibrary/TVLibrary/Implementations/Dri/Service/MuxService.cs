@@ -25,24 +25,15 @@ using UPnP.Infrastructure.CP.DeviceTree;
 
 namespace TvLibrary.Implementations.Dri.Service
 {
-  public class MuxService
+  public class MuxService : BaseService
   {
-    private CpDevice _device = null;
-    private CpService _service = null;
-
     private CpAction _setProgramAction = null;
     private CpAction _addPidAction = null;
     private CpAction _removePidAction = null;
 
     public MuxService(CpDevice device)
+      : base(device, "urn:opencable-com:serviceId:urn:schemas-opencable-com:service:Mux")
     {
-      _device = device;
-      if (!device.Services.TryGetValue("urn:opencable-com:serviceId:urn:schemas-opencable-com:service:Mux", out _service))
-      {
-        // Mux is a mandatory service, so this is an error.
-        throw new NotImplementedException("DRI: device does not implement a Mux service");
-      }
-
       _service.Actions.TryGetValue("SetProgram", out _setProgramAction);
       _service.Actions.TryGetValue("AddPid", out _addPidAction);
       _service.Actions.TryGetValue("RemovePid", out _removePidAction);

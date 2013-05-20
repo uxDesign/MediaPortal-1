@@ -81,50 +81,20 @@ namespace TvLibrary.Implementations.Dri.Service
     }
   }
 
-  public class TunerService : IDisposable
+  public class TunerService : BaseService
   {
-    private CpDevice _device = null;
-    private CpService _service = null;
-    private StateVariableChangedDlgt _stateVariableDelegate = null;
-
     private CpAction _setTunerParametersAction = null;
     private CpAction _getTunerParametersAction = null;
     private CpAction _seekSignalAction = null;
     private CpAction _seekCancelAction = null;
 
-    public TunerService(CpDevice device, StateVariableChangedDlgt svChangeDlg)
+    public TunerService(CpDevice device)
+      : base(device, "urn:opencable-com:serviceId:urn:schemas-opencable-com:service:Tuner")
     {
-      _device = device;
-      if (!device.Services.TryGetValue("urn:opencable-com:serviceId:urn:schemas-opencable-com:service:Tuner", out _service))
-      {
-        // Tuner is a mandatory service, so this is an error.
-        throw new NotImplementedException("DRI: device does not implement a Tuner service");
-      }
-
       _service.Actions.TryGetValue("SetTunerParameters", out _setTunerParametersAction);
       _service.Actions.TryGetValue("GetTunerParameters", out _getTunerParametersAction);
       _service.Actions.TryGetValue("SeekSignal", out _seekSignalAction);
       _service.Actions.TryGetValue("SeekCancel", out _seekCancelAction);
-
-      if (svChangeDlg != null)
-      {
-        _stateVariableDelegate = svChangeDlg;
-        _service.StateVariableChanged += _stateVariableDelegate;
-        _service.SubscribeStateVariables();
-      }
-    }
-
-    public void Dispose()
-    {
-      if (_stateVariableDelegate != null && _service != null)
-      {
-        if (_service.IsStateVariablesSubscribed)
-        {
-          _service.UnsubscribeStateVariables();
-        }
-        _service.StateVariableChanged -= _stateVariableDelegate;
-        _stateVariableDelegate = null;
-      }
     }
 
     /// <summary>

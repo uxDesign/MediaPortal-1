@@ -100,48 +100,18 @@ namespace TvLibrary.Implementations.Dri.Service
     VBR
   }
 
-  public class EncoderService : IDisposable
+  public class EncoderService : BaseService
   {
-    private CpDevice _device = null;
-    private CpService _service = null;
-    private StateVariableChangedDlgt _stateVariableDelegate = null;
-
     private CpAction _getEncoderCapabilitiesAction = null;
     private CpAction _setEncoderParametersAction = null;
     private CpAction _getEncoderParametersAction = null;
 
-    public EncoderService(CpDevice device, StateVariableChangedDlgt svChangeDlg)
+    public EncoderService(CpDevice device)
+      : base(device, "urn:opencable-com:serviceId:urn:schemas-opencable-com:service:Encoder")
     {
-      _device = device;
-      if (!device.Services.TryGetValue("urn:opencable-com:serviceId:urn:schemas-opencable-com:service:Encoder", out _service))
-      {
-        // Encoder is a mandatory service, so this is an error.
-        throw new NotImplementedException("DRI: device does not implement an Encoder service");
-      }
-
       _service.Actions.TryGetValue("GetEncoderCapabilities", out _getEncoderCapabilitiesAction);
       _service.Actions.TryGetValue("SetEncoderParameters", out _setEncoderParametersAction);
       _service.Actions.TryGetValue("GetEncoderParameters", out _getEncoderParametersAction);
-
-      if (svChangeDlg != null)
-      {
-        _stateVariableDelegate = svChangeDlg;
-        _service.StateVariableChanged += _stateVariableDelegate;
-        _service.SubscribeStateVariables();
-      }
-    }
-
-    public void Dispose()
-    {
-      if (_stateVariableDelegate != null && _service != null)
-      {
-        if (_service.IsStateVariablesSubscribed)
-        {
-          _service.UnsubscribeStateVariables();
-        }
-        _service.StateVariableChanged -= _stateVariableDelegate;
-        _stateVariableDelegate = null;
-      }
     }
 
     /// <summary>

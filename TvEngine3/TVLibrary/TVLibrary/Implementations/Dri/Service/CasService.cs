@@ -228,52 +228,22 @@ namespace TvLibrary.Implementations.Dri.Service
     // 0x03..0xff reserved
   }
 
-  public class CasService
+  public class CasService : BaseService
   {
-    private CpDevice _device = null;
-    private CpService _service = null;
-    private StateVariableChangedDlgt _stateVariableDelegate = null;
-
     private CpAction _getCardStatusAction = null;
     private CpAction _getEntitlementAction = null;
     private CpAction _notifyMmiCloseAction = null;
     private CpAction _setChannelAction = null;
     private CpAction _setPreferredLanguageAction = null;
 
-    public CasService(CpDevice device, StateVariableChangedDlgt svChangeDlg)
+    public CasService(CpDevice device)
+      : base(device, "urn:opencable-com:serviceId:urn:schemas-opencable-com:service:CAS")
     {
-      _device = device;
-      if (!device.Services.TryGetValue("urn:opencable-com:serviceId:urn:schemas-opencable-com:service:CAS", out _service))
-      {
-        // CAS is a mandatory service, so this is an error.
-        throw new NotImplementedException("DRI: device does not implement a CAS service");
-      }
-
       _service.Actions.TryGetValue("GetCardStatus", out _getCardStatusAction);
       _service.Actions.TryGetValue("GetEntitlement", out _getEntitlementAction);
       _service.Actions.TryGetValue("NotifyMmiClose", out _notifyMmiCloseAction);
       _service.Actions.TryGetValue("SetChannel", out _setChannelAction);
       _service.Actions.TryGetValue("SetPreferredLanguage", out _setPreferredLanguageAction);
-
-      if (svChangeDlg != null)
-      {
-        _stateVariableDelegate = svChangeDlg;
-        _service.StateVariableChanged += _stateVariableDelegate;
-        _service.SubscribeStateVariables();
-      }
-    }
-
-    public void Dispose()
-    {
-      if (_stateVariableDelegate != null && _service != null)
-      {
-        if (_service.IsStateVariablesSubscribed)
-        {
-          _service.UnsubscribeStateVariables();
-        }
-        _service.StateVariableChanged -= _stateVariableDelegate;
-        _stateVariableDelegate = null;
-      }
     }
 
     /// <summary>

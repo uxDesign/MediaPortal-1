@@ -42,52 +42,22 @@ namespace TvLibrary.Implementations.Dri.Service
     Input
   }
 
-  public class ConnectionManagerService : IDisposable
+  public class ConnectionManagerService : BaseService
   {
-    private CpDevice _device = null;
-    private CpService _service = null;
-    private StateVariableChangedDlgt _stateVariableDelegate = null;
-
     private CpAction _getProtocolInfoAction = null;
     private CpAction _prepareForConnectionAction = null;
     private CpAction _connectionCompleteAction = null;
     private CpAction _getCurrentConnectionIdsAction = null;
     private CpAction _getCurrentConnectionInfoAction = null;
 
-    public ConnectionManagerService(CpDevice device, StateVariableChangedDlgt svChangeDlg)
+    public ConnectionManagerService(CpDevice device)
+      : base(device, "urn:upnp-org:serviceId:urn:schemas-upnp-org:service:ConnectionManager")
     {
-      _device = device;
-      if (!device.Services.TryGetValue("urn:upnp-org:serviceId:urn:schemas-upnp-org:service:ConnectionManager", out _service))
-      {
-        // ConnectionManager is a mandatory service, so this is an error.
-        throw new NotImplementedException("DRI: device does not implement a ConnectionManager service");
-      }
-
       _service.Actions.TryGetValue("GetProtocolInfo", out _getProtocolInfoAction);
       _service.Actions.TryGetValue("PrepareForConnection", out _prepareForConnectionAction);
       _service.Actions.TryGetValue("ConnectionComplete", out _connectionCompleteAction);
       _service.Actions.TryGetValue("GetCurrentConnectionIDs", out _getCurrentConnectionIdsAction);
       _service.Actions.TryGetValue("GetCurrentConnectionInfo", out _getCurrentConnectionInfoAction);
-
-      if (svChangeDlg != null)
-      {
-        _stateVariableDelegate = svChangeDlg;
-        _service.StateVariableChanged += _stateVariableDelegate;
-        _service.SubscribeStateVariables();
-      }
-    }
-
-    public void Dispose()
-    {
-      if (_stateVariableDelegate != null && _service != null)
-      {
-        if (_service.IsStateVariablesSubscribed)
-        {
-          _service.UnsubscribeStateVariables();
-        }
-        _service.StateVariableChanged -= _stateVariableDelegate;
-        _stateVariableDelegate = null;
-      }
     }
 
     public void GetProtocolInfo(out string source, out string sink)

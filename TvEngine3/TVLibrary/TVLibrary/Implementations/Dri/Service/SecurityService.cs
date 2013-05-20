@@ -89,44 +89,14 @@ namespace TvLibrary.Implementations.Dri.Service
     }
   }
 
-  public class SecurityService : IDisposable
+  public class SecurityService : BaseService
   {
-    private CpDevice _device = null;
-    private CpService _service = null;
-    private StateVariableChangedDlgt _stateVariableDelegate = null;
-
     private CpAction _setDrmAction = null;
 
-    public SecurityService(CpDevice device, StateVariableChangedDlgt svChangeDlg)
+    public SecurityService(CpDevice device)
+      : base(device, "urn:opencable-com:serviceId:urn:schemas-opencable-com:service:Security")
     {
-      _device = device;
-      if (!device.Services.TryGetValue("urn:opencable-com:serviceId:urn:schemas-opencable-com:service:Security", out _service))
-      {
-        // Security is a mandatory service, so this is an error.
-        throw new NotImplementedException("DRI: device does not implement a Security service");
-      }
-
       _service.Actions.TryGetValue("SetDRM", out _setDrmAction);
-
-      if (svChangeDlg != null)
-      {
-        _stateVariableDelegate = svChangeDlg;
-        _service.StateVariableChanged += _stateVariableDelegate;
-        _service.SubscribeStateVariables();
-      }
-    }
-
-    public void Dispose()
-    {
-      if (_stateVariableDelegate != null && _service != null)
-      {
-        if (_service.IsStateVariablesSubscribed)
-        {
-          _service.UnsubscribeStateVariables();
-        }
-        _service.StateVariableChanged -= _stateVariableDelegate;
-        _stateVariableDelegate = null;
-      }
     }
 
     /// <summary>

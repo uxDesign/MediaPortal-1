@@ -259,12 +259,8 @@ namespace TvLibrary.Implementations.Dri.Service
     }
   }
 
-  public class AvTransportService : IDisposable
+  public class AvTransportService : BaseService
   {
-    private CpDevice _device = null;
-    private CpService _service = null;
-    private StateVariableChangedDlgt _stateVariableDelegate = null;
-
     private CpAction _setAvTransportUriAction = null;
     private CpAction _setNextAvTransportUriAction = null;
     private CpAction _getMediaInfoAction = null;
@@ -283,15 +279,9 @@ namespace TvLibrary.Implementations.Dri.Service
     private CpAction _setRecordQualityModeAction = null;
     private CpAction _getCurrentTransportActionsAction = null;
 
-    public AvTransportService(CpDevice device, StateVariableChangedDlgt svChangeDlg)
+    public AvTransportService(CpDevice device)
+      : base(device, "urn:upnp-org:serviceId:urn:schemas-upnp-org:service:AVTransport")
     {
-      _device = device;
-      if (!device.Services.TryGetValue("urn:upnp-org:serviceId:urn:schemas-upnp-org:service:AVTransport", out _service))
-      {
-        // AVTransport is a mandatory service, so this is an error.
-        throw new NotImplementedException("DRI: device does not implement an AVTransport service");
-      }
-
       _service.Actions.TryGetValue("SetAVTransportURI", out _setAvTransportUriAction);
       _service.Actions.TryGetValue("SetNextAVTransportURI", out _setNextAvTransportUriAction);
       _service.Actions.TryGetValue("GetMediaInfo", out _getMediaInfoAction);
@@ -309,26 +299,6 @@ namespace TvLibrary.Implementations.Dri.Service
       _service.Actions.TryGetValue("SetPlayMode", out _setPlayModeAction);
       _service.Actions.TryGetValue("SetRecordQualityMode", out _setRecordQualityModeAction);
       _service.Actions.TryGetValue("GetCurrentTransportActions", out _getCurrentTransportActionsAction);
-
-      if (svChangeDlg != null)
-      {
-        _stateVariableDelegate = svChangeDlg;
-        _service.StateVariableChanged += _stateVariableDelegate;
-        _service.SubscribeStateVariables();
-      }
-    }
-
-    public void Dispose()
-    {
-      if (_stateVariableDelegate != null && _service != null)
-      {
-        if (_service.IsStateVariablesSubscribed)
-        {
-          _service.UnsubscribeStateVariables();
-        }
-        _service.StateVariableChanged -= _stateVariableDelegate;
-        _stateVariableDelegate = null;
-      }
     }
 
     public void SetAvTransportUri(UInt32 instanceId, string currentUri, string currentUriMetaData)

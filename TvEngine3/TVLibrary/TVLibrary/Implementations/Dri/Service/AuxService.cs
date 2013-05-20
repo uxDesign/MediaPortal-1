@@ -125,46 +125,18 @@ namespace TvLibrary.Implementations.Dri.Service
     }
   }
 
-  public class AuxService : IDisposable
+  public class AuxService : BaseService
   {
-    private CpDevice _device = null;
-    private CpService _service = null;
-    private StateVariableChangedDlgt _stateVariableDelegate = null;
-
     private CpAction _getAuxCapabilitiesAction = null;
     private CpAction _setAuxParametersAction = null;
 
-    public AuxService(CpDevice device, StateVariableChangedDlgt svChangeDlg)
+    public AuxService(CpDevice device)
+      : base(device, "urn:opencable-com:serviceId:urn:schemas-opencable-com:service:Aux", true)
     {
-      _device = device;
-      if (!device.Services.TryGetValue("urn:opencable-com:serviceId:urn:schemas-opencable-com:service:Aux", out _service))
+      if (_service != null)
       {
-        // Aux is an optional service.
-        Log.Log.Debug("DRI: device {0} does not implement an Aux service", device.UDN);
-        return;
-      }
-
-      _service.Actions.TryGetValue("GetAuxCapabilities", out _getAuxCapabilitiesAction);
-      _service.Actions.TryGetValue("SetAuxParameters", out _setAuxParametersAction);
-
-      if (svChangeDlg != null)
-      {
-        _stateVariableDelegate = svChangeDlg;
-        _service.StateVariableChanged += _stateVariableDelegate;
-        _service.SubscribeStateVariables();
-      }
-    }
-
-    public void Dispose()
-    {
-      if (_stateVariableDelegate != null && _service != null)
-      {
-        if (_service.IsStateVariablesSubscribed)
-        {
-          _service.UnsubscribeStateVariables();
-        }
-        _service.StateVariableChanged -= _stateVariableDelegate;
-        _stateVariableDelegate = null;
+        _service.Actions.TryGetValue("GetAuxCapabilities", out _getAuxCapabilitiesAction);
+        _service.Actions.TryGetValue("SetAuxParameters", out _setAuxParametersAction);
       }
     }
 
