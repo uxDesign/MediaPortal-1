@@ -18,71 +18,95 @@
 
 #endregion
 
+using System.Collections.Generic;
+
 namespace TvLibrary.Implementations.Dri.Parser
 {
+  public enum ModulationMode : byte
+  {
+    Analog = 0x01,
+    ScteMode1 = 0x02, // 64 QAM
+    ScteMode2 = 0x03, // 256 QAM
+    Atsc8Vsb = 0x04,
+    Atsc16Vsb = 0x05,
+    PrivateDescriptor = 0x80
+  }
+
+  public enum EtmLocation : byte
+  {
+    None,
+    PhysicalChannelThis,
+    PhysicalChannelTsid
+  }
+
+  public enum AtscServiceType : byte
+  {
+    /// <summary>
+    /// analog television (A/65)
+    /// </summary>
+    AnalogTelevision = 0x01,
+    /// <summary>
+    /// ATSC digital television service (A/53 part 3)
+    /// </summary>
+    DigitalTelevision = 0x02,
+    /// <summary>
+    /// ATSC audio service (A/53 part 3)
+    /// </summary>
+    Audio = 0x03,
+    /// <summary>
+    /// ATSC data only service (A/90)
+    /// </summary>
+    DataOnly = 0x04,
+    /// <summary>
+    /// ATSC software download service (A/97)
+    /// </summary>
+    SoftwareDownload = 0x05,
+    /// <summary>
+    /// unassociated/small screen service (A/53 part 3)
+    /// </summary>
+    SmallScreen = 0x06,
+    /// <summary>
+    /// parameterised service (A/71)
+    /// </summary>
+    Parameterised = 0x07,
+    /// <summary>
+    /// Non Real Time service (A/103)
+    /// </summary>
+    Nrt = 0x08,
+    /// <summary>
+    /// extended parametised service (A/71)
+    /// </summary>
+    ExtendedParameterised = 0x09
+  }
+
+  public delegate void LvctChannelDetailDelegate(string shortName, int majorChannelNumber, int minorChannelNumber, ModulationMode modulationMode, 
+      uint carrierFrequency, int channelTsid, int programNumber, EtmLocation etmLocation, bool accessControlled, bool hidden,
+      int pathSelect, bool outOfBand, bool hideGuide, AtscServiceType serviceType, int sourceId);
+
+  /// <summary>
+  /// ATSC/SCTE long form virtual channel table parser. Refer to ATSC A-65 and SCTE 65.
+  /// </summary>
   public class LvctParser
   {
-    private enum ModulationMode : byte
-    {
-      Analog = 0x01,
-      ScteMode1 = 0x02, // 64 QAM
-      ScteMode2 = 0x03, // 256 QAM
-      Atsc8Vsb = 0x04,
-      Atsc16Vsb = 0x05,
-      PrivateDescriptor = 0x80
-    }
+    private int _currentVersion = -1;
+    private HashSet<int> _unseenSections = new HashSet<int>();
+    public event TableCompleteDelegate OnTableComplete = null;
+    public event LvctChannelDetailDelegate OnChannelDetail = null;
 
-    private enum EtmLocation : byte
+    public void Reset()
     {
-      None,
-      PhysicalChannelThis,
-      PhysicalChannelTsid
-    }
-
-    private enum AtscServiceType : byte
-    {
-      /// <summary>
-      /// analog television (A/65)
-      /// </summary>
-      AnalogTelevision = 0x01,
-      /// <summary>
-      /// ATSC digital television service (A/53 part 3)
-      /// </summary>
-      DigitalTelevision = 0x02,
-      /// <summary>
-      /// ATSC audio service (A/53 part 3)
-      /// </summary>
-      Audio = 0x03,
-      /// <summary>
-      /// ATSC data only service (A/90)
-      /// </summary>
-      DataOnly = 0x04,
-      /// <summary>
-      /// ATSC software download service (A/97)
-      /// </summary>
-      SoftwareDownload = 0x05,
-      /// <summary>
-      /// unassociated/small screen service (A/53 part 3)
-      /// </summary>
-      SmallScreen = 0x06,
-      /// <summary>
-      /// parameterised service (A/71)
-      /// </summary>
-      Parameterised = 0x07,
-      /// <summary>
-      /// Non Real Time service (A/103)
-      /// </summary>
-      Nrt = 0x08,
-      /// <summary>
-      /// extended parametised service (A/71)
-      /// </summary>
-      ExtendedParameterised = 0x09
+      _currentVersion = -1;
     }
 
     public void Decode(byte[] section)
     {
-      if (section == null || section.Length < 18)
+      if (OnTableComplete == null)
       {
+        return;
+      }
+      if (section.Length < 18)
+      {
+        Log.Log.Error("L-VCT: invalid section size {0}, expected at least 18 bytes", section.Length);
         return;
       }
 
@@ -103,7 +127,7 @@ namespace TvLibrary.Implementations.Dri.Parser
         Log.Log.Error("L-VCT: invalid section length = {0}, byte count = {1}", sectionLength, section.Length);
         return;
       }
-      int mapId = (section[5] << 8) + section[6];
+      int transportStreamId = (section[5] << 8) + section[6];
       int versionNumber = ((section[7] >> 1) & 0x1f);
       bool currentNextIndicator = ((section[7] & 0x80) != 0);
       if (!currentNextIndicator)
@@ -113,10 +137,26 @@ namespace TvLibrary.Implementations.Dri.Parser
       }
       byte sectionNumber = section[8];
       byte lastSectionNumber = section[9];
+      int sectionKey = (tableId << 8) + sectionNumber;
+      if (versionNumber > _currentVersion || (_currentVersion == 31 && versionNumber < _currentVersion))
+      {
+        _currentVersion = versionNumber;
+        _unseenSections.Clear();
+        for (int s = 0; s <= lastSectionNumber; s++)
+        {
+          _unseenSections.Add((tableId << 8) + s);
+        }
+      }
+      else if (!_unseenSections.Contains(sectionKey))
+      {
+        // Already seen this section.
+        return;
+      }
+
       byte protocolVersion = section[10];
       int numChannelsInSection = section[11];
-      Log.Log.Debug("L-VCT: map ID = 0x{0:x}, version number = {2}, section number = {3}, last section number {4}, protocol version = {5}, number of channels in section = 0x{6:x}",
-        mapId, versionNumber, sectionNumber, lastSectionNumber, protocolVersion, numChannelsInSection);
+      Log.Log.Debug("L-VCT: section length = {0}, transport stream ID = 0x{1:x}, version number = {2}, section number = {3}, last section number {4}, protocol version = {5}, number of channels in section = 0x{6:x}",
+        sectionLength, transportStreamId, versionNumber, sectionNumber, lastSectionNumber, protocolVersion, numChannelsInSection);
 
       int pointer = 12;
       int endOfSection = section.Length - 4;
@@ -133,20 +173,10 @@ namespace TvLibrary.Implementations.Dri.Parser
         int majorChannelNumber = ((section[pointer] & 0x0f) << 6) + (section[pointer + 1] >> 2);
         pointer++;
         int minorChannelNumber = ((section[pointer] & 0x03) << 8) + section[pointer + 1];
-        pointer++;
-        // SCTE cable supports both one-part and two-part channel numbers where
-        // the major and minor channel number range is 0..999.
-        // ATSC supports only two-part channel numbers where the major range is
-        // 1..99 and the minor range is 0..999.
-        // When the minor channel number is 0 it indicates an analog channel.
-        int onePartVirtualChannelNumber = 0;
-        if ((majorChannelNumber & 0x03f0) == 0x03f0)
-        {
-          onePartVirtualChannelNumber = ((majorChannelNumber & 0x0f) << 10) + minorChannelNumber;
-        }
+        pointer += 2;
         ModulationMode modulationMode = (ModulationMode)section[pointer++];
-        int carrierFrequency = 0;   // Hz
-        for (byte b = 0; b < 3; b++)
+        uint carrierFrequency = 0;   // Hz
+        for (byte b = 0; b < 4; b++)
         {
           carrierFrequency = carrierFrequency << 8;
           carrierFrequency = section[pointer++];
@@ -164,9 +194,15 @@ namespace TvLibrary.Implementations.Dri.Parser
         AtscServiceType serviceType = (AtscServiceType)(section[pointer++] & 0x3f);
         int sourceId = (section[pointer] << 8) + section[pointer + 1];
         pointer += 2;
-        Log.Log.Debug("L-VCT: channel, short name = {0}, major channel number = {1}, minor channel number = {2}, one part channel number = {3}, modulation mode = {4}, carrier frequency = {5} Hz, TSID = 0x{6:x}, program number = 0x{7:x}, ETM location = {8}, access controlled = {9}, hidden = {10}, path select = {11}, out of band = {12}, hide guide = {13}, service type = {14}, source ID = 0x{15:x}",
-          shortName, majorChannelNumber, minorChannelNumber, onePartVirtualChannelNumber, modulationMode, carrierFrequency,
-          channelTsid, programNumber, etmLocation, accessControlled, hidden, pathSelect, outOfBand, hideGuide, serviceType, sourceId);
+        Log.Log.Debug("L-VCT: channel, short name = {0}, major channel number = {1}, minor channel number = {2}, modulation mode = {3}, carrier frequency = {4} Hz, TSID = 0x{5:x}, program number = 0x{6:x}, ETM location = {7}, access controlled = {8}, hidden = {9}, path select = {10}, out of band = {11}, hide guide = {12}, service type = {13}, source ID = 0x{14:x}",
+          shortName, majorChannelNumber, minorChannelNumber, modulationMode, carrierFrequency, channelTsid, programNumber,
+          etmLocation, accessControlled, hidden, pathSelect, outOfBand, hideGuide, serviceType, sourceId);
+
+        if (OnChannelDetail != null)
+        {
+          OnChannelDetail(shortName, majorChannelNumber, minorChannelNumber, modulationMode, carrierFrequency, channelTsid,
+            programNumber, etmLocation, accessControlled, hidden, pathSelect, outOfBand, hideGuide, serviceType, sourceId);
+        }
 
         int descriptorsLength = ((section[pointer] & 0x03) << 8) + section[pointer + 1];
         pointer += 2;
@@ -219,6 +255,14 @@ namespace TvLibrary.Implementations.Dri.Parser
       {
         Log.Log.Error("L-VCT: corruption detected at end of section, pointer = {0}, end of section = {1}", pointer, endOfSection);
         return;
+      }
+
+      _unseenSections.Remove(sectionKey);
+      if (_unseenSections.Count == 0 && OnTableComplete != null)
+      {
+        OnTableComplete(MgtTableType.CvctCurrentNext1);
+        OnTableComplete = null;
+        OnChannelDetail = null;
       }
     }
   }

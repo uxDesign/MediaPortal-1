@@ -18,43 +18,64 @@
 
 #endregion
 
+using System.Collections.Generic;
+
 namespace TvLibrary.Implementations.Dri.Parser
 {
+  public enum MgtTableType
+  {
+    Mgt = -1,
+
+    // ATSC A-65
+    TvctCurrentNext1 = 0x0000,
+    TvctCurrentNext0 = 0x0001,
+    CvctCurrentNext1 = 0x0002,
+    CvctCurrentNext0 = 0x0003,
+    ChannelEtt = 0x0004,
+    Dccsct = 0x0005,
+
+    // SCTE 65
+    SvctVcm = 0x0010,
+    SvctDcm = 0x0011,
+    SvctIcm = 0x0012,
+    NitCds = 0x0020,
+    NitMms = 0x0021,
+    NttSns = 0x0030
+
+    // ATSC A-65
+    // 0x0100..0x017f EIT-0..EIT-127
+    // 0x0200..0x027f ETT-0..ETT-127
+    // 0x0301..0x03ff RRT, rating_region 0x01..0xff
+    // 0x1400..0x14ff DCCT, doc_id 0x00..0xff
+
+    // SCTE 65
+    // 0x1000..0x10ff AEIT, mgt_tag 0x00..0xff
+    // 0x1100..0x11ff AETT, mgt_tag 0x00..0xff
+  }
+
+  public delegate void MgtTableDetailDelegate(int tableType, int pid, int versionNumber, uint byteCount);
+
   public class MgtParser
   {
-    private enum TableType
+    private int _currentVersion = -1;
+    private HashSet<int> _unseenSections = new HashSet<int>();
+    public event TableCompleteDelegate OnTableComplete;
+    public event MgtTableDetailDelegate OnTableDetail;
+
+    public void Reset()
     {
-      // ATSC A-65
-      TvctCurrentNext1 = 0x0000,
-      TvctCurrentNext0 = 0x0001,
-      CvctCurrentNext1 = 0x0002,
-      CvctCurrentNext0 = 0x0003,
-      ChannelEtt = 0x0004,
-      Dccsct = 0x0005,
-
-      // SCTE 65
-      SvctVcm = 0x0010,
-      SvctDcm = 0x0011,
-      SvctIcm = 0x0012,
-      NitCds = 0x0020,
-      NitMms = 0x0021,
-      NttSns = 0x0030
-
-      // ATSC A-65
-      // 0x0100..0x017f EIT-0..EIT-127
-      // 0x0200..0x027f ETT-0..ETT-127
-      // 0x0301..0x03ff RRT, rating_region 0x01..0xff
-      // 0x1400..0x14ff DCCT, doc_id 0x00..0xff
-
-      // SCTE 65
-      // 0x1000..0x10ff AEIT, mgt_tag 0x00..0xff
-      // 0x1100..0x11ff AETT, mgt_tag 0x00..0xff
+      _currentVersion = -1;
     }
 
     public void Decode(byte[] section)
     {
-      if (section == null || section.Length < 19)
+      if (OnTableComplete == null)
       {
+        return;
+      }
+      if (section.Length < 19)
+      {
+        Log.Log.Error("MGT: invalid section size {0}, expected at least 19 bytes", section.Length);
         return;
       }
 
@@ -81,10 +102,26 @@ namespace TvLibrary.Implementations.Dri.Parser
       }
       byte sectionNumber = section[8];
       byte lastSectionNumber = section[9];
+      int sectionKey = sectionNumber;
+      if (versionNumber > _currentVersion || (_currentVersion == 31 && versionNumber < _currentVersion))
+      {
+        _currentVersion = versionNumber;
+        _unseenSections.Clear();
+        for (byte s = 0; s <= lastSectionNumber; s++)
+        {
+          _unseenSections.Add(s);
+        }
+      }
+      else if (!_unseenSections.Contains(sectionKey))
+      {
+        // Already seen this section.
+        return;
+      }
+
       byte protocolVersion = section[10];
       int tablesDefined = (section[11] << 8) + section[12];
-      Log.Log.Debug("MGT: map ID = 0x{0:x}, version number = {2}, section number = {3}, last section number {4}, protocol version = {5}, tables defined = {6}",
-        mapId, versionNumber, sectionNumber, lastSectionNumber, protocolVersion, tablesDefined);
+      Log.Log.Debug("MGT: section length = {0}, map ID = 0x{1:x}, version number = {2}, section number = {3}, last section number {4}, protocol version = {5}, tables defined = {6}",
+        sectionLength, mapId, versionNumber, sectionNumber, lastSectionNumber, protocolVersion, tablesDefined);
 
       int pointer = 13;
       int endOfSection = section.Length - 4;
@@ -101,12 +138,16 @@ namespace TvLibrary.Implementations.Dri.Parser
         pointer += 2;
         int tableTypeVersionNumber = (section[pointer++] & 0x1f);
         uint numberBytes = 0;
-        for (byte b = 0; b < 3; b++)
+        for (byte b = 0; b < 4; b++)
         {
           numberBytes = numberBytes << 8;
           numberBytes = section[pointer++];
         }
         Log.Log.Debug("MGT: table type = 0x{0:x}, PID = 0x{1:x}, version number = {2}", tableType, tableTypePid, tableTypeVersionNumber);
+        if (OnTableDetail != null)
+        {
+          OnTableDetail(tableType, tableTypePid, tableTypeVersionNumber, numberBytes);
+        }
 
         int tableTypeDescriptorsLength = ((section[pointer] & 0x0f) << 8) + section[pointer + 1];
         pointer += 2;
@@ -159,6 +200,14 @@ namespace TvLibrary.Implementations.Dri.Parser
       {
         Log.Log.Error("MGT: corruption detected at end of section, pointer = {0}, end of section = {1}", pointer, endOfSection);
         return;
+      }
+
+      _unseenSections.Remove(sectionNumber);
+      if (_unseenSections.Count == 0 && OnTableComplete != null)
+      {
+        OnTableComplete(MgtTableType.Mgt);
+        OnTableComplete = null;
+        OnTableDetail = null;
       }
     }
   }

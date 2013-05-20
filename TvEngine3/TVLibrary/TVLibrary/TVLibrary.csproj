@@ -112,8 +112,9 @@
     <Compile Include="Implementations\Dri\Parser\MgtParser.cs" />
     <Compile Include="Implementations\Dri\Parser\NitParser.cs" />
     <Compile Include="Implementations\Dri\Parser\NttParser.cs" />
-    <Compile Include="Implementations\Dri\Parser\ParserCommon.cs" />
+    <Compile Include="Implementations\Dri\Parser\BaseDriParser.cs" />
     <Compile Include="Implementations\Dri\Parser\SvctParser.cs" />
+    <Compile Include="Implementations\Dri\ScannerDri.cs" />
     <Compile Include="Implementations\Dri\Service\AuxService.cs" />
     <Compile Include="Implementations\Dri\Service\AvTransportService.cs" />
     <Compile Include="Implementations\Dri\Service\BaseService.cs" />

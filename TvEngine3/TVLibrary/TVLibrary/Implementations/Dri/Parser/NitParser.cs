@@ -19,6 +19,7 @@
 #endregion
 
 using System;
+using System.Collections.Generic;
 using DirectShowLib.BDA;
 
 namespace TvLibrary.Implementations.Dri.Parser
@@ -33,10 +34,46 @@ namespace TvLibrary.Implementations.Dri.Parser
     OverTheAir
   }
 
+  public enum WaveformStandard
+  {
+    Ntsc = 1,
+    Pal625,
+    Pal525,
+    Secam,
+    D2Mac,
+    Bmac,
+    Cmac,
+    Dci,       // DigiCipher I
+    VideoCipher,
+    RcaDss,
+    Orion,
+    Leitch
+  }
+
+  public enum MatrixMode
+  {
+    Mono = 0,
+    DiscreteStereo,
+    MatrixStereo
+  }
+
+  public enum TransmissionSystem
+  {
+    ItutAnnex1 = 1, // ITU ETSI cable (DVB-C???)
+    ItutAnnex2,     // ITU North American cable (SCTE???)
+    ItuR,           // ITU ETSI satellite
+    Atsc,
+    DigiCipher      // DC II satellite
+  }
+
+  public delegate void NitCarrierDefinitionDelegate(AtscTransmissionMedium transmissionMedium, byte index, int carrierFrequency);
+  public delegate void NitModulationModeDelegate(AtscTransmissionMedium transmissionMedium, byte index, TransmissionSystem transmissionSystem,
+    BinaryConvolutionCodeRate innerCodingMode, bool isSplitBitstreamMode, ModulationType modulationFormat, int symbolRate);
+
   /// <summary>
   /// ATSC/SCTE network information table parser. Refer to ATSC A-56 and SCTE 65.
   /// </summary>
-  public class NitParser
+  public class NitParser : BaseDriParser
   {
     private enum TableSubtype
     {
@@ -46,15 +83,6 @@ namespace TvLibrary.Implementations.Dri.Parser
       TransponderData
     }
 
-    private enum TransmissionSystem
-    {
-      ItutAnnex1 = 1, // ITU ETSI cable (DVB-C???)
-      ItutAnnex2,    // ITU North American cable (SCTE???)
-      ItuR,          // ITU ETSI satellite
-      Atsc,
-      DigiCipher      // DC II satellite
-    }
-
     private enum FrequencyBand
     {
       Cband = 0,
@@ -62,33 +90,24 @@ namespace TvLibrary.Implementations.Dri.Parser
       KuBandBss
     }
 
-    private enum WaveformStandard
-    {
-      Ntsc = 1,
-      Pal625,
-      Pal525,
-      Secam,
-      D2Mac,
-      Bmac,
-      Cmac,
-      Dci,       // DigiCipher I
-      VideoCipher,
-      RcaDss,
-      Orion,
-      Leitch
-    }
+    public event TableCompleteDelegate OnTableComplete = null;
+    public event NitCarrierDefinitionDelegate OnCarrierDefinition = null;
+    public event NitModulationModeDelegate OnModulationMode = null;
 
-    private enum MatrixMode
+    public NitParser()
+      : base(1, 4)
     {
-      Mono = 0,
-      DiscreteStereo,
-      MatrixStereo
     }
 
     public void Decode(byte[] section)
     {
-      if (section == null || section.Length < 13)
+      if (OnTableComplete == null)
       {
+        return;
+      }
+      if (section.Length < 13)
+      {
+        Log.Log.Error("NIT: invalid section size {0}, expected at least 13 bytes", section.Length);
         return;
       }
 
@@ -97,7 +116,7 @@ namespace TvLibrary.Implementations.Dri.Parser
       {
         return;
       }
-      int sectionLength = ((section[3] & 0x3f) << 8) + section[4];  // difference between A-56 and SCTE 65
+      int sectionLength = ((section[3] & 0xf) << 8) + section[4];
       if (section.Length != 2 + sectionLength + 3)
       {
         Log.Log.Error("NIT: invalid section length = {0}, byte count = {1}", sectionLength, section.Length);
@@ -107,13 +126,18 @@ namespace TvLibrary.Implementations.Dri.Parser
       byte firstIndex = section[6];
       byte numberOfRecords = section[7];
       AtscTransmissionMedium transmissionMedium = (AtscTransmissionMedium)(section[8] >> 4);
-      TableSubtype tableType = (TableSubtype)(section[8] & 0x0f);
+      TableSubtype tableSubtype = (TableSubtype)(section[8] & 0x0f);
+      if ((tableSubtype != TableSubtype.CarrierDefinition || OnCarrierDefinition == null) &&
+        (tableSubtype != TableSubtype.ModulationMode || OnModulationMode == null))
+      {
+        return;
+      }
 
       int pointer = 9;
       int endOfSection = section.Length - 4;
 
       byte satelliteId = 0;
-      if (tableType == TableSubtype.TransponderData)
+      if (tableSubtype == TableSubtype.TransponderData)
       {
         if (pointer >= endOfSection)
         {
@@ -122,20 +146,20 @@ namespace TvLibrary.Implementations.Dri.Parser
         }
         satelliteId = section[pointer++];
       }
-      Log.Log.Debug("NIT: protocol version = {0}, first index = {1}, number of records = {2}, transmission medium = {3}, table type = {4}, satellite ID = {5}",
-        protocolVersion, firstIndex, numberOfRecords, transmissionMedium, tableType, satelliteId);
+      Log.Log.Debug("NIT: section length = {0}, protocol version = {1}, first index = {2}, number of records = {3}, transmission medium = {4}, table subtype = {5}, satellite ID = {6}",
+        sectionLength, protocolVersion, firstIndex, numberOfRecords, transmissionMedium, tableSubtype, satelliteId);
 
       for (byte i = 0; i < numberOfRecords; i++)
       {
         try
         {
-          switch (tableType)
+          switch (tableSubtype)
           {
             case TableSubtype.CarrierDefinition:
-              DecodeCarrierDefinition(section, endOfSection, ref pointer);
+              DecodeCarrierDefinition(section, endOfSection, ref pointer, ref firstIndex, transmissionMedium);
               break;
             case TableSubtype.ModulationMode:
-              DecodeModulationMode(section, endOfSection, ref pointer);
+              DecodeModulationMode(section, endOfSection, ref pointer, ref firstIndex, transmissionMedium);
               break;
             case TableSubtype.SatelliteInformation:
               DecodeSatelliteInformation(section, endOfSection, ref pointer);
@@ -144,7 +168,7 @@ namespace TvLibrary.Implementations.Dri.Parser
               DecodeTransponderData(section, endOfSection, ref pointer);
               break;
             default:
-              Log.Log.Error("NIT: unsupported subtable type {0}", tableType);
+              Log.Log.Error("NIT: unsupported table subtype {0}", tableSubtype);
               return;
           }
         }
@@ -154,10 +178,10 @@ namespace TvLibrary.Implementations.Dri.Parser
           return;
         }
 
-        // subtable descriptors
+        // table descriptors
         if (pointer >= endOfSection)
         {
-          Log.Log.Error("NIT: invalid section length at subtable descriptor count, pointer = {0}, end of section = {1}, loop = {2}", pointer, endOfSection, i);
+          Log.Log.Error("NIT: invalid section length at table descriptor count, pointer = {0}, end of section = {1}, loop = {2}", pointer, endOfSection, i);
           return;
         }
         byte descriptorCount = section[pointer++];
@@ -165,15 +189,15 @@ namespace TvLibrary.Implementations.Dri.Parser
         {
           if (pointer + 2 > endOfSection)
           {
-            Log.Log.Error("NIT: detected subtable descriptor count {0} is invalid, pointer = {1}, end of section = {2}, loop = {3}, inner loop = {4}", descriptorCount, pointer, endOfSection, i, d);
+            Log.Log.Error("NIT: detected table descriptor count {0} is invalid, pointer = {1}, end of section = {2}, loop = {3}, inner loop = {4}", descriptorCount, pointer, endOfSection, i, d);
             return;
           }
           byte tag = section[pointer++];
           byte length = section[pointer++];
-          Log.Log.Debug("NIT: subtable descriptor, tag = 0x{0:x}, length = {1}", tag, length);
+          Log.Log.Debug("NIT: table descriptor, tag = 0x{0:x}, length = {1}", tag, length);
           if (pointer + length > endOfSection)
           {
-            Log.Log.Error("NIT: invalid subtable descriptor length, pointer = {0}, end of section = {1}, descriptor length = {2}, loop = {3}, inner loop = {4}", pointer, endOfSection, length, i, d);
+            Log.Log.Error("NIT: invalid table descriptor length {0}, pointer = {1}, end of section = {2}, loop = {3}, inner loop = {4}", length, pointer, endOfSection, i, d);
             return;
           }
           pointer += length;
@@ -187,13 +211,13 @@ namespace TvLibrary.Implementations.Dri.Parser
         Log.Log.Debug("NIT: descriptor, tag = 0x{0:x}, length = {1}", tag, length);
         if (pointer + length > endOfSection)
         {
-          Log.Log.Error("NIT: invalid descriptor length, pointer = {0}, end of section = {1}, descriptor length = {2}", pointer, endOfSection, length);
+          Log.Log.Error("NIT: invalid descriptor length {0}, pointer = {1}, end of section = {2}", length, pointer, endOfSection);
           return;
         }
 
-        if (tag == 0x93)  // revision detection descriptor
+        if (tag == 0x93)
         {
-          ParserCommon.DecodeRevisionDetectionDescriptor(section, pointer, length);
+          DecodeRevisionDetectionDescriptor(section, pointer, length, (int)tableSubtype);
         }
 
         pointer += length;
@@ -204,9 +228,38 @@ namespace TvLibrary.Implementations.Dri.Parser
         Log.Log.Error("NIT: corruption detected at end of section, pointer = {0}, end of section = {1}", pointer, endOfSection);
         return;
       }
+
+      if (tableSubtype == TableSubtype.CarrierDefinition &&
+        (
+          _currentVersions[(int)TableSubtype.CarrierDefinition] == -1 ||
+          _unseenSections[(int)TableSubtype.CarrierDefinition].Count == 0
+        ) &&
+        OnCarrierDefinition != null)
+      {
+        OnCarrierDefinition = null;
+        if (OnModulationMode == null && OnTableComplete != null)
+        {
+          OnTableComplete(MgtTableType.NitCds);
+          OnTableComplete = null;
+        }
+      }
+      else if (tableSubtype == TableSubtype.ModulationMode &&
+        (
+          _currentVersions[(int)TableSubtype.ModulationMode] == -1 ||
+          _unseenSections[(int)TableSubtype.ModulationMode].Count == 0
+        ) &&
+        OnModulationMode != null)
+      {
+        OnModulationMode = null;
+        if (OnCarrierDefinition == null && OnTableComplete != null)
+        {
+          OnTableComplete(MgtTableType.NitMms);
+          OnTableComplete = null;
+        }
+      }
     }
 
-    private void DecodeCarrierDefinition(byte[] section, int endOfSection, ref int pointer)
+    private void DecodeCarrierDefinition(byte[] section, int endOfSection, ref int pointer, ref byte firstIndex, AtscTransmissionMedium transmissionMedium)
     {
       if (pointer + 5 > endOfSection)
       {
@@ -230,9 +283,19 @@ namespace TvLibrary.Implementations.Dri.Parser
       pointer += 2;
       Log.Log.Debug("NIT: carrier definition, number of carriers = {0}, spacing unit = {1} kHz, frequency spacing = {2} kHz, frequency unit = {3} kHz, first carrier frequency = {4} kHz",
         numberOfCarriers, spacingUnit, frequencySpacing, frequencyUnit, firstCarrierFrequency);
+
+      if (OnCarrierDefinition != null)
+      {
+        int carrierFrequency = firstCarrierFrequency;
+        for (byte f = 0; f < numberOfCarriers; f++)
+        {
+          OnCarrierDefinition(transmissionMedium, firstIndex++, carrierFrequency);
+          carrierFrequency += frequencySpacing;
+        }
+      }
     }
 
-    private void DecodeModulationMode(byte[] section, int endOfSection, ref int pointer)
+    private void DecodeModulationMode(byte[] section, int endOfSection, ref int pointer, ref byte firstIndex, AtscTransmissionMedium transmissionMedium)
     {
       if (pointer + 6 > endOfSection)
       {
@@ -352,11 +415,16 @@ namespace TvLibrary.Implementations.Dri.Parser
       }
       pointer++;
 
+      // s/s
       int symbolRate = ((section[pointer] & 0x0f) << 24) + (section[pointer + 1] << 16) + (section[pointer + 2] << 8) + section[pointer + 3];
-      symbolRate /= 1000;   // ks/s
       pointer += 4;
-      Log.Log.Debug("NIT: modulation mode, transmission system = {0}, inner coding mode = {1}, is split bitstream mode = {2}, modulation format = {3}, symbol rate = {4} ks/s",
+      Log.Log.Debug("NIT: modulation mode, transmission system = {0}, inner coding mode = {1}, is split bitstream mode = {2}, modulation format = {3}, symbol rate = {4} s/s",
         transmissionSystem, innerCodingMode, isSplitBitstreamMode, modulationFormat, symbolRate);
+
+      if (OnModulationMode != null)
+      {
+        OnModulationMode(transmissionMedium, firstIndex++, transmissionSystem, innerCodingMode, isSplitBitstreamMode, modulationFormat, symbolRate);
+      }
     }
 
     private void DecodeSatelliteInformation(byte[] section, int endOfSection, ref int pointer)
@@ -387,16 +455,16 @@ namespace TvLibrary.Implementations.Dri.Parser
       bool isMpeg2Transport = ((section[pointer] & 0x80) == 0);
       bool isVerticalRightPolarisation = ((section[pointer] & 0x40) != 0);
       int transponderNumber = (section[pointer++] & 0x3f);
-      byte cdtReference = section[pointer++];
-      Log.Log.Debug("NIT: transponder data, is MPEG 2 transport = {0}, is vertical/right polarisation = {1}, transponder number = {2}, CDT reference = 0x{3:x}",
-        isMpeg2Transport, isVerticalRightPolarisation, transponderNumber, cdtReference);
+      byte cdsReference = section[pointer++];
+      Log.Log.Debug("NIT: transponder data, is MPEG 2 transport = {0}, is vertical/right polarisation = {1}, transponder number = {2}, CDS reference = 0x{3:x}",
+        isMpeg2Transport, isVerticalRightPolarisation, transponderNumber, cdsReference);
       if (isMpeg2Transport)
       {
-        byte mmtReference = section[pointer++];
+        byte mmsReference = section[pointer++];
         int vctId = (section[pointer] << 8) + section[pointer + 1];
         pointer += 2;
         bool isRootTransponder = ((section[pointer++] & 0x80) != 0);
-        Log.Log.Debug("NIT: MPEG 2 transponder data, MMT reference = 0x{0:x}, VCT ID = 0x{1:x}, is root transponder = {2}", mmtReference, vctId, isRootTransponder);
+        Log.Log.Debug("NIT: MPEG 2 transponder data, MMS reference = 0x{0:x}, VCT ID = 0x{1:x}, is root transponder = {2}", mmsReference, vctId, isRootTransponder);
       }
       else
       {
@@ -405,12 +473,12 @@ namespace TvLibrary.Implementations.Dri.Parser
         bool isWideBandwidthAudio = ((section[pointer] & 0x80) != 0);
         bool isCompandedAudio = ((section[pointer] & 0x40) != 0);
         MatrixMode matrixMode = (MatrixMode)((section[pointer] >> 4) & 0x03);
-        int subcarrier2pointer = 10 * (((section[pointer] & 0x0f) << 6) + (section[pointer + 1] >> 2));  // kHz
+        int subcarrier2Offset = 10 * (((section[pointer] & 0x0f) << 6) + (section[pointer + 1] >> 2));  // kHz
         pointer++;
-        int subcarrier1pointer = 10 * (((section[pointer] & 0x03) << 8) + section[pointer + 1]);
+        int subcarrier1Offset = 10 * (((section[pointer] & 0x03) << 8) + section[pointer + 1]);
         pointer += 2;
-        Log.Log.Debug("NIT: non-MPEG 2 transponder data, is WB video = {0}, waveform standard = {1}, is WB audio = {2}, is companded audio = {3}, matrix mode = {4}, subcarrier 1 pointer = {5} kHz, subcarrier 2 pointer = {6} kHz",
-          isWideBandwidthVideo, waveformStandard, isWideBandwidthAudio, isCompandedAudio, matrixMode, subcarrier2pointer, subcarrier1pointer);
+        Log.Log.Debug("NIT: non-MPEG 2 transponder data, is WB video = {0}, waveform standard = {1}, is WB audio = {2}, is companded audio = {3}, matrix mode = {4}, subcarrier 2 offset = {5} kHz, subcarrier 1 offset = {6} kHz",
+          isWideBandwidthVideo, waveformStandard, isWideBandwidthAudio, isCompandedAudio, matrixMode, subcarrier2Offset, subcarrier1Offset);
       }
     }
   }
