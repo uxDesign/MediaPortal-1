@@ -21,6 +21,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Management;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
@@ -38,6 +39,8 @@ using TvLibrary.Interfaces.Analyzer;
 using UPnP.Infrastructure;
 using UPnP.Infrastructure.CP;
 using UPnP.Infrastructure.CP.Description;
+using UPnP.Infrastructure.CP.DeviceTree;
+
 
 namespace TvLibrary.Implementations
 {
@@ -50,11 +53,16 @@ namespace TvLibrary.Implementations
     private CPData _upnpControlPointData = null;
     private UPnPNetworkTracker _upnpAgent = null;
     private UPnPControlPoint _upnpControlPoint = null;
+    HashSet<string> _knownUpnpDevices = new HashSet<string>();
 
-    // Are we actively detecting devices?
-    private volatile bool _detecting = false;
-    // The thread responsible for actually detecting devices.
-    private Thread _detectThread = null;
+    // Used for detecting and communicating with devices that are directly
+    // connected to the system.
+    ManagementEventWatcher _systemDeviceChangeEventWatcher = null;
+    DateTime _previousSystemDeviceChange = DateTime.MinValue;
+    object _lockObject = new object();
+    HashSet<string> _knownDevices = new HashSet<string>();
+    RadioWebStreamCard _rwsTuner = new RadioWebStreamCard();    // Always one RWS "tuner".
+
     // The listener that we notify when device events occur.
     private IDeviceEventListener _deviceEventListener = null;
 
@@ -88,8 +96,6 @@ namespace TvLibrary.Implementations
         Thread.Sleep(delayDetect * 1000);
       }
 
-      _detecting = true;
-
       // Start detecting UPnP devices.
       // IMPORTANT: you should start the control point before the network tracker.
       UPnPConfiguration.LOGGER = new Tve3Logger();
@@ -102,10 +108,22 @@ namespace TvLibrary.Implementations
       _upnpAgent.Start();
 
       // Start detecting BDA/WDM devices.
-      _detectThread = new Thread(new ThreadStart(DetectDevices));
-      _detectThread.Priority = ThreadPriority.Lowest;
-      _detectThread.IsBackground = true;
-      _detectThread.Start();
+      _deviceEventListener.OnDeviceAdded(_rwsTuner);
+      try
+      {
+        InitBdaDetectionGraph();
+      }
+      catch (Exception ex)
+      {
+        Log.Log.Error("Failed to initialise the BDA device detection graph!\r\n{0}", ex);
+        return;
+      }
+      DetectDevices();
+      _systemDeviceChangeEventWatcher = new ManagementEventWatcher();
+      _systemDeviceChangeEventWatcher.Query = new WqlEventQuery("SELECT * FROM Win32_DeviceChangeEvent WHERE EventType = 2 OR EventType = 3");
+      _systemDeviceChangeEventWatcher.EventArrived += OnSystemDeviceConnectedOrDisconnected;
+      _systemDeviceChangeEventWatcher.Start();
+      Log.Log.Info("Started async device detection...");
     }
 
     #region IDisposable member
@@ -115,19 +133,16 @@ namespace TvLibrary.Implementations
     /// </summary>
     public void Dispose()
     {
-      _detecting = false;
       _upnpAgent.Close();
       _upnpControlPoint.Close();
+      _systemDeviceChangeEventWatcher.Stop();
 
-      if (_detectThread != null && _detectThread.IsAlive)
+      _knownDevices.Clear();
+      if (_rwsTuner != null)
       {
-        if (!_detectThread.Join(30000))
-        {
-          _detectThread.Abort();
-        }
-        _detectThread = null;
+        _rwsTuner.Dispose();
+        _rwsTuner = null;
       }
-
       if (_rotEntry != null)
       {
         _rotEntry.Dispose();
@@ -136,33 +151,12 @@ namespace TvLibrary.Implementations
       {
         FilterGraphTools.RemoveAllFilters(_graphBuilder);
         Release.ComObject("device detection graph builder", _graphBuilder);
-        _graphBuilder = null;
       }
-      if (_atscNp != null)
-      {
-        Release.ComObject("device detection ATSC network provider", _atscNp);
-        _atscNp = null;
-      }
-      if (_dvbcNp != null)
-      {
-        Release.ComObject("device detection DVB-C network provider", _dvbcNp);
-        _dvbcNp = null;
-      }
-      if (_dvbsNp != null)
-      {
-        Release.ComObject("device detection DVB-S network provider", _dvbsNp);
-        _dvbsNp = null;
-      }
-      if (_dvbtNp != null)
-      {
-        Release.ComObject("device detection DVB-T network provider", _dvbtNp);
-        _dvbtNp = null;
-      }
-      if (_mpNp != null)
-      {
-        Release.ComObject("device detection MediaPortal network provider", _mpNp);
-        _mpNp = null;
-      }
+      Release.ComObject("device detection ATSC network provider", _atscNp);
+      Release.ComObject("device detection DVB-C network provider", _dvbcNp);
+      Release.ComObject("device detection DVB-S network provider", _dvbsNp);
+      Release.ComObject("device detection DVB-T network provider", _dvbtNp);
+      Release.ComObject("device detection MediaPortal network provider", _mpNp);
     }
 
     #endregion
@@ -175,61 +169,52 @@ namespace TvLibrary.Implementations
       return (hr == 0);
     }
 
+    private void OnSystemDeviceConnectedOrDisconnected(object sender, EventArrivedEventArgs e)
+    {
+      // Often several events will be triggered within a very short period of time when a device is added.
+      if ((DateTime.Now - _previousSystemDeviceChange).TotalMilliseconds < 10000)
+      {
+        return;
+      }
+      _previousSystemDeviceChange = DateTime.Now;
+      DetectDevices();
+    }
+
     /// <summary>
     /// Check whether any BDA or WDM devices have been connected to or
     /// disconnected from the system.
     /// </summary>
     private void DetectDevices()
     {
-      Log.Log.Debug("Detecting BDA/WDM devices...");
-
-      try
+      lock (_lockObject)
       {
-        InitBdaDetectionGraph();
-      }
-      catch (Exception ex)
-      {
-        Log.Log.Error("Failed to initialise the BDA device detection graph!\r\n{0}", ex);
-        return;
-      }
+        Log.Log.Debug("Detecting BDA/WDM devices...");
 
-      HashSet<string> previouslyKnownDevices = new HashSet<string>();
-      HashSet<string> knownDevices = new HashSet<string>();
-
-      // Always one RWS "tuner".
-      RadioWebStreamCard rws = new RadioWebStreamCard();
-      _deviceEventListener.OnDeviceAdded(rws);
-
-      while (_detecting)
-      {
-        previouslyKnownDevices = knownDevices;
-        knownDevices = new HashSet<string>();
-        knownDevices.Add(rws.DevicePath);
+        HashSet<string> previouslyKnownDevices = _knownDevices;
+        _knownDevices = new HashSet<string>();
+        _knownDevices.Add(_rwsTuner.DevicePath);
 
         // Detect TechniSat SkyStar/AirStar/CableStar 2 & IP streaming devices.
-        DetectSupportedLegacyAmFilterDevices(ref previouslyKnownDevices, ref knownDevices);
+        DetectSupportedLegacyAmFilterDevices(ref previouslyKnownDevices, ref _knownDevices);
 
         // Detect capture devices. Currently only the Hauppauge HD PVR & Colossus.
-        DetectSupportedAmKsCrossbarDevices(ref previouslyKnownDevices, ref knownDevices);
+        DetectSupportedAmKsCrossbarDevices(ref previouslyKnownDevices, ref _knownDevices);
 
         // Detect analog tuners.
-        DetectSupportedAmKsTvTunerDevices(ref previouslyKnownDevices, ref knownDevices);
+        DetectSupportedAmKsTvTunerDevices(ref previouslyKnownDevices, ref _knownDevices);
 
         // Detect digital BDA tuners.
-        DetectSupportedBdaSourceDevices(ref previouslyKnownDevices, ref knownDevices);
+        DetectSupportedBdaSourceDevices(ref previouslyKnownDevices, ref _knownDevices);
 
         // Remove the devices that are no longer connected.
         foreach (string previouslyKnownDevice in previouslyKnownDevices)
         {
-          if (!knownDevices.Contains(previouslyKnownDevice))
+          if (!_knownDevices.Contains(previouslyKnownDevice))
           {
             Log.Log.Info("Device {0} removed", previouslyKnownDevice);
             _deviceEventListener.OnDeviceRemoved(previouslyKnownDevice);
           }
         }
-
-        // Check for new devices every 60 seconds.
-        Thread.Sleep(60000);
       }
     }
 
@@ -504,20 +489,20 @@ namespace TvLibrary.Implementations
             {
               TuningType tuningTypes;
               interfaceNetworkProvider.GetAvailableTuningTypes(out tuningTypes);
-              Log.Log.Debug("  tuning types = {0}, hash = {1}" + tuningTypes, hash);
-              if (tuningTypes.HasFlag(TuningType.DvbT) && !isCablePreferred)
+              Log.Log.Debug("  tuning types = {0}, hash = {1}", tuningTypes, hash);
+              if ((tuningTypes & TuningType.DvbT) != 0 && !isCablePreferred)
               {
                 deviceToAdd = new TvCardDVBT(connectedDevice);
               }
-              else if (tuningTypes.HasFlag(TuningType.DvbS) && !isCablePreferred)
+              else if ((tuningTypes & TuningType.DvbS) != 0 && !isCablePreferred)
               {
                 deviceToAdd = new TvCardDVBS(connectedDevice);
               }
-              else if (tuningTypes.HasFlag(TuningType.DvbC))
+              else if ((tuningTypes & TuningType.DvbC) != 0)
               {
                 deviceToAdd = new TvCardDVBC(connectedDevice);
               }
-              else if (tuningTypes.HasFlag(TuningType.Atsc))
+              else if ((tuningTypes & TuningType.Atsc) != 0)
               {
                 deviceToAdd = new TvCardATSC(connectedDevice);
               }
@@ -564,6 +549,9 @@ namespace TvLibrary.Implementations
                 for (int n = 0; n < networkTypeCount; n++)
                 {
                   Log.Log.Debug("  network type {0} = {1}", n, networkTypes[n]);
+                }
+                for (int n = 0; n < networkTypeCount; n++)
+                {
                   if (networkTypes[n] == typeof(DVBTNetworkProvider).GUID && !isCablePreferred)
                   {
                     deviceToAdd = new TvCardDVBT(connectedDevice);
