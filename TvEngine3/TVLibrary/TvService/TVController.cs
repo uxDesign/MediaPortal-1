@@ -4421,7 +4421,7 @@ namespace TvService
     /// <param name="device">The device that has been detected.</param>
     public void OnDeviceAdded(ITVCard device)
     {
-      Log.Info("Controller: add device {0}", device.Name);
+      Log.Info("Controller: add device {0} {1}", device.Name, device.DevicePath);
       device.RegisterEpgEventListener(this);
 
       // Check if we have settings for this device in the DB. Create them if we don't.
@@ -4435,9 +4435,14 @@ namespace TvService
 
       // Do we already have a handler for this device? If so, reuse it.
       ITvCardHandler handler = null;
-      if (_cards.ContainsKey(dbSettings.IdCard))
+      if (_cards.TryGetValue(dbSettings.IdCard, out handler))
       {
-        handler = _cards[dbSettings.IdCard];
+        if (handler.Card.CardPresent)
+        {
+          Log.Info("Controller: warn, device was already present", device.Name);
+          device.Dispose();
+          return;
+        }
         handler.Card.CardPresent = true;
         device.Dispose();
       }
@@ -4457,7 +4462,7 @@ namespace TvService
           }
           catch (Exception ex)
           {
-            Log.Error("Failed to preload device {0} {1}!\r\n{1}", device.Name, device.DevicePath, ex);
+            Log.Error("Failed to preload device {0} {1}!\r\n{2}", device.Name, device.DevicePath, ex);
           }
         }
       }
@@ -4510,7 +4515,7 @@ namespace TvService
       try
       {
         String timeShiftPath = dbSettings.TimeShiftFolder;
-        if (String.IsNullOrWhiteSpace(dbSettings.TimeShiftFolder))
+        if (string.IsNullOrEmpty(dbSettings.TimeShiftFolder))
         {
           timeShiftPath = String.Format(@"{0}\Team MediaPortal\MediaPortal TV Server\timeshiftbuffer",
                                         Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData));
@@ -4541,7 +4546,9 @@ namespace TvService
                 File.Delete(fInfo.FullName);
               }
             }
-            catch (IOException) { }
+            catch (IOException)
+            {
+            }
           }
         }
       }
