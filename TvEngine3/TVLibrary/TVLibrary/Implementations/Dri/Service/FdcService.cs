@@ -70,7 +70,7 @@ namespace TvLibrary.Implementations.Dri.Service
       string tidHexCsv = "ALL"; // = no filtering
       if (tid != null)
       {
-        tidHexCsv = string.Join(",", tid.Select(x => string.Format("{0:x}", x)).ToArray());
+        tidHexCsv = string.Join(",", tid.Select(x => string.Format("{0:X}", x)).ToArray());
       }
       _requestTablesAction.InvokeAction(new List<object> { });
     }
@@ -86,7 +86,7 @@ namespace TvLibrary.Implementations.Dri.Service
       string addPidListHexCsv = string.Empty;
       if (addPidList != null)
       {
-        addPidListHexCsv = string.Join(",", addPidList.Select(x => string.Format("{0:x}", x)).ToArray());
+        addPidListHexCsv = string.Join(",", addPidList.Select(x => string.Format("{0:X}", x)).ToArray());
       }
       IList<object> outParams = _addPidAction.InvokeAction(new List<object> { addPidListHexCsv });
       remainingPidFilter = (byte)outParams[0];
@@ -102,7 +102,7 @@ namespace TvLibrary.Implementations.Dri.Service
       string removePidListHexCsv = string.Empty;
       if (removePidList != null)
       {
-        removePidListHexCsv = string.Join(",", removePidList.Select(x => string.Format("{0:x}", x)).ToArray());
+        removePidListHexCsv = string.Join(",", removePidList.Select(x => string.Format("{0:X}", x)).ToArray());
       }
       _removePidAction.InvokeAction(new List<object> { removePidListHexCsv });
     }
