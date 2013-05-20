@@ -372,16 +372,7 @@ namespace TvLibrary.Implementations.DVB
     /// </returns>
     public override bool CanTune(IChannel channel)
     {
-      ATSCChannel atscChannel = channel as ATSCChannel;
-      if (atscChannel == null)
-      {
-        return false;
-      }
-      if (atscChannel.ModulationType == ModulationType.ModNotSet)
-      {
-        return false;
-      }
-      return true;
+      return channel is ATSCChannel;
     }
 
     protected override DVBBaseChannel CreateChannel(int networkid, int transportid, int serviceid, string name)
