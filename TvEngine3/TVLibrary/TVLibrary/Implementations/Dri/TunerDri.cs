@@ -29,7 +29,6 @@ using System.Threading;
 using DirectShowLib;
 using DirectShowLib.BDA;
 using TvLibrary.Channels;
-using TvLibrary.Implementations.Dri.Parser;
 using TvLibrary.Implementations.Dri.Service;
 using TvLibrary.Implementations.DVB;
 using TvLibrary.Implementations.Helper;
@@ -68,12 +67,18 @@ namespace TvLibrary.Implementations.Dri
     private ConnectionManagerService _connectionManagerService = null;
 
     private IBaseFilter _filterStreamSource = null;
-    private IPin _firstFilterInputPin = null;
+    private AMMediaType _mpeg2TransportStream = null;
 
     private int _connectionId = -1;
     private int _avTransportId = -1;
     private string _streamUrl = string.Empty;
 
+    // These variables are used to ensure we don't interrupt another
+    // application using the tuner.
+    private bool _gotTunerControl = false;
+    private UpnpAvTransportState _transportState = UpnpAvTransportState.STOPPED;
+
+    // Important DRM state variables.
     private DriCasCardStatus _cardStatus = DriCasCardStatus.Removed;
     private DriCasDescramblingStatus _descramblingStatus = DriCasDescramblingStatus.Unknown;
     private DriSecurityPairingStatus _pairingStatus = DriSecurityPairingStatus.Red;
@@ -82,6 +87,8 @@ namespace TvLibrary.Implementations.Dri
     private IDictionary<int, string> _menuLinks = new Dictionary<int, string>();
 
     private ManualResetEvent _eventSignalLock = null;
+
+    private readonly bool _isCetonDevice = false;
 
     #endregion
 
@@ -98,6 +105,7 @@ namespace TvLibrary.Implementations.Dri
       _name = descriptor.FriendlyName;
       _devicePath = descriptor.DeviceUDN;   // unique device name is as good as a device path for a unique identifier
       _eventSignalLock = new ManualResetEvent(false);
+      _isCetonDevice = _name.Contains("Ceton");
 
       GetPreloadBitAndCardId();
       GetSupportsPauseGraph();
@@ -110,15 +118,17 @@ namespace TvLibrary.Implementations.Dri
       if (_eventSignalLock != null)
       {
         _eventSignalLock.Close();
+        _eventSignalLock = null;
       }
-      RemoveStreamSourceFilter();
-      if (_firstFilterInputPin != null)
-      {
-        Release.ComObject("DRI first filter input pin", _firstFilterInputPin);
-        _firstFilterInputPin = null;
-      }
+
       base.Dispose();
 
+      RemoveStreamSourceFilter();
+      if (_mpeg2TransportStream != null)
+      {
+        DsUtils.FreeAMMediaType(_mpeg2TransportStream);
+        _mpeg2TransportStream = null;
+      }
       if (_tunerService != null)
       {
         _tunerService.Dispose();
@@ -144,13 +154,28 @@ namespace TvLibrary.Implementations.Dri
         _casService.Dispose();
         _casService = null;
       }
+      if (_muxService != null)
+      {
+        _muxService.Dispose();
+        _muxService = null;
+      }
       if (_securityService != null)
       {
         _securityService.Dispose();
         _securityService = null;
       }
+      if (_diagService != null)
+      {
+        _diagService.Dispose();
+        _diagService = null;
+      }
       if (_avTransportService != null)
       {
+        if (_gotTunerControl && _transportState != UpnpAvTransportState.STOPPED)
+        {
+          _avTransportService.Stop((uint)_avTransportId);
+          _transportState = UpnpAvTransportState.STOPPED;
+        }
         _avTransportService.Dispose();
         _avTransportService = null;
       }
@@ -166,6 +191,7 @@ namespace TvLibrary.Implementations.Dri
         _deviceConnection.Disconnect();
         _deviceConnection = null;
       }
+      _gotTunerControl = false;
     }
 
     #endregion
@@ -261,27 +287,32 @@ namespace TvLibrary.Implementations.Dri
           return;
         }
 
-        bool useKeepAlive = true;
-        if (_name.Contains("Ceton"))
-        {
-          useKeepAlive = false;
-        }
-        Log.Log.Debug("DRI CC: connect to device, keep-alive = {0}", useKeepAlive);
+        bool useKeepAlive = !_isCetonDevice;
+        Log.Log.Info("DRI CC: connect to device, keep-alive = {0}", useKeepAlive);
         _deviceConnection = _controlPoint.Connect(_descriptor.RootDescriptor, _descriptor.DeviceUUID, DriExtendedDataTypes.ResolveDataType, useKeepAlive);
 
         // services
         Log.Log.Debug("DRI CC: setup services");
-        _stateVariableDelegate = new StateVariableChangedDlgt(StateVariableChanged);
-        _tunerService = new TunerService(_deviceConnection.Device, _stateVariableDelegate);
-        _fdcService = new FdcService(_deviceConnection.Device, _stateVariableDelegate);
-        _auxService = new AuxService(_deviceConnection.Device, _stateVariableDelegate);
-        _encoderService = new EncoderService(_deviceConnection.Device, _stateVariableDelegate);
-        _casService = new CasService(_deviceConnection.Device, _stateVariableDelegate);
+        _tunerService = new TunerService(_deviceConnection.Device);
+        _fdcService = new FdcService(_deviceConnection.Device);
+        _auxService = new AuxService(_deviceConnection.Device);
+        _encoderService = new EncoderService(_deviceConnection.Device);
+        _casService = new CasService(_deviceConnection.Device);
         _muxService = new MuxService(_deviceConnection.Device);
-        _securityService = new SecurityService(_deviceConnection.Device, _stateVariableDelegate);
+        _securityService = new SecurityService(_deviceConnection.Device);
         _diagService = new DiagService(_deviceConnection.Device);
-        _avTransportService = new AvTransportService(_deviceConnection.Device, _stateVariableDelegate);
-        _connectionManagerService = new ConnectionManagerService(_deviceConnection.Device, _stateVariableDelegate);
+        _avTransportService = new AvTransportService(_deviceConnection.Device);
+        _connectionManagerService = new ConnectionManagerService(_deviceConnection.Device);
+
+        Log.Log.Debug("DRI CC: subscribe services");
+        _stateVariableDelegate = new StateVariableChangedDlgt(OnStateVariableChanged);
+        _tunerService.SubscribeStateVariables(_stateVariableDelegate);
+        _auxService.SubscribeStateVariables(_stateVariableDelegate);
+        _encoderService.SubscribeStateVariables(_stateVariableDelegate);
+        _casService.SubscribeStateVariables(_stateVariableDelegate);
+        _securityService.SubscribeStateVariables(_stateVariableDelegate);
+        _avTransportService.SubscribeStateVariables(_stateVariableDelegate);
+        _connectionManagerService.SubscribeStateVariables(_stateVariableDelegate);
 
         // Give time for the device to notify us about initial state variable values.
         // Attempting to continue with other actions now can overload the puny device
@@ -293,17 +324,12 @@ namespace TvLibrary.Implementations.Dri
         Log.Log.Debug("DRI CC: PrepareForConnection, connection ID = {0}, AV transport ID = {1}", _connectionId, _avTransportId);
 
         // Check that the device is not already in use.
-        UpnpAvTransportState transportState = UpnpAvTransportState.NO_MEDIA_PRESENT;
-        UpnpAvTransportStatus transportStatus = UpnpAvTransportStatus.OK;
-        string speed = string.Empty;
-        _avTransportService.GetTransportInfo((uint)_avTransportId, out transportState, out transportStatus, out speed);
-        if (transportState != UpnpAvTransportState.STOPPED)
+        if (IsTunerInUse())
         {
-          // TODO need to find a reliable way to ensure we stop AVTransport
-          // after we're done with the tuner without interfering with other
-          // applications that might be using the tuner.
-          //throw new TvExceptionGraphBuildingFailed(string.Format("DRI CC: tuner appears to be in use, transport state = {0}", transportState));
+          throw new TvExceptionGraphBuildingFailed("DRI CC: tuner appears to be in use");
         }
+
+        ReadDeviceInfo();
 
         Log.Log.Info("DRI CC: build graph");
         _graphBuilder = (IFilterGraph2)new FilterGraph();
@@ -311,13 +337,12 @@ namespace TvLibrary.Implementations.Dri
         _capBuilder.SetFiltergraph(_graphBuilder);
         _rotEntry = new DsROTEntry(_graphBuilder);
         AddTsWriterFilterToGraph();
-        _firstFilterInputPin = DsFindPin.ByDirection(_filterTsWriter, PinDirection.Input, 0);
+        AddStreamSourceFilter();
 
-        // This isn't really required, but it enables us to reuse TvCardDvbBase
-        // without null reference exceptions.
+        // This shouldn't be required, but it enables us to reuse TvCardDvbBase
+        // and use CI menus for delivering messages from the CableCARD to the
+        // user.
         _conditionalAccess = new ConditionalAccess(null, null, null, this);
-
-        ReadDeviceInfo();
 
         _graphState = GraphState.Created;
       }
@@ -328,14 +353,43 @@ namespace TvLibrary.Implementations.Dri
       }
     }
 
+    public override void PauseGraph()
+    {
+      if (_avTransportService != null && _gotTunerControl)
+      {
+        _avTransportService.Pause((uint)_avTransportId);
+        _transportState = UpnpAvTransportState.PAUSED_PLAYBACK;
+      }
+      _gotTunerControl = false;
+      base.PauseGraph();
+    }
+
     public override void StopGraph()
     {
-      if (_avTransportService != null)
+      if (_avTransportService != null && _gotTunerControl)
       {
         _avTransportService.Stop((uint)_avTransportId);
+        _transportState = UpnpAvTransportState.STOPPED;
       }
+      _gotTunerControl = false;
       base.StopGraph();
-      RemoveStreamSourceFilter();
+      _previousChannel = null;
+    }
+
+    private bool IsTunerInUse()
+    {
+      if (_gotTunerControl)
+      {
+        return false;
+      }
+      UpnpAvTransportStatus transportStatus = UpnpAvTransportStatus.OK;
+      string speed = string.Empty;
+      _avTransportService.GetTransportInfo((uint)_avTransportId, out _transportState, out transportStatus, out speed);
+      if (_transportState == UpnpAvTransportState.STOPPED || _transportState == UpnpAvTransportState.PAUSED_PLAYBACK || _transportState == UpnpAvTransportState.NO_MEDIA_PRESENT)
+      {
+        return false;
+      }
+      return true;
     }
 
     private void ReadDeviceInfo()
@@ -366,7 +420,7 @@ namespace TvLibrary.Implementations.Dri
         Log.Log.Debug("  carrier lock      = {0}", isCarrierLocked);
         Log.Log.Debug("  frequency         = {0} kHz", frequency);
         Log.Log.Debug("  spectrum inverted = {0}", spectrumInversion);
-        Log.Log.Debug("  PIDs              = {0}", string.Join(", ", pids));
+        Log.Log.Debug("  PIDs              = {0}", string.Join(", ", pids.Select(x => x.ToString()).ToArray()));
 
         IList<DriAuxFormat> formats;
         byte svideoInputCount = 0;
@@ -374,7 +428,7 @@ namespace TvLibrary.Implementations.Dri
         if (_auxService.GetAuxCapabilities(out formats, out svideoInputCount, out compositeInputCount))
         {
           Log.Log.Debug("DRI CC: auxiliary input info...");
-          Log.Log.Debug("  supported formats     = {0}", string.Join(", ", formats));
+          Log.Log.Debug("  supported formats     = {0}", string.Join(", ", formats.Select(x => x.ToString()).ToArray()));
           Log.Log.Debug("  S-video input count   = {0}", svideoInputCount);
           Log.Log.Debug("  composite input count = {0}", compositeInputCount);
         }
@@ -476,25 +530,28 @@ namespace TvLibrary.Implementations.Dri
           _diagService.GetParameter(p, out value, out isVolatile);
           Log.Log.Debug("  {0}{1} = {2}", p.ToString(), isVolatile ? " [volatile]" : "", value);
         }
-        Log.Log.Debug("DRI CC: Ceton-specific diagnostic parameters...");
-        foreach (CetonDiagParameter p in CetonDiagParameter.Values)
+        if (_isCetonDevice)
         {
-          _diagService.GetParameter(p, out value, out isVolatile);
-          Log.Log.Debug("  {0}{1} = {2}", p.ToString(), isVolatile ? " [volatile]" : "", value);
+          Log.Log.Debug("DRI CC: Ceton-specific diagnostic parameters...");
+          foreach (CetonDiagParameter p in CetonDiagParameter.Values)
+          {
+            _diagService.GetParameter(p, out value, out isVolatile);
+            Log.Log.Debug("  {0}{1} = {2}", p.ToString(), isVolatile ? " [volatile]" : "", value);
+          }
         }
 
         IList<UpnpAvTransportAction> actions;
         if (_avTransportService.GetCurrentTransportActions((uint)_avTransportId, out actions))
         {
-          Log.Log.Debug("DRI CC: supported AV transport actions = {0}", string.Join(", ", actions));
+          Log.Log.Debug("DRI CC: supported AV transport actions = {0}", string.Join(", ", actions.Select(x => x.ToString()).ToArray()));
         }
         IList<UpnpAvStorageMedium> playMedia;
         IList<UpnpAvStorageMedium> recordMedia;
         IList<UpnpAvRecordQualityMode> recordQualityModes;
         _avTransportService.GetDeviceCapabilities((uint)_avTransportId, out playMedia, out recordMedia, out recordQualityModes);
-        Log.Log.Debug("DRI CC: supported play media = {0}", string.Join(", ", playMedia));
-        Log.Log.Debug("DRI CC: supported record media = {0}", string.Join(", ", recordMedia));
-        Log.Log.Debug("DRI CC: supported record quality modes = {0}", string.Join(", ", recordQualityModes));
+        Log.Log.Debug("DRI CC: supported play media = {0}", string.Join(", ", playMedia.Select(x => x.ToString()).ToArray()));
+        Log.Log.Debug("DRI CC: supported record media = {0}", string.Join(", ", recordMedia.Select(x => x.ToString()).ToArray()));
+        Log.Log.Debug("DRI CC: supported record quality modes = {0}", string.Join(", ", recordQualityModes.Select(x => x.ToString()).ToArray()));
 
         Log.Log.Debug("DRI CC: media info...");
         uint trackCount = 0;
@@ -517,6 +574,7 @@ namespace TvLibrary.Implementations.Dri
         Log.Log.Debug("  play medium        = {0}", playMedium);
         Log.Log.Debug("  record medium      = {0}", recordMedium);
         Log.Log.Debug("  write status       = {0}", writeStatus);
+        _streamUrl = currentUri;
 
         /*Log.Log.Debug("DRI CC: position info...");
         uint track = 0;
@@ -562,34 +620,37 @@ namespace TvLibrary.Implementations.Dri
     /// <summary>
     /// Add the stream source filter to the graph.
     /// </summary>
-    /// <param name="url">The URL to </param>
-    private void AddStreamSourceFilter(string url)
+    private void AddStreamSourceFilter()
     {
       Log.Log.Info("DRI CC: add source filter");
       _filterStreamSource = FilterGraphTools.AddFilterFromClsid(_graphBuilder, SourceFilterClsid,
                                                                   "DRI Source Filter");
-      AMMediaType mpeg2TransportStream = new AMMediaType();
-      mpeg2TransportStream.majorType = MediaType.Stream;
-      mpeg2TransportStream.subType = MediaSubType.Mpeg2Transport;
-      mpeg2TransportStream.unkPtr = IntPtr.Zero;
-      mpeg2TransportStream.sampleSize = 0;
-      mpeg2TransportStream.temporalCompression = false;
-      mpeg2TransportStream.fixedSizeSamples = true;
-      mpeg2TransportStream.formatType = FormatType.None;
-      mpeg2TransportStream.formatSize = 0;
-      mpeg2TransportStream.formatPtr = IntPtr.Zero;
-      ((IFileSourceFilter)_filterStreamSource).Load(url, mpeg2TransportStream);
-      DsUtils.FreeAMMediaType(mpeg2TransportStream);
+      _mpeg2TransportStream = new AMMediaType();
+      _mpeg2TransportStream.majorType = MediaType.Stream;
+      _mpeg2TransportStream.subType = MediaSubType.Mpeg2Transport;
+      _mpeg2TransportStream.unkPtr = IntPtr.Zero;
+      _mpeg2TransportStream.sampleSize = 0;
+      _mpeg2TransportStream.temporalCompression = false;
+      _mpeg2TransportStream.fixedSizeSamples = true;
+      _mpeg2TransportStream.formatType = FormatType.None;
+      _mpeg2TransportStream.formatSize = 0;
+      _mpeg2TransportStream.formatPtr = IntPtr.Zero;
 
       // (Re)connect the source filter to the first filter in the chain.
-      IPin sourceOutputPin = DsFindPin.ByDirection(_filterStreamSource, PinDirection.Output, 0);
-      if (sourceOutputPin == null)
+      IPin tsWriterInputPin = DsFindPin.ByDirection(_filterTsWriter, PinDirection.Input, 0);
+      if (tsWriterInputPin == null)
       {
-        throw new TvException("DRI CC: failed to find source filter output pin");
+        throw new TvExceptionGraphBuildingFailed("DRI CC: failed to find TsWriter filter input pin");
       }
+      IPin sourceOutputPin = null;
       try
       {
-        int hr = _graphBuilder.Connect(sourceOutputPin, _firstFilterInputPin);
+        sourceOutputPin = DsFindPin.ByDirection(_filterStreamSource, PinDirection.Output, 0);
+        if (sourceOutputPin == null)
+        {
+          throw new TvExceptionGraphBuildingFailed("DRI CC: failed to find source filter output pin");
+        }
+        int hr = _graphBuilder.Connect(sourceOutputPin, tsWriterInputPin);
         if (hr != 0)
         {
           throw new TvExceptionGraphBuildingFailed(string.Format("DRI CC: failed to connect source filter into graph, hr = 0x{0:x} ({1})", hr, HResult.GetDXErrorString(hr)));
@@ -598,6 +659,7 @@ namespace TvLibrary.Implementations.Dri
       }
       finally
       {
+        Release.ComObject("DRI TsWriter filter input pin", tsWriterInputPin);
         Release.ComObject("DRI source filter output pin", sourceOutputPin);
       }
     }
@@ -630,6 +692,11 @@ namespace TvLibrary.Implementations.Dri
       {
         BuildGraph();
       }
+      else if (IsTunerInUse())
+      {
+        throw new TvException("DRI CC: tuner appears to be in use");
+      }
+      _gotTunerControl = true;
       return true;
     }
 
@@ -641,7 +708,7 @@ namespace TvLibrary.Implementations.Dri
                                               bool performTune)
     {
       ATSCChannel atscChannel = channel as ATSCChannel;
-      Log.Log.Info("DRI CC: tune channel {0} \"{1}\", sub channel ID {2} ", atscChannel.PhysicalChannel, channel.Name, subChannelId);
+      Log.Log.Info("DRI CC: tune channel {0} \"{1}\", sub channel ID {2}", atscChannel.PhysicalChannel, channel.Name, subChannelId);
 
       bool newSubChannel = false;
       BaseSubChannel subChannel;
@@ -665,6 +732,7 @@ namespace TvLibrary.Implementations.Dri
         {
           _interfaceEpgGrabber.Reset();
         }
+
         if (performTune)
         {
           Log.Log.Debug("DRI CC: tuning...");
@@ -675,30 +743,21 @@ namespace TvLibrary.Implementations.Dri
           // get lock, however that is probably slower on average than
           // receiving asynchronous updates.
           _eventSignalLock.Reset();
-          _casService.SetChannel((uint)atscChannel.PhysicalChannel, 0, DriCasCaptureMode.Live, out _tunerLocked);
-
-          Log.Log.Debug("DRI CC: get media info...");
-          uint trackCount = 0;
-          string mediaDuration = string.Empty;
-          string currentUri = string.Empty;
-          string currentUriMetaData = string.Empty;
-          string nextUri = string.Empty;
-          string nextUriMetaData = string.Empty;
-          UpnpAvStorageMedium playMedium = UpnpAvStorageMedium.Unknown;
-          UpnpAvStorageMedium recordMedium = UpnpAvStorageMedium.Unknown;
-          UpnpAvRecordMediumWriteStatus writeStatus = UpnpAvRecordMediumWriteStatus.NOT_IMPLEMENTED;
-          _avTransportService.GetMediaInfo((uint)_avTransportId, out trackCount, out mediaDuration, out currentUri,
-            out currentUriMetaData, out nextUri, out nextUriMetaData, out playMedium, out recordMedium, out writeStatus);
-
-          AddStreamSourceFilter(currentUri);
-
-          Log.Log.Debug("DRI CC: play...");
-          _avTransportService.Play((uint)_avTransportId, "1");
+          _casService.SetChannel((uint)atscChannel.MajorChannel, 0, DriCasCaptureMode.Live, out _tunerLocked);
         }
         else
         {
           Log.Log.Info("DRI CC: already tuned");
         }
+
+        if (_transportState != UpnpAvTransportState.PLAYING)
+        {
+          Log.Log.Debug("DRI CC: play...");
+          ((IFileSourceFilter)_filterStreamSource).Load(_streamUrl, _mpeg2TransportStream);
+          _avTransportService.Play((uint)_avTransportId, "1");
+          _transportState = UpnpAvTransportState.PLAYING;
+        }
+
         _lastSignalUpdate = DateTime.MinValue;
         subChannel.OnAfterTune();
       }
@@ -730,9 +789,6 @@ namespace TvLibrary.Implementations.Dri
       Log.Log.Info("DRI CC: signal locked");
     }
 
-    /// <summary>
-    /// Updates the signal informations of the tv cards
-    /// </summary>
     protected override void UpdateSignalQuality(bool force)
     {
       if (!force)
@@ -790,22 +846,80 @@ namespace TvLibrary.Implementations.Dri
       }
     }
 
-    /// <summary>
-    /// Check if the device can tune to a given channel.
-    /// </summary>
-    /// <param name="channel">The channel to check.</param>
-    /// <returns><c>true</c> if the device can tune to the channel, otherwise <c>false</c></returns>
-    public override bool CanTune(IChannel channel)
+    public override ITVScanning ScanningInterface
     {
-      ATSCChannel atscChannel = channel as ATSCChannel;
-      if (atscChannel != null && atscChannel.ModulationType == ModulationType.ModNotSet)
-      {
-        return true;
-      }
-      return false;
+      get { return new ScannerDri(this, _fdcService); }
     }
 
-    private void StateVariableChanged(CpStateVariable stateVariable, object newValue)
+    public override ITvSubChannel Scan(int subChannelId, IChannel channel)
+    {
+      Log.Log.Info("DRI CC: scan, sub channel ID {0}", subChannelId);
+      BeforeTune(channel);
+
+      bool newSubChannel = false;
+      BaseSubChannel subChannel;
+      if (!_mapSubChannels.TryGetValue(subChannelId, out subChannel))
+      {
+        Log.Log.Debug("  new subchannel");
+        newSubChannel = true;
+        subChannelId = GetNewSubChannel(channel);
+        subChannel = _mapSubChannels[subChannelId];
+      }
+      else
+      {
+        Log.Log.Debug("  existing subchannel {0}", subChannelId);
+      }
+
+      try
+      {
+        if (_graphState == GraphState.Idle)
+        {
+          BuildGraph();
+        }
+
+        Log.Log.Debug("DRI CC: check OOB tuner lock...");
+        uint bitrate = 0;
+        bool isCarrierLocked = false;
+        uint frequency = 0;
+        bool spectrumInversion = false;
+        IList<ushort> pids;
+        _fdcService.GetFdcStatus(out bitrate, out isCarrierLocked, out frequency, out spectrumInversion, out pids);
+        Log.Log.Debug("  carrier lock = {0}", isCarrierLocked);
+        Log.Log.Debug("  frequency    = {0} kHz", frequency);
+        if (_isCetonDevice)
+        {
+          string value = string.Empty;
+          bool isVolatile = false;
+          _diagService.GetParameter(CetonDiagParameter.OobSignalLevel, out value, out isVolatile);
+          Log.Log.Debug("  signal level = {0}", value);
+          _diagService.GetParameter(CetonDiagParameter.OobSnr, out value, out isVolatile);
+          Log.Log.Debug("  SNR          = {0}", value);
+        }
+
+        if (!isCarrierLocked)
+        {
+          throw new TvExceptionNoSignal();
+        }
+
+        return subChannel;
+      }
+      catch (Exception)
+      {
+        if (newSubChannel)
+        {
+          Log.Log.Info("DRI CC: scan initialisation failed, removing subchannel");
+          _mapSubChannels.Remove(subChannelId);
+        }
+        throw;
+      }
+    }
+
+    /// <summary>
+    /// Handle UPnP evented state variable changes.
+    /// </summary>
+    /// <param name="stateVariable">The state variable that has changed.</param>
+    /// <param name="newValue">The new value of the state variable.</param>
+    private void OnStateVariableChanged(CpStateVariable stateVariable, object newValue)
     {
       try
       {
@@ -828,7 +942,7 @@ namespace TvLibrary.Implementations.Dri
         }
         else if (stateVariable.Name.Equals("CardMessage"))
         {
-          if (!string.IsNullOrWhiteSpace(newValue.ToString()))
+          if (!string.IsNullOrEmpty(newValue.ToString()))
           {
             Log.Log.Info("DRI CC: device {0} received message from the CableCARD, current status = {1}, message = {2}", _cardId, _cardStatus, newValue);
           }
@@ -854,17 +968,6 @@ namespace TvLibrary.Implementations.Dri
           {
             Log.Log.Info("DRI CC: device {0} pairing status update, old status = {1}, new status = {2}", _cardId, oldStatus, _pairingStatus);
           }
-        }
-        else if (stateVariable.Name.Equals("TableSection"))
-        {
-          byte[] bytes = (byte[])newValue;
-          NitParser nitParser = new NitParser();
-          NttParser nttParser = new NttParser();
-          MgtParser mgtParser = new MgtParser();
-          DVB_MMI.DumpBinary(bytes, 0, bytes.Length);
-          nitParser.Decode(bytes);
-          nttParser.Decode(bytes);
-          mgtParser.Decode(bytes);
         }
         else
         {
