@@ -268,7 +268,7 @@ namespace TvLibrary.Implementations.Pbda
         if (performTune)
         {
           Log.Log.Info("PBDA CC: tuning...");
-          int hr = _bdaCa.TuneByChannel((ushort)(channel as ATSCChannel).PhysicalChannel);
+          int hr = _bdaCa.TuneByChannel((ushort)(channel as ATSCChannel).MajorChannel);
           if (hr != 0)
           {
             Log.Log.Error("  tuning failed, hr = 0x{0:x}", hr);
@@ -309,11 +309,8 @@ namespace TvLibrary.Implementations.Pbda
       {
         return false;
       }
-      if (atscChannel.ModulationType != ModulationType.ModNotSet)
-      {
-        return false;
-      }
-      return true;
+      // Major channel holds the virtual channel number that we use for tuning.
+      return atscChannel.MajorChannel > 0;
     }
 
     /// <summary>
