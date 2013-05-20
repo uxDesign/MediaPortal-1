@@ -33,6 +33,7 @@ using TvLibrary.Implementations.Dri.Service;
 using TvLibrary.Implementations.DVB;
 using TvLibrary.Implementations.Helper;
 using TvLibrary.Interfaces;
+using UPnP.Infrastructure.Common;
 using UPnP.Infrastructure.CP;
 using UPnP.Infrastructure.CP.Description;
 using UPnP.Infrastructure.CP.DeviceTree;
@@ -289,7 +290,7 @@ namespace TvLibrary.Implementations.Dri
 
         bool useKeepAlive = !_isCetonDevice;
         Log.Log.Info("DRI CC: connect to device, keep-alive = {0}", useKeepAlive);
-        _deviceConnection = _controlPoint.Connect(_descriptor.RootDescriptor, _descriptor.DeviceUUID, DriExtendedDataTypes.ResolveDataType, useKeepAlive);
+        _deviceConnection = _controlPoint.Connect(_descriptor.RootDescriptor, _descriptor.DeviceUUID, ResolveDataType, useKeepAlive);
 
         // services
         Log.Log.Debug("DRI CC: setup services");
@@ -1103,6 +1104,20 @@ namespace TvLibrary.Implementations.Dri
           _ciMenuCallbacks.OnCiMenuChoice(i - 1, item);
         }
       }
+    }
+
+    /// <summary>
+    /// Resolve a DRI-specific data type.
+    /// </summary>
+    /// <param name="dataTypeName">The fully qualified name of the data type.</param>
+    /// <param name="dataType">The data type.</param>
+    /// <returns><c>true</c> if the data type has been resolved, otherwise <c>false</c></returns>
+    public static bool ResolveDataType(string dataTypeName, out UPnPExtendedDataType dataType)
+    {
+      // All the DRI variable types are standard, so we don't expect to be asked to resolve any data types.
+      Log.Log.Error("DRI: resolve data type not supported, type name = {0}", dataTypeName);
+      dataType = null;
+      return true;
     }
   }
 }
