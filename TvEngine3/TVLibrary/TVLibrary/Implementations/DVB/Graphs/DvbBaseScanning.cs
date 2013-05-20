@@ -283,7 +283,7 @@ namespace TvLibrary.Implementations.DVB
       try
       {
         bool isDigitalCableScan = false;
-        if (_card is TunerPbdaCableCard || _card is TunerDri)
+        if (_card is TunerPbdaCableCard)
         {
           isDigitalCableScan = true;
         }
