@@ -53,7 +53,7 @@ namespace TvLibrary.Implementations.Pbda
     #region graphbuilding
 
     /// <summary>
-    /// Builds the graph.
+    /// Build the graph.
     /// </summary>
     public override void BuildGraph()
     {
@@ -61,10 +61,10 @@ namespace TvLibrary.Implementations.Pbda
       {
         if (_graphState != GraphState.Idle)
         {
-          Log.Log.Error("PBDA CC: graph already built");
-          throw new TvException("Graph already built");
+          Log.Log.Info("PBDA CC: device already initialised");
+          return;
         }
-        Log.Log.WriteFile("PBDA CC: build graph");
+        Log.Log.Info("PBDA CC: build graph");
         _graphBuilder = (IFilterGraph2)new FilterGraph();
         _capBuilder = (ICaptureGraphBuilder2)new CaptureGraphBuilder2();
         _capBuilder.SetFiltergraph(_graphBuilder);
@@ -80,8 +80,7 @@ namespace TvLibrary.Implementations.Pbda
         _bdaCa = _filterTuner as IBDA_ConditionalAccess;
         if (_bdaCa == null)
         {
-          Log.Log.Debug("PBDA CC: tuner filter does not implement required interface");
-          throw new TvExceptionGraphBuildingFailed("The tuner filter does not implement the required interface.");
+          throw new TvExceptionGraphBuildingFailed("PBDA CC: tuner filter does not implement required interface");
         }
         AddPbdaFilter(ref lastFilter);
         CompleteGraph(ref lastFilter);
@@ -93,12 +92,10 @@ namespace TvLibrary.Implementations.Pbda
         GetTunerSignalStatistics();
         _graphState = GraphState.Created;
       }
-      catch (Exception ex)
+      catch (Exception)
       {
-        Log.Log.Write(ex);
         Dispose();
-        _graphState = GraphState.Idle;
-        throw new TvExceptionGraphBuildingFailed("Graph building failed.", ex);
+        throw;
       }
     }
 
@@ -115,7 +112,7 @@ namespace TvLibrary.Implementations.Pbda
 
     private void AddPbdaFilter(ref IBaseFilter lastFilter)
     {
-      Log.Log.Debug("PBDA CC: add PBDA filter");
+      Log.Log.Info("PBDA CC: add PBDA filter");
 
       // PBDA PTFilter
       // {89C2E132-C29B-11DB-96FA-005056C00008}
@@ -124,15 +121,13 @@ namespace TvLibrary.Implementations.Pbda
       _pbdaFilter = FilterGraphTools.AddFilterFromClsid(_graphBuilder, pbdaPtFilter, "PBDA PTFilter");
       if (_pbdaFilter == null)
       {
-        Log.Log.Debug("PBDA CC: failed to add PBDA filter, filter is null - you must use Windows 7+!");
-        throw new TvExceptionGraphBuildingFailed("Failed to add PBDA filter to graph.");
+        throw new TvExceptionGraphBuildingFailed("PBDA CC: failed to add PBDA filter, filter is null - you must use Windows 7+!");
       }
 
       int hr = _capBuilder.RenderStream(null, null, lastFilter, null, _pbdaFilter);
       if (hr != 0)
       {
-        Log.Log.Debug("PBDA CC: failed to connect PBDA filter into the graph, hr = 0x{0:x}", hr);
-        throw new TvExceptionGraphBuildingFailed("Failed to connect PBDA filter into graph.");
+        throw new TvExceptionGraphBuildingFailed(string.Format("PBDA CC: failed to connect PBDA filter into the graph, hr = 0x{0:x}", hr));
       }
       lastFilter = _pbdaFilter;
     }
@@ -175,12 +170,12 @@ namespace TvLibrary.Implementations.Pbda
         }
         else
         {
-          Log.Log.Debug("PBDA CC: failed to read smart card info, hr = 0x{0:x}", hr);
+          Log.Log.Error("PBDA CC: failed to read smart card info, hr = 0x{0:x}", hr);
         }
       }
       catch (Exception ex)
       {
-        Log.Log.Debug("PBDA CC: caught exception when attempting to read smart card info\r\n{0}", ex.ToString());
+        Log.Log.Error("PBDA CC: caught exception when attempting to read smart card info\r\n{0}", ex);
       }
 
       // Smart card applications.
@@ -201,12 +196,12 @@ namespace TvLibrary.Implementations.Pbda
         }
         else
         {
-          Log.Log.Debug("PBDA CC: failed to read smart card status, hr = 0x{0:x}", hr);
+          Log.Log.Error("PBDA CC: failed to read smart card status, hr = 0x{0:x}", hr);
         }
       }
       catch (Exception ex)
       {
-        Log.Log.Debug("PBDA CC: caught exception when attempting to read smart card status\r\n{0}", ex.ToString());
+        Log.Log.Error("PBDA CC: caught exception when attempting to read smart card status\r\n{0}", ex);
       }
 
       // Smart card applications.
@@ -230,12 +225,12 @@ namespace TvLibrary.Implementations.Pbda
         }
         else
         {
-          Log.Log.Debug("PBDA CC: failed to read smart card application info, hr = 0x{0:x}", hr);
+          Log.Log.Error("PBDA CC: failed to read smart card application info, hr = 0x{0:x}", hr);
         }
       }
       catch (Exception ex)
       {
-        Log.Log.Debug("PBDA CC: caught exception when attempting to read smart card application info\r\n{0}", ex.ToString());
+        Log.Log.Error("PBDA CC: caught exception when attempting to read smart card application info\r\n{0}", ex);
       }
     }
 
@@ -246,35 +241,37 @@ namespace TvLibrary.Implementations.Pbda
     protected override ITvSubChannel SubmitTuneRequest(int subChannelId, IChannel channel, ITuneRequest tuneRequest,
                                               bool performTune)
     {
-      Log.Log.Info("PBDA CC: tune channel \"{0}\", subChannel {1} ", channel.Name, subChannelId);
+      Log.Log.Info("PBDA CC: tune channel \"{0}\", sub channel ID {1}", channel.Name, subChannelId);
       RunGraph(-1);
       bool newSubChannel = false;
-      if (_mapSubChannels.ContainsKey(subChannelId) == false)
+      BaseSubChannel subChannel;
+      if (!_mapSubChannels.TryGetValue(subChannelId, out subChannel))
       {
-        Log.Log.Info("  new subchannel");
+        Log.Log.Debug("  new subchannel");
         newSubChannel = true;
         subChannelId = GetNewSubChannel(channel);
+        subChannel = _mapSubChannels[subChannelId];
       }
       else
       {
-        Log.Log.Info("  existing subchannel {0}", subChannelId);
+        Log.Log.Debug("  existing subchannel {0}", subChannelId);
       }
 
-      _mapSubChannels[subChannelId].CurrentChannel = channel;
+      subChannel.CurrentChannel = channel;
       try
-      {         
-        _mapSubChannels[subChannelId].OnBeforeTune();        
+      {
+        subChannel.OnBeforeTune();        
         if (_interfaceEpgGrabber != null)
         {
           _interfaceEpgGrabber.Reset();
         }
         if (performTune)
         {
-          Log.Log.WriteFile("PBDA CC: tuning...");
+          Log.Log.Info("PBDA CC: tuning...");
           int hr = _bdaCa.TuneByChannel((ushort)(channel as ATSCChannel).PhysicalChannel);
           if (hr != 0)
           {
-            Log.Log.WriteFile("  tuning failed, hr = 0x{0:x}", hr);
+            Log.Log.Error("  tuning failed, hr = 0x{0:x}", hr);
             throw new TvException("Unable to tune to channel");
           }
         }
@@ -283,19 +280,19 @@ namespace TvLibrary.Implementations.Pbda
           Log.Log.WriteFile("PBDA CC: already tuned");
         }
         _lastSignalUpdate = DateTime.MinValue;
-        _mapSubChannels[subChannelId].OnAfterTune();
+        subChannel.OnAfterTune();
       }
       catch (Exception)
       {        
         if (newSubChannel)
         {
-          Log.Log.WriteFile("PBDA CC: tuning failed, removing subchannel");
+          Log.Log.Info("PBDA CC: tuning failed, removing subchannel");
           _mapSubChannels.Remove(subChannelId);
         }
         throw;
       }
 
-      return _mapSubChannels[subChannelId];
+      return subChannel;
     }
 
     /// <summary>
@@ -327,7 +324,23 @@ namespace TvLibrary.Implementations.Pbda
     /// <returns>true if succeeded else false</returns>
     public override ITvSubChannel Scan(int subChannelId, IChannel channel)
     {
-      Log.Log.WriteFile("PBDA CC: scan");
+      Log.Log.Info("PBDA CC: scan, subchannel ID {0}", subChannelId);
+      BeforeTune(channel);
+
+      bool newSubChannel = false;
+      BaseSubChannel subChannel;
+      if (!_mapSubChannels.TryGetValue(subChannelId, out subChannel))
+      {
+        Log.Log.Debug("  new subchannel");
+        newSubChannel = true;
+        subChannelId = GetNewSubChannel(channel);
+        subChannel = _mapSubChannels[subChannelId];
+      }
+      else
+      {
+        Log.Log.Debug("  existing subchannel {0}", subChannelId);
+      }
+
       try
       {
         if (_graphState == GraphState.Idle)
@@ -350,7 +363,7 @@ namespace TvLibrary.Implementations.Pbda
         }
         else
         {
-          Log.Log.Debug("PBDA CC: failed to read smart card status, hr = 0x{0:x}", hr);
+          Log.Log.Error("PBDA CC: failed to read smart card status, hr = 0x{0:x}", hr);
         }
 
         if (hr != 0 || !isOutOfBandTunerLocked)
@@ -358,24 +371,18 @@ namespace TvLibrary.Implementations.Pbda
           throw new TvExceptionNoSignal();
         }
 
-        // Create a subchannel.
-        if (_mapSubChannels.ContainsKey(subChannelId) == false)
-        {
-          Log.Log.Info("PBDA CC: creating new subchannel");
-          subChannelId = GetNewSubChannel(channel);
-        }
-        else
-        {
-          Log.Log.Info("PBDA CC: using existing subchannel");
-        }
         RunGraph(-1);
-        return _mapSubChannels[subChannelId];
+        return subChannel;
       }
-      catch (Exception ex)
+      catch (Exception)
       {
-        Log.Log.Debug("PBDA CC: caught exception when attempting to scan\r\n{0}", ex.ToString());
+        if (newSubChannel)
+        {
+          Log.Log.Info("PBDA CC: scan initialisation failed, removing subchannel");
+          _mapSubChannels.Remove(subChannelId);
+        }
+        throw;
       }
-      return null;
     }
 
     protected override bool BeforeTune(IChannel channel)
@@ -383,8 +390,7 @@ namespace TvLibrary.Implementations.Pbda
       ATSCChannel atscChannel = channel as ATSCChannel;
       if (atscChannel == null)
       {
-        Log.Log.WriteFile("PBDA CC: channel is not a ATSC channel!!! {0}", channel.GetType().ToString());
-        return false;
+        throw new TvException("PBDA CC: received tune request for unsupported channel");
       }
       if (_graphState == GraphState.Idle)
       {
