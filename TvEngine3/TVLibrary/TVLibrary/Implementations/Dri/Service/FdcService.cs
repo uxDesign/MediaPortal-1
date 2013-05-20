@@ -72,7 +72,7 @@ namespace TvLibrary.Implementations.Dri.Service
       {
         tidHexCsv = string.Join(",", tid.Select(x => string.Format("{0:X}", x)).ToArray());
       }
-      _requestTablesAction.InvokeAction(new List<object> { });
+      _requestTablesAction.InvokeAction(new List<object> { tidHexCsv });
     }
 
     /// <summary>
