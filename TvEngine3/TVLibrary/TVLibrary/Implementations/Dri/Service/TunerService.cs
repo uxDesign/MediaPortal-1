@@ -20,6 +20,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using UPnP.Infrastructure.CP.DeviceTree;
 
 namespace TvLibrary.Implementations.Dri.Service
@@ -113,7 +114,7 @@ namespace TvLibrary.Implementations.Dri.Service
       string newModulationListCsv = DriTunerModulation.All;
       if (newModulationList != null)
       {
-        newModulationListCsv = string.Join(",", newModulationList);
+        newModulationListCsv = string.Join(",", newModulationList.Select(x => x.ToString()).ToArray());
       }
       IList<object> outParams = _setTunerParametersAction.InvokeAction(new List<object> { newFrequency, newModulationListCsv });
       currentFrequency = (uint)outParams[0];
@@ -166,7 +167,7 @@ namespace TvLibrary.Implementations.Dri.Service
       string newModulationListCsv = DriTunerModulation.All;
       if (newModulationList != null)
       {
-        newModulationListCsv = string.Join(",", newModulationList);
+        newModulationListCsv = string.Join(",", newModulationList.Select(x => x.ToString()).ToArray());
       }
       _seekSignalAction.InvokeAction(new List<object> { startFrequency, stopFrequency, newModulationListCsv, increment, seekUp, timeToBlock });
       return true;
