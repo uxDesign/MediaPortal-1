@@ -133,7 +133,6 @@
     <Compile Include="Implementations\Dri\Service\TunerService.cs" />
     <Compile Include="Implementations\Dri\TunerDri.cs" />
     <Compile Include="Implementations\Pbda\TunerPbdaCableCard.cs" />
-    <Compile Include="Implementations\Dri\DriExtendedDataTypes.cs" />
     <Compile Include="Implementations\DVB\QAM\GenericATSC.cs" />
     <Compile Include="Implementations\DVB\DisEqC\GenericBDAS.cs" />
     <Compile Include="Implementations\DVB\DisEqC\GenPixBDA.cs" />
