@@ -43,6 +43,11 @@
 #define     SYNC_BYTE                                                 0x47
 #define     PID_PAT                                                   0x0000
 #define     PID_NULL                                                  0x1FFF
+#define     MAX_RESERVED_PID                                          0x000F
+
+#define     KEEP_PID_IN_STREAM                                        0x02
+#define     KEEP_PID_IN_PMT                                           0x01
+#define     NOT_KEEP_PID                                              0x00
 
 struct ProtocolImplementation
 {
@@ -130,6 +135,9 @@ private:
 
   // instance of CRC32 to compute CRC32 checksum
   Crc32 crc32;
+
+  // pointer to array of PID to keep in PMT
+  unsigned int *keepPidValues;
 };
 
 #endif

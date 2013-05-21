@@ -38,6 +38,7 @@
 #define RTSP_PORT_DEFAULT                                   554
 #define RTSP_UDP_PORT_RANGE_START_DEFAULT                   45000
 #define RTSP_UDP_PORT_RANGE_END_DEFAULT                     46000
+#define RTSP_UDP_SINK_MAX_PAYLOAD_SIZE_DEFAULT              1450
 #define RTSP_TEARDOWN_REQUEST_MAXIMUM_COUNT_DEFAULT         5
 #define RTSP_TEARDOWN_REQUEST_TIMEOUT_DEFAULT               100
 #define RTSP_OPEN_CONNECTION_MAXIMUM_ATTEMPTS_DEFAULT       3
@@ -47,6 +48,7 @@
 #define CONFIGURATION_RTSP_RECEIVE_DATA_TIMEOUT             _T("RtspReceiveDataTimeout")
 #define CONFIGURATION_RTSP_UDP_PORT_RANGE_START             _T("RtspUdpPortRangeStart")
 #define CONFIGURATION_RTSP_UDP_PORT_RANGE_END               _T("RtspUdpPortRangeEnd")
+#define CONFIGURATION_RTSP_UDP_SINK_MAX_PAYLOAD_SIZE        _T("RtspUdpSinkMaxPayloadSize")
 #define CONFIGURATION_RTSP_TEARDOWN_REQUEST_MAXIMUM_COUNT   _T("RtspTeardownRequestMaximumCount")
 #define CONFIGURATION_RTSP_TEARDOWN_REQUEST_TIMEOUT         _T("RtspTeardownRequestTimeout")
 #define CONFIGURATION_RTSP_OPEN_CONNECTION_MAXIMUM_ATTEMPTS _T("RtspOpenConnectionMaximumAttempts")
@@ -93,7 +95,8 @@ protected:
   MediaSession* rtspSession;
   FramedSource *rtspSource;
   Groupsock *rtspUdpGroupsock;
-  BasicUDPSink *rtspUdpSink;
+  MediaSink *rtspUdpSink;
+  unsigned int rtspUdpSinkMaxPayloadSize;
   unsigned int rtspUdpPortRangeStart;
   unsigned int rtspUdpPortRangeEnd;
 

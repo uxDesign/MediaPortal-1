@@ -116,6 +116,7 @@ int CMPIPTV_RTSP::Initialize(HANDLE lockMutex, CParameterCollection *configurati
   this->receiveDataTimeout = this->configurationParameters->GetValueLong(CONFIGURATION_RTSP_RECEIVE_DATA_TIMEOUT, true, RTSP_RECEIVE_DATA_TIMEOUT_DEFAULT);
   this->rtspUdpPortRangeStart = this->configurationParameters->GetValueLong(CONFIGURATION_RTSP_UDP_PORT_RANGE_START, true, RTSP_UDP_PORT_RANGE_START_DEFAULT);
   this->rtspUdpPortRangeEnd = this->configurationParameters->GetValueLong(CONFIGURATION_RTSP_UDP_PORT_RANGE_END, true, RTSP_UDP_PORT_RANGE_END_DEFAULT);
+  this->rtspUdpSinkMaxPayloadSize = this->configurationParameters->GetValueUnsignedInt(CONFIGURATION_RTSP_UDP_SINK_MAX_PAYLOAD_SIZE, true, RTSP_UDP_SINK_MAX_PAYLOAD_SIZE_DEFAULT);
   this->rtspTeardownRequestMaximumCount = this->configurationParameters->GetValueLong(CONFIGURATION_RTSP_TEARDOWN_REQUEST_MAXIMUM_COUNT, true, RTSP_TEARDOWN_REQUEST_MAXIMUM_COUNT_DEFAULT);
   this->rtspTeardownRequestTimeout = this->configurationParameters->GetValueLong(CONFIGURATION_RTSP_TEARDOWN_REQUEST_TIMEOUT, true, RTSP_TEARDOWN_REQUEST_TIMEOUT_DEFAULT);
   this->openConnetionMaximumAttempts = this->configurationParameters->GetValueLong(CONFIGURATION_RTSP_OPEN_CONNECTION_MAXIMUM_ATTEMPTS, true, RTSP_OPEN_CONNECTION_MAXIMUM_ATTEMPTS_DEFAULT);
@@ -478,7 +479,7 @@ int CMPIPTV_RTSP::OpenConnection(void)
                   }
                   else
                   {
-                    this->rtspUdpSink = BasicUDPSink::createNew(*this->rtspEnvironment, this->rtspUdpGroupsock);
+                    this->rtspUdpSink = BasicUDPSink::createNew(*this->rtspEnvironment, this->rtspUdpGroupsock, this->rtspUdpSinkMaxPayloadSize);
                     result |= (this->rtspUdpSink == NULL);
 
                     if (result != STATUS_OK)

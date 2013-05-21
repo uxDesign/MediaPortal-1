@@ -67,6 +67,12 @@ CMPIPTVSourceStream::CMPIPTVSourceStream(HRESULT *phr, CSource *pFilter, CParame
   this->oldPid = PID_DEFAULT;
   this->oldSid = SID_DEFAULT;
 
+  this->keepPidValues = ALLOC_MEM_SET(this->keepPidValues, unsigned int, PID_COUNT, KEEP_PID_IN_STREAM);
+  if (this->keepPidValues == NULL)
+  {
+    this->logger.Log(LOGGER_WARNING, METHOD_MESSAGE_FORMAT, MODULE_NAME, METHOD_CONSTRUCTOR_NAME, _T("cannot allocate enough memory for keeped PID values, PID keeping disabled"));
+  }
+
   this->protocolImplementations = NULL;
   this->dllTotal = 0;
   this->LoadPlugins();
@@ -110,6 +116,7 @@ CMPIPTVSourceStream::~CMPIPTVSourceStream(void)
     this->dllTotal = 0;
   }
 
+  FREE_MEM(this->keepPidValues);
   FREE_MEM(this->protocolImplementations);
 
   if (this->configuration != NULL)
@@ -467,6 +474,88 @@ HRESULT CMPIPTVSourceStream::FillBuffer(IMediaSample *pSamp)
     if (this->activeProtocol != NULL)
     {
       unsigned int postedData = this->activeProtocol->FillBuffer(pSamp, pData, cbData);
+
+      if ((postedData > 0) && (this->keepPidValues != NULL))
+      {
+        unsigned int expectedSize = (postedData / DVB_PACKET_SIZE) * DVB_PACKET_SIZE;
+        if (expectedSize == postedData)
+        {
+          ALLOC_MEM_DEFINE_SET(tempBuffer, char, postedData, 0);
+          unsigned int tempPostedData = 0;
+
+          if (tempBuffer != NULL)
+          {
+            for(unsigned int i = 0; (i < ((postedData / DVB_PACKET_SIZE))); i++)
+            {
+              unsigned char *tsPacket = (unsigned char *)pData + i * DVB_PACKET_SIZE;
+              if (tsPacket[0] == SYNC_BYTE)
+              {
+                PmtParser *pmtParser = new PmtParser(&this->crc32);
+                if (pmtParser != NULL)
+                {
+                  if (pmtParser->SetPmtData(tsPacket, DVB_PACKET_SIZE))
+                  {
+                    if (pmtParser->IsValidPacket())
+                    {
+                      this->keepPidValues[pmtParser->GetPacketPid()] |= KEEP_PID_IN_STREAM;
+                      if (pmtParser->GetPcrPid() != UINT_MAX)
+                      {
+                        this->keepPidValues[pmtParser->GetPcrPid()] |= KEEP_PID_IN_STREAM;
+                      }
+
+                      unsigned int j = 0;
+                      while (j < pmtParser->GetPmtStreamDescriptions()->Count())
+                      {
+                        PmtStreamDescription *streamDescription = pmtParser->GetPmtStreamDescriptions()->GetItem(j);
+
+                        if ((this->keepPidValues[streamDescription->GetStreamPid()] & KEEP_PID_IN_PMT) == 0)
+                        {
+                          pmtParser->GetPmtStreamDescriptions()->Remove(j);
+                        }
+                        else
+                        {
+                          j++;
+                        }
+                      }
+
+                      if (pmtParser->RecalculateSectionLength())
+                      {
+                        unsigned char *pmtPacket = pmtParser->GetPmtPacket();
+                        if (pmtPacket != NULL)
+                        {
+                          memcpy(tsPacket, pmtPacket, DVB_PACKET_SIZE);
+                        }
+                        FREE_MEM(pmtPacket);
+                      }
+                    }
+                  }
+
+                  delete pmtParser;
+                }
+
+                unsigned int tsPacketPid = (tsPacket[1] & 0x1F) << 8;
+                tsPacketPid |= tsPacket[2];
+
+                if (((this->keepPidValues[tsPacketPid] & KEEP_PID_IN_STREAM) != 0) || (tsPacketPid == 68))
+                {
+                  // copy TS packet if its PID is allowed
+                  memcpy(tempBuffer + tempPostedData, tsPacket, DVB_PACKET_SIZE);
+                  tempPostedData += DVB_PACKET_SIZE;
+                }
+              }
+            }
+
+            if (tempPostedData > 0)
+            {
+              memcpy(pData, tempBuffer, tempPostedData);
+            }
+            pSamp->SetActualDataLength(tempPostedData);
+            postedData = tempPostedData;
+
+            FREE_MEM(tempBuffer);
+          }
+        }
+      }
 
       if ((postedData > 0) && (this->canChangeSidAndPid) && (this->newSid != SID_DEFAULT) && (this->newPid != PID_DEFAULT))
       {
@@ -1008,6 +1097,14 @@ HRESULT CMPIPTVSourceStream::Run(REFERENCE_TIME tStart)
 
 bool CMPIPTVSourceStream::Load(const TCHAR *url, const CParameterCollection *parameters)
 {
+  if (this->keepPidValues != NULL)
+  {
+    for (unsigned int i = 0; i < PID_COUNT; i++)
+    {
+      this->keepPidValues[i] = KEEP_PID_IN_PMT | KEEP_PID_IN_STREAM;
+    }
+  }
+
   if (parameters != NULL)
   {
     this->newSid = ((CParameterCollection *)parameters)->GetValueLong(CONFIGURATION_SID_VALUE, true, UINT_MAX);
@@ -1017,6 +1114,50 @@ bool CMPIPTVSourceStream::Load(const TCHAR *url, const CParameterCollection *par
     this->canChangeSidAndPid = true;
 
     this->logger.Log(LOGGER_VERBOSE, _T("%s: %s: changed SID: %u, changed PID: %u"), MODULE_NAME, _T("Load()"), this->newSid, this->newPid);
+
+    if (((CParameterCollection *)parameters)->Contains(CONFIGURATION_KEEP_PID_VALUE, true))
+    {
+      if (this->keepPidValues != NULL)
+      {
+        for (unsigned int i = 0; i < PID_COUNT; i++)
+        {
+          if ((i <= MAX_RESERVED_PID) || (i == PID_NULL))
+          {
+            // reserved PIDs and NULL packets will be transmitted always
+            this->keepPidValues[i] = KEEP_PID_IN_STREAM;
+          }
+          else
+          {
+            this->keepPidValues[i] = NOT_KEEP_PID;
+          }
+        }
+
+        for (unsigned int i = 0; i < ((CParameterCollection *)parameters)->Count(); i++)
+        {
+          CParameter *parameter = ((CParameterCollection *)parameters)->GetItem(i);
+
+          if (parameter != NULL)
+          {
+            if (_tcsicmp(parameter->GetName(), CONFIGURATION_KEEP_PID_VALUE) == 0)
+            {
+              TCHAR *end = NULL;
+              long valueLong = _tcstol(parameter->GetValue(), &end, 10);
+              if ((valueLong == 0) && (parameter->GetValue() == end))
+              {
+                // error while converting
+                valueLong = UINT_MAX;
+              }
+
+              if (valueLong != UINT_MAX)
+              {
+                this->keepPidValues[(unsigned int)valueLong] = KEEP_PID_IN_PMT | KEEP_PID_IN_STREAM;
+                this->logger.Log(LOGGER_VERBOSE, _T("%s: %s: keeping PID: %u"), MODULE_NAME, _T("Load()"), (unsigned int)valueLong);
+              }
+            }
+          }
+        }
+      }
+    }
   }
 
   // for each protocol run ParseUrl() method

@@ -56,6 +56,8 @@
 #define CONFIGURATION_SID_VALUE                                     _T("SidValue")
 #define CONFIGURATION_PID_VALUE                                     _T("PidValue")
 
+#define CONFIGURATION_KEEP_PID_VALUE                                _T("KeepPidValue")
+
 #define INTERFACE_PARAMETER_NAME                                    _T("interface")
 
 // this is temporary parameter for url
