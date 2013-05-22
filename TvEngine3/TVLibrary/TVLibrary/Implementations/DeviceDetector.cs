@@ -40,6 +40,7 @@ using UPnP.Infrastructure;
 using UPnP.Infrastructure.CP;
 using UPnP.Infrastructure.CP.Description;
 using UPnP.Infrastructure.CP.DeviceTree;
+using UPnP.Infrastructure.CP.SSDP;
 
 
 namespace TvLibrary.Implementations
@@ -53,15 +54,15 @@ namespace TvLibrary.Implementations
     private CPData _upnpControlPointData = null;
     private UPnPNetworkTracker _upnpAgent = null;
     private UPnPControlPoint _upnpControlPoint = null;
-    HashSet<string> _knownUpnpDevices = new HashSet<string>();
+    private HashSet<string> _knownUpnpDevices = new HashSet<string>();
 
     // Used for detecting and communicating with devices that are directly
     // connected to the system.
-    ManagementEventWatcher _systemDeviceChangeEventWatcher = null;
-    DateTime _previousSystemDeviceChange = DateTime.MinValue;
-    object _lockObject = new object();
-    HashSet<string> _knownDevices = new HashSet<string>();
-    RadioWebStreamCard _rwsTuner = new RadioWebStreamCard();    // Always one RWS "tuner".
+    private ManagementEventWatcher _systemDeviceChangeEventWatcher = null;
+    private DateTime _previousSystemDeviceChange = DateTime.MinValue;
+    private object _lockObject = new object();
+    private HashSet<string> _knownBdaWdmDevices = new HashSet<string>();
+    private RadioWebStreamCard _rwsTuner = new RadioWebStreamCard();    // Always one RWS "tuner".
 
     // The listener that we notify when device events occur.
     private IDeviceEventListener _deviceEventListener = null;
@@ -78,37 +79,21 @@ namespace TvLibrary.Implementations
 
     /// <summary>
     /// Constructor.
-    /// Start a thread that periodically checks device states.
     /// </summary>
     /// <param name="listener">A listener that wishes to be notified about device events.</param>
     public DeviceDetector(IDeviceEventListener listener)
     {
       _deviceEventListener = listener;
 
-      // Logic here to delay starting to detect devices.
-      // Ideally this should also apply after resuming from standby.
-      TvBusinessLayer layer = new TvBusinessLayer();
-      Setting setting = layer.GetSetting("delayCardDetect", "0");
-      int delayDetect = Convert.ToInt32(setting.Value);
-      if (delayDetect >= 1)
-      {
-        Log.Log.Info("Delaying device detection for {0} second(s)", delayDetect);
-        Thread.Sleep(delayDetect * 1000);
-      }
-
-      // Start detecting UPnP devices.
-      // IMPORTANT: you should start the control point before the network tracker.
+      // Setup UPnP device detection.
       UPnPConfiguration.LOGGER = new Tve3Logger();
       _upnpControlPointData = new CPData();
       _upnpAgent = new UPnPNetworkTracker(_upnpControlPointData);
-      _upnpAgent.RootDeviceAdded += UpnpRootDeviceAdded;
-      _upnpAgent.RootDeviceRemoved += UpnpRootDeviceRemoved;
+      _upnpAgent.RootDeviceAdded += OnUpnpRootDeviceAdded;
+      _upnpAgent.RootDeviceRemoved += OnUpnpRootDeviceRemoved;
       _upnpControlPoint = new UPnPControlPoint(_upnpAgent);
-      _upnpControlPoint.Start();
-      _upnpAgent.Start();
 
-      // Start detecting BDA/WDM devices.
-      _deviceEventListener.OnDeviceAdded(_rwsTuner);
+      // Setup other (BDA, PBDA, WDM) device detection.
       try
       {
         InitBdaDetectionGraph();
@@ -116,14 +101,44 @@ namespace TvLibrary.Implementations
       catch (Exception ex)
       {
         Log.Log.Error("Failed to initialise the BDA device detection graph!\r\n{0}", ex);
-        return;
+        throw;
       }
-      DetectDevices();
       _systemDeviceChangeEventWatcher = new ManagementEventWatcher();
+      // EventType 2 and 3 are device arrival and removal. See:
+      // http://msdn.microsoft.com/en-us/library/windows/desktop/aa394124%28v=vs.85%29.aspx
       _systemDeviceChangeEventWatcher.Query = new WqlEventQuery("SELECT * FROM Win32_DeviceChangeEvent WHERE EventType = 2 OR EventType = 3");
       _systemDeviceChangeEventWatcher.EventArrived += OnSystemDeviceConnectedOrDisconnected;
+    }
+
+    public void Start()
+    {
+      Log.Log.Info("Starting async device detection...");
+      // Start detecting UPnP devices.
+      // IMPORTANT: you should start the control point before the network tracker.
+      _upnpControlPoint.Start();
+      _upnpAgent.Start();
+      SearchKnownUpnpDevices();
+
+      // Start detecting BDA and WDM devices.
+      _deviceEventListener.OnDeviceAdded(_rwsTuner);
+      DetectBdaWdmDevices();
       _systemDeviceChangeEventWatcher.Start();
-      Log.Log.Info("Started async device detection...");
+    }
+
+    public void Reset()
+    {
+      Stop();
+      _knownUpnpDevices.Clear();
+      _knownBdaWdmDevices.Clear();
+      Start();
+    }
+
+    public void Stop()
+    {
+      Log.Log.Info("Stopping async device detection...");
+      _upnpAgent.Close();
+      _upnpControlPoint.Close();
+      _systemDeviceChangeEventWatcher.Stop();
     }
 
     #region IDisposable member
@@ -133,11 +148,8 @@ namespace TvLibrary.Implementations
     /// </summary>
     public void Dispose()
     {
-      _upnpAgent.Close();
-      _upnpControlPoint.Close();
-      _systemDeviceChangeEventWatcher.Stop();
+      Stop();
 
-      _knownDevices.Clear();
       if (_rwsTuner != null)
       {
         _rwsTuner.Dispose();
@@ -161,57 +173,59 @@ namespace TvLibrary.Implementations
 
     #endregion
 
+    #region BDA/WDM device detection
+
     private static bool ConnectFilter(IFilterGraph2 graphBuilder, IBaseFilter networkFilter, IBaseFilter tunerFilter)
     {
       IPin pinOut = DsFindPin.ByDirection(networkFilter, PinDirection.Output, 0);
       IPin pinIn = DsFindPin.ByDirection(tunerFilter, PinDirection.Input, 0);
       int hr = graphBuilder.Connect(pinOut, pinIn);
+      Release.ComObject(pinOut);
+      Release.ComObject(pinIn);
       return (hr == 0);
     }
 
     private void OnSystemDeviceConnectedOrDisconnected(object sender, EventArrivedEventArgs e)
     {
-      // Often several events will be triggered within a very short period of time when a device is added.
+      // Often several events will be triggered within a very short period of
+      // time when a device is added/removed. We only want to check for new
+      // devices once.
       if ((DateTime.Now - _previousSystemDeviceChange).TotalMilliseconds < 10000)
       {
         return;
       }
       _previousSystemDeviceChange = DateTime.Now;
-      DetectDevices();
+      DetectBdaWdmDevices();
     }
 
-    /// <summary>
-    /// Check whether any BDA or WDM devices have been connected to or
-    /// disconnected from the system.
-    /// </summary>
-    private void DetectDevices()
+    private void DetectBdaWdmDevices()
     {
       lock (_lockObject)
       {
         Log.Log.Debug("Detecting BDA/WDM devices...");
 
-        HashSet<string> previouslyKnownDevices = _knownDevices;
-        _knownDevices = new HashSet<string>();
-        _knownDevices.Add(_rwsTuner.DevicePath);
+        HashSet<string> previouslyKnownDevices = _knownBdaWdmDevices;
+        _knownBdaWdmDevices = new HashSet<string>();
+        _knownBdaWdmDevices.Add(_rwsTuner.DevicePath);
 
         // Detect TechniSat SkyStar/AirStar/CableStar 2 & IP streaming devices.
-        DetectSupportedLegacyAmFilterDevices(ref previouslyKnownDevices, ref _knownDevices);
+        DetectSupportedLegacyAmFilterDevices(ref previouslyKnownDevices, ref _knownBdaWdmDevices);
 
         // Detect capture devices. Currently only the Hauppauge HD PVR & Colossus.
-        DetectSupportedAmKsCrossbarDevices(ref previouslyKnownDevices, ref _knownDevices);
+        DetectSupportedAmKsCrossbarDevices(ref previouslyKnownDevices, ref _knownBdaWdmDevices);
 
         // Detect analog tuners.
-        DetectSupportedAmKsTvTunerDevices(ref previouslyKnownDevices, ref _knownDevices);
+        DetectSupportedAmKsTvTunerDevices(ref previouslyKnownDevices, ref _knownBdaWdmDevices);
 
         // Detect digital BDA tuners.
-        DetectSupportedBdaSourceDevices(ref previouslyKnownDevices, ref _knownDevices);
+        DetectSupportedBdaSourceDevices(ref previouslyKnownDevices, ref _knownBdaWdmDevices);
 
         // Remove the devices that are no longer connected.
         foreach (string previouslyKnownDevice in previouslyKnownDevices)
         {
-          if (!_knownDevices.Contains(previouslyKnownDevice))
+          if (!_knownBdaWdmDevices.Contains(previouslyKnownDevice))
           {
-            Log.Log.Info("Device {0} removed", previouslyKnownDevice);
+            Log.Log.Info("BDA/WDM device {0} removed", previouslyKnownDevice);
             _deviceEventListener.OnDeviceRemoved(previouslyKnownDevice);
           }
         }
@@ -628,6 +642,8 @@ namespace TvLibrary.Implementations
       }
     }
 
+    #endregion
+
     #region MP network provider only (contact MisterD)
 
     /// <summary>
@@ -661,57 +677,104 @@ namespace TvLibrary.Implementations
 
     #endregion
 
-    #region UPnP delegates
+    #region UPnP device detection
 
-    private void UpnpRootDeviceAdded(RootDescriptor rootDescriptor)
+    private void SearchKnownUpnpDevices()
     {
-      if (rootDescriptor.State != RootDescriptorState.Ready)
+      SSDPClientController ssdpController = _upnpAgent.SharedControlPointData.SSDPController;
+      TvBusinessLayer layer = new TvBusinessLayer();
+      IList<Card> allDevices = layer.Cards;
+      foreach (Card d in allDevices)
+      {
+        // Is the device a UPnP device?
+        if (!d.Enabled || d.DevicePath == null || !d.DevicePath.StartsWith("uuid:"))
+        {
+          continue;
+        }
+        string uuid = d.DevicePath.Substring(5);
+        ssdpController.SearchDeviceByUUID(uuid, null);
+      }
+    }
+
+    private void OnUpnpRootDeviceAdded(RootDescriptor rootDescriptor)
+    {
+      if (rootDescriptor == null || rootDescriptor.State != RootDescriptorState.Ready)
       {
         return;
       }
-      DeviceDescriptor deviceDescriptor = DeviceDescriptor.CreateRootDeviceDescriptor(rootDescriptor);
-      if (deviceDescriptor.FriendlyName.StartsWith("HDHomeRun Prime Tuner") ||
-        deviceDescriptor.FriendlyName.StartsWith("Ceton InfiniTV")
-      )
+
+      if (_knownUpnpDevices.Contains(rootDescriptor.SSDPRootEntry.RootDeviceUUID))
       {
-        Log.Log.Info("Detected new OCUR/DRI device {0}, sub-device count = {1}", deviceDescriptor.FriendlyName, deviceDescriptor.ChildDevices.Count);
-        foreach (DeviceDescriptor d in deviceDescriptor.ChildDevices)
+        return;
+      }
+      _knownUpnpDevices.Add(rootDescriptor.SSDPRootEntry.RootDeviceUUID);
+      DeviceDescriptor deviceDescriptor = DeviceDescriptor.CreateRootDeviceDescriptor(rootDescriptor);
+      IEnumerator<DeviceEntry> childDeviceEn = rootDescriptor.SSDPRootEntry.Devices.Values.GetEnumerator();
+      bool isFirst = true;
+      while (childDeviceEn.MoveNext())
+      {
+        foreach (string serviceUrn in childDeviceEn.Current.Services)
         {
-          if (d.FriendlyName.Contains(" OCTA "))
+          // Supported device?
+          if (serviceUrn.Equals("urn:schemas-opencable-com:service:Tuner:1"))
           {
-            Log.Log.Debug("  skipping Ceton tuning adaptor device, not supported");
-          }
-          else
-          {
-            Log.Log.Info("  add {0} {1}", d.FriendlyName, d.DeviceUDN);
-            _deviceEventListener.OnDeviceAdded(new TunerDri(d, _upnpControlPoint));
+            if (isFirst)
+            {
+              isFirst = false;
+              Log.Log.Info("Detected new OCUR/DRI device {0}", deviceDescriptor.FriendlyName);
+            }
+
+            // Find the corresponding DeviceDescriptor.
+            IEnumerator<DeviceDescriptor> childDeviceDescriptorEn = deviceDescriptor.ChildDevices.GetEnumerator();
+            while (childDeviceDescriptorEn.MoveNext())
+            {
+              if (childDeviceDescriptorEn.Current.DeviceUUID == childDeviceEn.Current.UUID)
+              {
+                break;
+              }
+            }
+            Log.Log.Info("  add {0} {1}", childDeviceDescriptorEn.Current.FriendlyName, childDeviceDescriptorEn.Current.DeviceUDN);
+            _deviceEventListener.OnDeviceAdded(new TunerDri(childDeviceDescriptorEn.Current, _upnpControlPoint));
+            break;
           }
         }
       }
     }
 
-    private void UpnpRootDeviceRemoved(RootDescriptor rootDescriptor)
+    private void OnUpnpRootDeviceRemoved(RootDescriptor rootDescriptor)
     {
       if (rootDescriptor == null)
       {
         return;
       }
+
+      _knownUpnpDevices.Remove(rootDescriptor.SSDPRootEntry.RootDeviceUUID);
       DeviceDescriptor deviceDescriptor = DeviceDescriptor.CreateRootDeviceDescriptor(rootDescriptor);
-      if (deviceDescriptor == null)
+      IEnumerator<DeviceEntry> childDeviceEn = rootDescriptor.SSDPRootEntry.Devices.Values.GetEnumerator();
+      bool isFirst = true;
+      while (childDeviceEn.MoveNext())
       {
-        return;
-      }
-      if (deviceDescriptor.FriendlyName.StartsWith("HDHomeRun Prime Tuner") ||
-        deviceDescriptor.FriendlyName.StartsWith("Ceton InfiniTV")
-      )
-      {
-        Log.Log.Info("Device {0} removed, sub-device count = {1}", deviceDescriptor.FriendlyName, deviceDescriptor.ChildDevices.Count);
-        foreach (DeviceDescriptor d in deviceDescriptor.ChildDevices)
+        foreach (string serviceUrn in childDeviceEn.Current.Services)
         {
-          if (!d.FriendlyName.Contains(" OCTA "))
+          if (serviceUrn.Equals("urn:schemas-opencable-com:service:Tuner:1"))
           {
-            Log.Log.Info("  remove {0} {1}", d.FriendlyName, d.DeviceUDN);
-            _deviceEventListener.OnDeviceRemoved(d.DeviceUDN);
+            if (isFirst)
+            {
+              isFirst = false;
+              Log.Log.Info("UPnP device {0} removed", deviceDescriptor.FriendlyName);
+            }
+
+            IEnumerator<DeviceDescriptor> childDeviceDescriptorEn = deviceDescriptor.ChildDevices.GetEnumerator();
+            while (childDeviceDescriptorEn.MoveNext())
+            {
+              if (childDeviceDescriptorEn.Current.DeviceUUID == childDeviceEn.Current.UUID)
+              {
+                break;
+              }
+            }
+            Log.Log.Info("  remove {0} {1}", childDeviceDescriptorEn.Current.FriendlyName, childDeviceDescriptorEn.Current.DeviceUDN);
+            _deviceEventListener.OnDeviceRemoved(childDeviceDescriptorEn.Current.DeviceUDN);
+            break;
           }
         }
       }

@@ -90,7 +90,7 @@ namespace TvService
     private Server _ourServer;
 
     /// <summary>
-    private DeviceDetector _localCardCollection;
+    private DeviceDetector _deviceDetector;
 
     /// <summary>
     /// Indicates how many free cards to try for timeshifting
@@ -571,7 +571,18 @@ namespace TvService
         }
 
         _cards = new Dictionary<int, ITvCardHandler>();
-        _localCardCollection = new DeviceDetector(this);
+        _deviceDetector = new DeviceDetector(this);
+        // Logic here to delay starting to detect devices.
+        // Ideally this should also apply after resuming from standby.
+        TvBusinessLayer layer = new TvBusinessLayer();
+        Setting setting = layer.GetSetting("delayCardDetect", "0");
+        int delayDetect = Convert.ToInt32(setting.Value);
+        if (delayDetect >= 1)
+        {
+          Log.Info("Controller: delaying device detection for {0} second(s)", delayDetect);
+          Thread.Sleep(delayDetect * 1000);
+        }
+        _deviceDetector.Start();
 
         Log.Info("Controller: setup streaming");
         _streamer = new RtspStreaming(_ourServer.HostName, _ourServer.RtspPort);
@@ -687,7 +698,8 @@ namespace TvService
 
         //clean up the tv cards
         FreeCards();
-        _localCardCollection.Dispose();
+        _deviceDetector.Stop();
+        _deviceDetector.Dispose();
 
         Gentle.Common.CacheManager.Clear();
         if (GlobalServiceProvider.Instance.IsRegistered<ITvServerEvent>())
