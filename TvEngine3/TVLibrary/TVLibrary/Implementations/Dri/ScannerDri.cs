@@ -115,7 +115,6 @@ namespace TvLibrary.Implementations.Dri
     {
       try
       {
-        Log.Log.Debug("debug: state variable name = {0}", stateVariable.Name);
         if (!stateVariable.Name.Equals("TableSection"))
         {
           return;
@@ -128,7 +127,7 @@ namespace TvLibrary.Implementations.Dri
         int pid = (section[0] << 8) + section[1];
         byte tableId = section[2];
         Log.Log.Debug("DRI CC: scan stage = {0}, PID = 0x{1:x}, table ID = 0x{2:x}, size = {3}", _scanStage, pid, tableId, section.Length);
-        DVB_MMI.DumpBinary(section, 0, section.Length);
+        //DVB_MMI.DumpBinary(section, 0, section.Length);
         switch (_scanStage)
         {
           case ScanStage.Mgt:
