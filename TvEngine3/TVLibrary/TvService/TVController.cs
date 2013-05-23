@@ -40,6 +40,7 @@ using TvLibrary.Implementations.Hybrid;
 using TvLibrary.Interfaces;
 using TvLibrary.Log;
 using TvLibrary.Streaming;
+using TvThumbnails;
 
 namespace TvService
 {
@@ -72,6 +73,11 @@ namespace TvService
     /// Recording scheduler
     /// </summary>
     private Scheduler _scheduler;
+    
+    /// <summary>
+    /// Thumbnail processor for recordings
+    /// </summary>
+    private ThumbProcessor _thumbProcessor;
 
     /// <summary>
     /// RTSP Streaming Server
@@ -338,7 +344,7 @@ namespace TvService
             bool IsLocal(Card card)
             {
               if (ValidateTvControllerParams(card)) return false;
-              return _cards[card.IdCard].IsLocal;
+              return _cards[Card.IdCard].IsLocal;
             }
         */
 
@@ -768,6 +774,9 @@ namespace TvService
           _scheduler.Start();
         }
 
+        _thumbProcessor = new ThumbProcessor();
+        _thumbProcessor.Start();
+
         SetupHeartbeatThread();
         ExecutePendingDeletions();
 
@@ -858,6 +867,14 @@ namespace TvService
           _streamer.Stop();
           _streamer = null;
           Log.Info("Controller: streamer stopped...");
+        }
+        //stop the thumbnail processor
+        if (_thumbProcessor != null)
+        {
+          Log.Info("Controller: stop thumb processor...");
+          _thumbProcessor.Stop();
+          _thumbProcessor = null;
+          Log.Info("Controller: thumb processor stopped...");
         }
         //stop the recording scheduler
         if (_scheduler != null)
@@ -1646,7 +1663,7 @@ namespace TvService
         ICardReservation cardreservationImpl = new CardReservationTimeshifting(this);
         try
         {
-          ticket = cardreservationImpl.RequestCardTuneReservation(tvCardHandler, channel, user);
+          ticket = cardreservationImpl.RequestCardTuneReservation(tvCardHandler, channel, user, idChannel);
           result = Tune(ref user, channel, idChannel, ticket); 
         }
         catch(Exception)
@@ -2371,6 +2388,30 @@ namespace TvService
       return "";
     }
 
+    /// <summary>
+    /// Gets the thumbnail image data of given file
+    /// </summary>
+    /// <param name="thumbnailFilename">Filename of the thumbnail, e.g. "Top Gear - MTV3 - 2012-11-10.jpg"</param>
+    /// <returns></returns>
+    public byte[] GetRecordingThumbnail(string thumbnailFilename)
+    {
+      try
+      {
+        string fileAndPath = _thumbProcessor.GetThumbnailFolder() + "/" + thumbnailFilename;
+
+        if (!File.Exists(fileAndPath))
+        {
+          return new byte[0];
+        }
+        return File.ReadAllBytes(fileAndPath); 
+      }
+      catch (Exception ex)
+      {
+        Log.Error("Controller: Can't get recording thumbnail data: {0}", ex.Message);
+      }
+      return new byte[0];
+    }
+
     public string GetRecordingUrl(int idRecording)
     {
       try
@@ -2589,12 +2630,18 @@ namespace TvService
       cardChanged = false;
       if (user != null)
       {
+        int oldCardId = user.CardId;
+        string initialTimeshiftingFile = "";
+        if (oldCardId > 0)
+        {
+          initialTimeshiftingFile = TimeShiftFileName(ref user);
+        }
         user.Priority = UserFactory.GetDefaultPriority(user.Name, user.Priority);
         Channel channel = Channel.Retrieve(idChannel);
         Log.Write("Controller: StartTimeShifting {0} {1}", channel.DisplayName, channel.IdChannel);
         StopEPGgrabber();
 
-        ICollection<ICardTuneReservationTicket> tickets = null;
+        IDictionary<CardDetail, ICardTuneReservationTicket> tickets = null;
         try
         {
           var cardAllocationStatic = new AdvancedCardAllocationStatic(_layer, this);
@@ -2606,7 +2653,7 @@ namespace TvService
               channel,
               forceCardId,
               freeCardsForReservation,
-              out cardChanged, ref result, ref card);
+              ref result, ref card);
           }
           else
           {
@@ -2621,41 +2668,55 @@ namespace TvService
         }
         finally
         {
-          CardReservationHelper.CancelAllCardReservations(tickets, _cards);          
+          CardReservationHelper.CancelAllCardReservations(tickets, CardCollection);
           if (!HasTvSucceeded(result))
           {
             StartEPGgrabber();
           }
+          if (card != null)
+          {
+            cardChanged = card.Id != oldCardId;
+            if (!cardChanged)
+            {
+              cardChanged = initialTimeshiftingFile != card.TimeShiftFileName;
+            }
+          }
         }
-      }      
+      }
       return result;
     }
 
-    private ICollection<ICardTuneReservationTicket> IterateCardsUntilTimeshifting(ref IUser user, Channel channel, bool forceCardId, ICollection<CardDetail> freeCardsForReservation, out bool cardChanged, ref TvResult result, ref VirtualCard card)
-    {      
-      cardChanged = false;
+    private VirtualCard GetValidVirtualCard(IUser user)
+    {
+      VirtualCard initialCard = null;
+      if (user.CardId != -1)
+      {
+        initialCard = GetVirtualCard(user);
+      }
+      return initialCard;
+    }
+
+    private IDictionary<CardDetail, ICardTuneReservationTicket> IterateCardsUntilTimeshifting(ref IUser user, Channel channel, bool forceCardId, ICollection<CardDetail> freeCardsForReservation, ref TvResult result, ref VirtualCard card)
+    {
       VirtualCard initialCard = GetValidVirtualCard(user);
       string intialTimeshiftingFilename = GetIntialTimeshiftingFilename(initialCard);
       var cardResImpl = new CardReservationTimeshifting(this);
-      ICollection<ICardTuneReservationTicket> tickets = null;
-      ICollection<int> freeCardsIterated = UpdateCardsIteratedBasedOnForceCardId(user, forceCardId);
+      IDictionary<CardDetail, ICardTuneReservationTicket> tickets = null;
       int cardsIterated = 0;
       bool moreCardsAvailable = true;
+      ICollection<CardDetail> freeCardsIterated = UpdateCardsIteratedBasedOnForceCardId(user, forceCardId, freeCardsForReservation);
       while (moreCardsAvailable && !HasTvSucceeded(result))
       {
-        tickets = CardReservationHelper.RequestCardReservations(user, freeCardsForReservation, this, cardResImpl,
-                                                                freeCardsIterated);
-        if (HasTickets(tickets))
+        tickets = CardReservationHelper.RequestCardReservations(user, freeCardsForReservation, this, cardResImpl, freeCardsIterated, channel.IdChannel);
+        List<ICardTuneReservationTicket> ticketsList = tickets.Values.ToList();
+        if (HasTickets(ticketsList))
         {
-          var cardAllocationTicket = new AdvancedCardAllocationTicket(_layer, this, tickets);
-          ICollection<CardDetail> freeCards = cardAllocationTicket.UpdateFreeCardsForChannelBasedOnTicket(_cards,
-                                                                                                          freeCardsForReservation,
-                                                                                                          user, out result);
-          CardReservationHelper.CancelCardReservationsExceedingMaxConcurrentTickets(tickets, freeCards, _cards);
-          CardReservationHelper.CancelCardReservationsNotFoundInFreeCards(freeCardsForReservation, tickets, freeCards,
-                                                                          _cards);
+          var cardAllocationTicket = new AdvancedCardAllocationTicket(_layer, this, ticketsList);
+          IList<CardDetail> freeCards = cardAllocationTicket.UpdateFreeCardsForChannelBasedOnTicket(freeCardsForReservation, user, out result);
+          CardReservationHelper.CancelCardReservationsExceedingMaxConcurrentTickets(tickets, freeCards, CardCollection);
+          CardReservationHelper.CancelCardReservationsNotFoundInFreeCards(freeCardsForReservation, tickets, freeCards, CardCollection);
           int maxCards = GetMaxCards(freeCards);
-          CardReservationHelper.CancelCardReservationsBasedOnMaxCardsLimit(tickets, freeCards, maxCards, _cards);
+          CardReservationHelper.CancelCardReservationsBasedOnMaxCardsLimit(tickets, freeCards, maxCards, CardCollection);
           UpdateFreeCardsIterated(freeCardsIterated, freeCards); //keep tracks of what cards have been iterated here.
           moreCardsAvailable = HasFreeCards(freeCards);
           if (moreCardsAvailable)
@@ -2667,7 +2728,7 @@ namespace TvService
               cardResImpl,
               intialTimeshiftingFilename,
               freeCards,
-              maxCards, ref card, ref result, ref cardsIterated, out cardChanged);
+              maxCards, ref card, ref result, ref cardsIterated);
           }
           else
           {
@@ -2681,26 +2742,30 @@ namespace TvService
           Log.Write("Controller: StartTimeShifting failed:{0} - no card reservation(s) could be made", result);          
           moreCardsAvailable = false;
         }
-      } //end of while             
+      } //end of while
       return tickets;
     }
 
-    private ICollection<int> UpdateCardsIteratedBasedOnForceCardId(IUser user, bool forceCardId)
+    private ICollection<CardDetail> UpdateCardsIteratedBasedOnForceCardId(IUser user, bool forceCardId, IEnumerable<CardDetail> freeCardsForReservation)
     {
-      ICollection<int> freeCardsIterated = new HashSet<int>();
+      ICollection<CardDetail> freeCardsIterated = new HashSet<CardDetail>();
       if (forceCardId)
       {
-        foreach (KeyValuePair<int, ITvCardHandler> card in _cards.Where(t => t.Value.DataBaseCard.IdCard != user.CardId))
+        foreach (CardDetail cardDetail in freeCardsForReservation)
         {
-          freeCardsIterated.Add(card.Value.DataBaseCard.IdCard);
+          if (cardDetail.Id != user.CardId)
+          {
+            freeCardsIterated.Add(cardDetail);
+          }
         }
       }
       return freeCardsIterated;
     }
 
-    private bool IterateTicketsUntilTimeshifting(ref IUser user, Channel channel, ICollection<ICardTuneReservationTicket> tickets, CardReservationTimeshifting cardResImpl, string intialTimeshiftingFilename, ICollection<CardDetail> freeCards, int maxCards, ref VirtualCard card, ref TvResult result, ref int cardsIterated, out bool cardChanged)
+    private bool IterateTicketsUntilTimeshifting(ref IUser user, Channel channel, IDictionary<CardDetail,
+        ICardTuneReservationTicket> tickets, CardReservationTimeshifting cardResImpl, string intialTimeshiftingFilename, 
+      ICollection<CardDetail> freeCards, int maxCards, ref VirtualCard card, ref TvResult result, ref int cardsIterated)
     {
-      cardChanged = false;
       int failedCardId = -1;
       bool moreCardsAvailable = true;
       Log.Write("Controller: try max {0} of {1} cards for timeshifting", maxCards, freeCards.Count);
@@ -2717,14 +2782,24 @@ namespace TvService
         ITvCardHandler tvcard = _cards[cardInfo.Id];
         try
         {
-          ICardTuneReservationTicket ticket = GetTicketByCardId(cardInfo, tickets);
+          ICardTuneReservationTicket ticket = GetTicketByCardDetail(cardInfo, tickets);
           if (ticket == null)
           {
-            Log.Write("Controller: StartTimeShifting - could not find cardreservation on card:{0}",
-                      userCopy.CardId);
-            HandleAllCardsBusy(tickets, out result, out failedCardId, cardInfo, tvcard);
-            continue;
+            ticket = CardReservationHelper.RequestCardReservation(user, cardInfo, this, cardResImpl, channel.IdChannel);
+            if (ticket == null)
+            {
+              Log.Write("Controller: StartTimeShifting - could not find cardreservation on card:{0}",
+                       userCopy.CardId);
+              HandleAllCardsBusy(tickets, out result, cardInfo);
+              failedCardId = cardInfo.Id;
+              continue;
+            }
+            else
+            {
+              tickets[cardInfo] = ticket;
+            }
           }
+
           cardsIterated++;
           bool isTimeshifting = ticket.IsAnySubChannelTimeshifting;
           if (isTimeshifting)
@@ -2732,7 +2807,7 @@ namespace TvService
             RemoveInactiveUsers(ticket);
             if (!IsTransponderAvailable(user, maxCards, cardInfo, cardIteration, tvcard, ticket))
             {
-              HandleAllCardsBusy(tickets, out result, out failedCardId, cardInfo, tvcard);
+              HandleAllCardsBusy(tickets, out result, cardInfo);
               continue;
             }
           }
@@ -2742,14 +2817,15 @@ namespace TvService
           result = CardTune(ref userCopy, tuneChannel, channel, ticket, cardResImpl);
           if (!HasTvSucceeded(result))
           {
-            HandleTvException(tickets, out failedCardId, cardInfo, tvcard);
+            HandleTvException(tickets, cardInfo);
+            failedCardId = cardInfo.Id;
             StopTimeShifting(ref userCopy);
-            continue; //try next card            
+            continue; //try next card
           }
 
           //reset failedCardId incase previous card iteration failed.
           failedCardId = -1;
-          CardReservationHelper.CancelAllCardReservations(tickets, _cards);
+          CardReservationHelper.CancelAllCardReservations(tickets, CardCollection);
           Log.Info("control2:{0} {1} {2}", userCopy.Name, userCopy.CardId, userCopy.SubChannel);
           card = GetVirtualCard(userCopy);
           card.NrOfOtherUsersTimeshiftingOnCard = ticket.NumberOfOtherUsersOnSameChannel;
@@ -2758,17 +2834,19 @@ namespace TvService
         }
         catch (Exception)
         {
-          CardReservationHelper.CancelCardReservationAndRemoveTicket(tvcard, tickets);
+          CardReservationHelper.CancelCardReservationAndRemoveTicket(cardInfo, tickets, this.CardCollection);
           if ((cardIteration + 1) < maxCards)
           {
-            //in case of exception, try next card if available.
-            HandleTvException(tickets, out failedCardId, cardInfo, tvcard);
+            HandleTvException(tickets, cardInfo);
+            failedCardId = cardInfo.Id;
             continue;
           }
           throw;
         }
         finally
         {
+          cardIteration++;
+
           if (failedCardId > 0)
           {
             user.FailedCardId = failedCardId;
@@ -2779,30 +2857,21 @@ namespace TvService
             Log.Write(moreCardsAvailable
                         ? "Controller: Timeshifting failed, lets try next available card."
                         : "Controller: Timeshifting failed, no more cards available.");
-            cardChanged = (maxCards > 1);
           }
-          else
-          {
-            cardChanged = GetCardChanged(card, intialTimeshiftingFilename);
-          }
-          cardIteration++;
         }
         break; //if we made it to the bottom, then we have a successful timeshifting.          
       } //end of foreach      
       return moreCardsAvailable;
     }
 
-    private static void HandleTvException(ICollection<ICardTuneReservationTicket> tickets, out int failedCardId,
-                                       CardDetail cardInfo, ITvCardHandler tvcard)
+    private void HandleTvException(IDictionary<CardDetail, ICardTuneReservationTicket> tickets, CardDetail cardInfo)
     {
-      CardReservationHelper.CancelCardReservationAndRemoveTicket(tvcard, tickets);      
-      failedCardId = cardInfo.Id;      
+      CardReservationHelper.CancelCardReservationAndRemoveTicket(cardInfo, tickets, CardCollection);
     }
 
-    private static void HandleAllCardsBusy(ICollection<ICardTuneReservationTicket> tickets, out TvResult result, out int failedCardId,
-                                           CardDetail cardInfo, ITvCardHandler tvcard)
+    private void HandleAllCardsBusy(IDictionary<CardDetail, ICardTuneReservationTicket> tickets, out TvResult result, CardDetail cardInfo)
     {
-      HandleTvException (tickets,  out failedCardId, cardInfo, tvcard);
+      HandleTvException(tickets, cardInfo);
       result = TvResult.AllCardsBusy;
     }
 
@@ -2843,24 +2912,16 @@ namespace TvService
       return result;
     }
 
-    private VirtualCard GetValidVirtualCard(IUser user)
-    {
-      VirtualCard initialCard = null;
-      if (user.CardId != -1)
-      {
-        initialCard = GetVirtualCard(user);
-      }
-      return initialCard;
-    }
-
     private bool AreMoreCardsAvailable(int cardsIterated, int maxCards, int i)
     {
       return (i < maxCards) && (_maxFreeCardsToTry == 0 || _maxFreeCardsToTry > cardsIterated);
     }
 
-    private static ICardTuneReservationTicket GetTicketByCardId(CardDetail cardInfo, IEnumerable<ICardTuneReservationTicket> tickets)
+    private static ICardTuneReservationTicket GetTicketByCardDetail(CardDetail cardInfo, IDictionary<CardDetail, ICardTuneReservationTicket> tickets)
     {
-      return tickets.FirstOrDefault(t => t.CardId == cardInfo.Id);
+      ICardTuneReservationTicket ticket;
+      tickets.TryGetValue(cardInfo, out ticket);
+      return ticket;
     }
 
     private bool DifferentTransponder(int maxCards, ICardTuneReservationTicket ticket, ITvCardHandler tvcard, CardDetail cardInfo, int cardIteration)
@@ -2911,15 +2972,19 @@ namespace TvService
       }
     }
 
-    private static void UpdateFreeCardsIterated(ICollection<int> freeCardsIterated, IEnumerable<CardDetail> freeCards)
+    private static void UpdateFreeCardsIterated(ICollection<CardDetail> freeCardsIterated, IEnumerable<CardDetail> freeCards)
     {
       foreach (CardDetail card in freeCards)
       {
-        int idCard = card.Card.IdCard;
-        if (!freeCardsIterated.Contains(idCard))
-        {
-          freeCardsIterated.Add(idCard);
-        }
+        UpdateFreeCardsIterated(freeCardsIterated, card);
+      }
+    }
+
+    private static void UpdateFreeCardsIterated(ICollection<CardDetail> freeCardsIterated, CardDetail card)
+    {
+      if (!freeCardsIterated.Contains(card))
+      {
+        freeCardsIterated.Add(card);
       }
     }
 
@@ -3111,7 +3176,7 @@ namespace TvService
     /// </summary>
     /// <param name="user">user credentials.</param>
     /// <param name="idChannel">The id channel.</param>
-    /// <param name="card">returns card for which timeshifting is started</param>    
+    /// <param name="card">returns card for which timeshifting is started</param>
     /// <returns>
     /// TvResult indicating whether method succeeded
     /// </returns>
@@ -3732,13 +3797,44 @@ namespace TvService
     }
 
     /// <summary>
+    /// Returns an ordered, distinct list of all program genres.  Maintained for backward compatibility.
+    /// </summary>
+    /// <returns></returns>
+    public List<string> GetGenres()
+    {
+      return GetProgramGenres();
+    }
+
+    /// <summary>
     /// Returns an ordered, distinct list of all program genres.
     /// </summary>
     /// <returns></returns>
-    public IList<string> GetGenres()
+    public List<string> GetProgramGenres()
     {
       TvBusinessLayer layer = new TvBusinessLayer();
-      return layer.GetGenres();
+      return layer.GetProgramGenres();
+    }
+
+    /// <summary>
+    /// Returns a list of MediaPortal genre objects.
+    /// </summary>
+    /// <returns></returns>
+    public List<MpGenre> GetMpGenres()
+    {
+      TvBusinessLayer layer = new TvBusinessLayer();
+      return (List<MpGenre>)layer.GetMpGenres();
+    }
+
+    /// <summary>
+    /// Returns a list of radio channel group names.
+    /// </summary>
+    /// <returns></returns>
+    public List<string> GetRadioChannelGroupNames()
+    {
+      List<string> groupNames = new List<string>();
+      foreach (RadioChannelGroup group in RadioChannelGroup.ListAll())
+        groupNames.Add(group.GroupName);
+      return groupNames;
     }
 
     #endregion

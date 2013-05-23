@@ -26,17 +26,6 @@
       <height>765</height>
       <texture>general_overlay.png</texture>
     </control>
-    <!--control>
-    <description>Overlay buttons left</description>
-    <id>0</id>
-    <type>image</type>
-    <posX>50</posX>
-    <posY>156</posY>
-    <width>300</width>
-    <height>265</height>
-    <texture mask="picturethumbmask.png">black.png</texture>
-    <colordiffuse>60ffffff</colordiffuse>
-  </control-->
     <control>
       <type>group</type>
       <layout>StackLayout(0,Vertical,true)</layout>
@@ -45,7 +34,7 @@
       <posY>170</posY>
       <control>
         <description>TV On/Off button</description>
-        <type>togglebutton</type>
+        <type>checkbutton</type>
         <id>8</id>
         <label>707</label>
         <onup>17</onup>
@@ -106,7 +95,7 @@
         <label>692</label>
         <onup>14</onup>
         <ondown>10</ondown>
-        <onleft>99</onleft>
+        <onright>99</onright>
       </control>
       <control>
         <description>Scheduler</description>
@@ -116,7 +105,7 @@
         <hyperlink>601</hyperlink>
         <onup>9</onup>
         <ondown>12</ondown>
-        <onleft>99</onleft>
+        <onright>99</onright>
       </control>
       <control>
         <description>Search</description>
@@ -126,7 +115,7 @@
         <hyperlink>604</hyperlink>
         <onup>10</onup>
         <ondown>13</ondown>
-        <onleft>99</onleft>
+        <onright>99</onright>
       </control>
       <control>
         <description>Teletext</description>
@@ -135,31 +124,31 @@
         <label>1441</label>
         <onup>12</onup>
         <ondown>76</ondown>
-        <onleft>99</onleft>
+        <onright>99</onright>
         <visible>no</visible>
       </control>
       <control>
-        <description>TV Shows</description>
-        <type>button</type>
-        <id>76</id>
-        <hyperlink>25</hyperlink>
-        <label>3</label>
-        <onup>13</onup>
-        <ondown>77</ondown>
-        <onleft>99</onleft>
-        <visible>plugin.isenabled(MP-TV Series)</visible>
-      </control>
-      <control>
-        <description>Videos</description>
-        <type>button</type>
-        <id>77</id>
-        <hyperlink>9811</hyperlink>
-        <label>1300</label>
-        <onup>76</onup>
-        <ondown>8</ondown>
-        <onleft>99</onleft>
-        <visible>plugin.isenabled(Videos)</visible>
-      </control>
+      <description>TV Shows</description>
+      <type>button</type>
+      <id>76</id>
+      <hyperlink>9811</hyperlink>
+      <label>1300</label>
+      <onup>13</onup>
+      <ondown>77</ondown>
+      <onright>99</onright>
+      <visible>plugin.isenabled(MP-TV Series)</visible>
+    </control>
+    <control>
+      <description>Videos</description>
+      <type>button</type>
+      <id>77</id>
+      <hyperlink>25</hyperlink>
+      <label>3</label>
+      <onup>76</onup>
+      <ondown>8</ondown>
+      <onright>99</onright>
+      <visible>plugin.isenabled(Videos)</visible>
+    </control>
     </control>
     <control>
       <description>LCD image</description>

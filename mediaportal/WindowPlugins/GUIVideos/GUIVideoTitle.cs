@@ -168,16 +168,10 @@ namespace MediaPortal.GUI.Video
           if (sortby == null)
           {
             sortby = new VideoSort.SortMethod[handler.Views.Count,50];
-
+            // !!!!!!!!Sort items must be the same as in VideoSort.cs -> public enum SortMethod
             ArrayList sortStrings = new ArrayList();
-            sortStrings.Add("Name");
-            sortStrings.Add("NameAll");
-            sortStrings.Add("Date");
-            sortStrings.Add("Size");
-            sortStrings.Add("Year");
-            sortStrings.Add("Rating");
-            sortStrings.Add("Label");
-
+            sortStrings.AddRange(Enum.GetNames(typeof(VideoSort.SortMethod)));
+            
             for (int i = 0; i < handler.Views.Count; ++i)
             {
               for (int j = 0; j < handler.Views[i].Filters.Count; ++j)
@@ -283,7 +277,7 @@ namespace MediaPortal.GUI.Video
       handler.CurrentView = view;
       // Resume view lvl position (back from VideoInfo window)
       handler.CurrentLevel = _currentLevel;
-      _currentBaseView = handler.CurrentLevelWhere.ToLower();
+      _currentBaseView = handler.CurrentLevelWhere.ToLowerInvariant();
 
       // Set views
       if (btnViews != null)
@@ -698,10 +692,10 @@ namespace MediaPortal.GUI.Video
     protected override void SetView(int selectedViewId)
     {
       // Set current view before change (reset search variables)
-      _currentViewHistory = handler.CurrentLevelWhere.ToLower();
+      _currentViewHistory = handler.CurrentLevelWhere.ToLowerInvariant();
       // Set new view
       base.SetView(selectedViewId);
-      _currentBaseView = handler.CurrentLevelWhere.ToLower();
+      _currentBaseView = handler.CurrentLevelWhere.ToLowerInvariant();
     }
 
     protected override void OnInfo(int itemIndex)
@@ -735,7 +729,7 @@ namespace MediaPortal.GUI.Video
 
         if (actor != null)
         {
-          string restriction = "7"; // Refresh every week actor info and movies
+          string restriction = "30"; // Refresh every month actor info and movies
 
           TimeSpan ts = new TimeSpan(Convert.ToInt32(restriction), 0, 0, 0);
           DateTime searchDate = DateTime.Today - ts;
@@ -815,7 +809,7 @@ namespace MediaPortal.GUI.Video
                      "movieinfo.studios," +
                      "movieinfo.country," +
                      "movieinfo.language," +
-                     "movieinfo.lastupdate " +
+                     "movieinfo.lastupdate, " +
 			               "movieinfo.strSortTitle " +
                      "FROM movieinfo " +
                      "INNER JOIN actorlinkmovie ON actorlinkmovie.idMovie = movieinfo.idMovie " +
@@ -1001,7 +995,7 @@ namespace MediaPortal.GUI.Video
           itemIndex++;
         }
         
-        switch (handler.CurrentLevelWhere.ToLower())
+        switch (handler.CurrentLevelWhere.ToLowerInvariant())
         {
           case "genre":
             SetGenreThumbs(itemlist);
@@ -1687,7 +1681,7 @@ namespace MediaPortal.GUI.Video
       
       if (handler != null)
       {
-        strView = handler.CurrentLevelWhere.ToLower();
+        strView = handler.CurrentLevelWhere.ToLowerInvariant();
         currentViewlvl = handler.CurrentLevel;
 
         if (handler.CurrentLevel > 0)
@@ -1822,7 +1816,7 @@ namespace MediaPortal.GUI.Video
       string where = string.Empty;
       string value = string.Empty;
       string sql = string.Empty;
-      string view = handler.CurrentLevelWhere.ToLower();
+      string view = handler.CurrentLevelWhere.ToLowerInvariant();
       string groupDescription = string.Empty;
       IMDBMovie movie = item.AlbumInfoTag as IMDBMovie;
 
@@ -2275,10 +2269,10 @@ namespace MediaPortal.GUI.Video
         GUIDialogProgress progressDialog =
           (GUIDialogProgress)GUIWindowManager.GetWindow((int)Window.WINDOW_DIALOG_PROGRESS);
         progressDialog.Reset();
-        progressDialog.SetHeading("Exporting movies....");
+        progressDialog.SetHeading(GUILocalizeStrings.Get(1312)); // Exporting movies...
         progressDialog.ShowProgressBar(true);
-        progressDialog.SetLine(1, "Creating nfo file");
-        progressDialog.SetLine(2, "Working...");
+        progressDialog.SetLine(1, GUILocalizeStrings.Get(1313)); // Creating nfo file
+        progressDialog.SetLine(2, GUILocalizeStrings.Get(1314)); // Working...
         progressDialog.StartModal(GUIWindowManager.ActiveWindow);
         int percent = 0;
         int moviesCount = facadeLayout.ListLayout.ListItems.Count;
@@ -2294,8 +2288,8 @@ namespace MediaPortal.GUI.Video
           
           if (movie != null)
           {
-            progressDialog.SetLine(1, "Creating nfo for: " + movie.Title);
-            progressDialog.SetLine(2, "Working...");
+            progressDialog.SetLine(1, GUILocalizeStrings.Get(1315) + movie.Title); // Creating nfo for:
+            progressDialog.SetLine(2, GUILocalizeStrings.Get(1314)); // Working
             progressDialog.SetPercentage(percent);
             percent += 100 / (moviesCount - 1);
             progressDialog.Progress();
@@ -2512,7 +2506,7 @@ namespace MediaPortal.GUI.Video
 
             foreach (string share in pShares)
             {
-              if (directory.ToLower().Contains(share.ToLower()))
+              if (directory.ToLowerInvariant().Contains(share.ToLowerInvariant()))
               {
                 // Movie belongs to unlocked share
                 found = true;
@@ -2599,7 +2593,7 @@ namespace MediaPortal.GUI.Video
 
             foreach (string share in pShares)
             {
-              if (directory.ToLower().Contains(share.ToLower()))
+              if (directory.ToLowerInvariant().Contains(share.ToLowerInvariant()))
               {
                 // Movie belongs to unlocked share
                 found = true;
@@ -2636,7 +2630,7 @@ namespace MediaPortal.GUI.Video
     // (when user switch view and get back item position will be restored)
     private string SetItemViewHistory()
     {
-      string viewFolder = handler.CurrentLevelWhere.ToLower();
+      string viewFolder = handler.CurrentLevelWhere.ToLowerInvariant();
       return viewFolder;
     }
 
@@ -3070,7 +3064,7 @@ namespace MediaPortal.GUI.Video
       GUIDialogSelect pDlgSelect = (GUIDialogSelect)GUIWindowManager.GetWindow((int)Window.WINDOW_DIALOG_SELECT);
       // more then 1 actor found
       // ask user to select 1
-      pDlgSelect.SetHeading("Select actor:"); //select actor
+      pDlgSelect.SetHeading(GUILocalizeStrings.Get(1310)); //select actor
       pDlgSelect.Reset();
       for (int i = 0; i < fetcher.Count; ++i)
       {

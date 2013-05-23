@@ -133,6 +133,16 @@ namespace MediaPortal.Tests.Core.Playlists
       return false;
     }
 
+    public bool Play(string strFile, Player.g_Player.MediaType type)
+    {
+      return true;
+    }
+
+    public bool Play(string strFile, MediaPortal.Player.g_Player.MediaType type, int title, bool forcePlay)
+    {
+      return true;
+    }
+
     #endregion
   }
 }

@@ -251,7 +251,7 @@
     <Compile Include="..\..\..\Common-MP-TVE3\SolutionInfo.cs">
       <Link>SolutionInfo.cs</Link>
     </Compile>
-    <Compile Include="BluRay\GUISetingsBluRay.cs" />
+    <Compile Include="BluRay\GUISettingsBluRay.cs" />
     <Compile Include="DVD\GUISettingsDVD.cs" />
     <Compile Include="General\GeneralMP\GUISettingsGeneral.cs" />
     <Compile Include="General\GeneralMP\GUISettingsGeneral_GeneralMP.cs" />

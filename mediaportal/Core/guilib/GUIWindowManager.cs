@@ -526,7 +526,7 @@ namespace MediaPortal.GUI.Library
     {
       using (Profile.Settings xmlreader = new Profile.MPSettings())
       {
-        _startWithBasicHome = xmlreader.GetValueAsBool("gui", "startbasichome", false);
+        _startWithBasicHome = xmlreader.GetValueAsBool("gui", "startbasichome", true);
       }
       //no active window yet
       _activeWindowId = -1;
@@ -649,15 +649,6 @@ namespace MediaPortal.GUI.Library
     public static void OnDeviceRestored()
     {
       LockAndDoOnAllRegisteredWindows(window => window.OnDeviceRestored());
-    }
-
-    /// <summary>
-    /// Called by the runtime when the DirectX device has been lost
-    /// just let all windoww know about this so they can free their directx resources
-    /// </summary>
-    public static void OnDeviceLost()
-    {
-      LockAndDoOnAllRegisteredWindows(window => window.OnDeviceLost());
     }
 
     #endregion

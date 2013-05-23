@@ -108,6 +108,8 @@ namespace MpeInstaller
     {
       //UpdateList(true);
       QueueCommandCollection collection = QueueCommandCollection.Load();
+      // close all MP processes without message box, because executing the queue is called from within MP from GUI plugin which warns the user already
+      if (collection.Items.Count > 0) Util.KillAllMediaPortalProcesses(true);
       foreach (QueueCommand item in collection.Items)
       {
         switch (item.CommandEnum)
@@ -285,7 +287,7 @@ Do you want to continue ?",packageClass.GeneralInfo.Name, pak.GeneralInfo.Versio
         return;
       try
       {
-        if (Path.GetExtension(conf_str).ToUpper() == ".DLL")
+        if (Path.GetExtension(conf_str).ToUpperInvariant() == ".DLL")
         {
           string assemblyFileName = conf_str;
           AppDomainSetup setup = new AppDomainSetup();
@@ -553,7 +555,7 @@ Do you want to continue ?",packageClass.GeneralInfo.Name, pak.GeneralInfo.Versio
           }
           else
           {
-            MpeCore.MpeInstaller.InstalledExtensions.Remove(pak);
+			  MpeCore.MpeInstaller.InstalledExtensions.Remove(installedPak);
           }
         }
         if (gui)

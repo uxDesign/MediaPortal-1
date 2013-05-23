@@ -47,7 +47,9 @@ namespace WindowPlugins.GUISettings.TV
     [SkinControl(41)] protected GUIButtonControl btnDatabase= null;
     [SkinControl(42)] protected GUIButtonControl btnPlaylist= null;
     [SkinControl(43)] protected GUIButtonControl btnOtherSettings = null;
-    
+    [SkinControl(44)] protected GUICheckButton btnautoDecoderSettings = null;
+    [SkinControl(45)] protected GUICheckButton btnForceSourceSplitter = null;
+    [SkinControl(46)] protected GUICheckButton btnUseMovieCodects = null;
 
     private bool _subtitleSettings;
     private int _selectedOption;
@@ -69,6 +71,9 @@ namespace WindowPlugins.GUISettings.TV
     private CultureInfo _info;
     private CultureInfo _infoAudio;
     private string _defaultAudioLanguage;
+    private bool _autoDecoderSettings;
+    private bool _ForceSourceSplitter;
+    private bool _mpCheckBoxTS;
     
 
     private class CultureComparer : IComparer
@@ -123,6 +128,12 @@ namespace WindowPlugins.GUISettings.TV
         _subtitleSettings = xmlreader.GetValueAsBool("subtitles", "enabled", false);
         btnEnableSubtitles.Selected = _subtitleSettings;
         _playAll = xmlreader.GetValueAsInt("movies", "playallinfolder", 3);
+        _autoDecoderSettings = xmlreader.GetValueAsBool("movieplayer", "autodecodersettings", false);
+        _ForceSourceSplitter = xmlreader.GetValueAsBool("movieplayer", "forcesourcesplitter", false);
+        _mpCheckBoxTS = xmlreader.GetValueAsBool("movieplayer", "usemoviecodects", false);
+        btnForceSourceSplitter.Selected = _ForceSourceSplitter;
+        btnUseMovieCodects.Selected = _mpCheckBoxTS;
+        btnautoDecoderSettings.Selected = _autoDecoderSettings;
       }
     }
 
@@ -143,6 +154,9 @@ namespace WindowPlugins.GUISettings.TV
         // Splitter
         xmlwriter.SetValue("movieplayer", "splitterfilter", _strSplitterFilter);
         xmlwriter.SetValue("movieplayer", "splitterfilefilter", _strSplitterFilesyncFilter);
+        xmlwriter.SetValueAsBool("movieplayer", "autodecodersettings", btnautoDecoderSettings.Selected);
+        xmlwriter.SetValueAsBool("movieplayer", "forcesourcesplitter", btnForceSourceSplitter.Selected);
+        xmlwriter.SetValueAsBool("movieplayer", "usemoviecodects", btnUseMovieCodects.Selected);
 
         if (_info != null)
         {
@@ -177,10 +191,16 @@ namespace WindowPlugins.GUISettings.TV
       }
     }
 
-    protected override void OnPageDestroy(int new_windowId)
+    protected override void OnPageDestroy(int newWindowId)
     {
       SaveSettings();
-      base.OnPageDestroy(new_windowId);
+
+      if (MediaPortal.GUI.Settings.GUISettings.SettingsChanged && !MediaPortal.Util.Utils.IsGUISettingsWindow(newWindowId))
+      {
+        MediaPortal.GUI.Settings.GUISettings.OnRestartMP(GetID);
+      }
+
+      base.OnPageDestroy(newWindowId);
     }
 
     protected override void OnClicked(int controlId, GUIControl control, Action.ActionType actionType)

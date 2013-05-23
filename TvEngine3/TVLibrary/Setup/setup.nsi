@@ -362,6 +362,8 @@ ${MementoSection} "MediaPortal TV Server" SecServer
   ${LOG_TEXT} "INFO" "Terminating processes ..."
   ${StopService} "TVservice"
   ${KillProcess} "SetupTv.exe"
+  ; ffmpeg
+  ${KillProcess} "ffmpeg.exe"
 
   SetOverwrite on
 
@@ -420,7 +422,7 @@ ${MementoSection} "MediaPortal TV Server" SecServer
   File "${git_TVServer}\TvService\bin\${BUILD_TYPE}\TvService.exe.config"
   File "${git_TVServer}\SetupControls\bin\${BUILD_TYPE}\SetupControls.dll"
   File "${git_TVServer}\TVLibrary.Utils\bin\${BUILD_TYPE}\TVLibrary.Utils.dll"
-  File "${git_TVServer}\TVLibrary.Utils\bin\${BUILD_TYPE}\Interop.SHDocVw.dll"
+  ;File "${git_TVServer}\TVLibrary.Utils\bin\${BUILD_TYPE}\Interop.SHDocVw.dll"
 
   ; 3rd party assemblys
   File "${TVSERVER.BASE}\hauppauge.dll"
@@ -430,6 +432,11 @@ ${MementoSection} "MediaPortal TV Server" SecServer
   File "${TVSERVER.BASE}\ttdvbacc.dll"
   File "${TVSERVER.BASE}\tevii.dll"
   File "${TVSERVER.BASE}\Ionic.Zip.dll"
+  
+  ; thumbnail software
+  File "${TVSERVER.BASE}\ffmpeg.exe"
+  File "${git_TVServer}\TvThumbnails\bin\${BUILD_TYPE}\TvThumbnails.dll"
+  
 
   File "${git_DirectShowFilters}\StreamingServer\bin\${BUILD_TYPE}\StreamingServer.dll"
   
@@ -494,6 +501,8 @@ ${MementoSectionEnd}
   ${LOG_TEXT} "INFO" "Terminating processes ..."
   ${StopService} "TVservice"
   ${KillProcess} "SetupTv.exe"
+  ; ffmpeg
+  ${KillProcess} "ffmpeg.exe"
 
   #---------------------------------------------------------------------------
   # CLEARING DATABASE if RemoveAll was selected
@@ -588,7 +597,9 @@ ${MementoSectionEnd}
   Delete "$INSTDIR\ttdvbacc.dll"
   Delete "$INSTDIR\tevii.dll"
   Delete "$INSTDIR\Ionic.Zip.dll"
-  Delete "$INSTDIR\Interop.SHDocVw.dll"
+  ;Delete "$INSTDIR\Interop.SHDocVw.dll"
+  Delete "$INSTDIR\ffmpeg.exe"
+  Delete "$INSTDIR\TvThumbnails.dll"
 
   ; remove Start Menu shortcuts
   Delete "${STARTMENU_GROUP}\TV-Server Configuration.lnk"
@@ -773,7 +784,7 @@ Section -Post
   ;if TV Server was installed exec SetupTv with correct parameters    
   ${If} $noServer == 0
 	  ${If} $DeploySql != ""
-	  ${AndIf} $DeployPwd != ""
+	  ;${AndIf} $DeployPwd != ""
 	            StrCpy $R0 "--DeployMode --DeploySql:$DeploySql --DeployPwd:$DeployPwd"
 	  ${Else}
 	            StrCpy $R0 "--DeployMode"
@@ -897,9 +908,9 @@ Function .onInit
   ;${ReadCommandlineParameter} "noStartMenuSC"
   ${ReadCommandlineParameter} "DeployMode"
   ClearErrors
-  ${GetOptions} $R0 "/DeploySql:" $DeploySql
+  ${GetOptions} $R0 "--DeploySql:" $DeploySql
   ClearErrors
-  ${GetOptions} $R0 "/DeployPwd:" $DeployPwd
+  ${GetOptions} $R0 "--DeployPwd:" $DeployPwd
 
   ClearErrors
   ${GetOptions} $R0 "/UpdateMode" $R1
