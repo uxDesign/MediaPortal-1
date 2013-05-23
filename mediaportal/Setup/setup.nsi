@@ -481,7 +481,6 @@ Section "MediaPortal core files (required)" SecCore
   File "${git_MP}\WindowPlugins\GUIMusic\bin\${BUILD_TYPE}\GUIMusic.dll"
   File "${git_MP}\WindowPlugins\GUINumberPlace\bin\${BUILD_TYPE}\GUINumberPlace.dll"
   File "${git_MP}\WindowPlugins\GUIPictures\bin\${BUILD_TYPE}\GUIPictures.dll"
-  File "${git_MP}\WindowPlugins\GUIRadioLastFM\bin\${BUILD_TYPE}\GUIRadioLastFM.dll"
   File "${git_MP}\WindowPlugins\GUIRSSFeed\bin\${BUILD_TYPE}\GUIRSSFeed.dll"
   File "${git_MP}\WindowPlugins\GUISettings\bin\${BUILD_TYPE}\GUISettings.dll"
   File "${git_MP}\WindowPlugins\GUITetris\bin\${BUILD_TYPE}\GUITetris.dll"

@@ -312,7 +312,7 @@ namespace MediaPortal.GUI.Library
       // ReSharper restore EmptyGeneralCatchClause
 
       // need to load windowPlugins.dll first // TODO
-      string windowPluginsDLL = Config.GetFile(Config.Dir.Plugins, @"windows\WindowPlugins.dll");
+      //string windowPluginsDLL = Config.GetFile(Config.Dir.Plugins, @"windows\WindowPlugins.dll");
       //DateTime startTimeNonThreaded = DateTime.Now;
       //Log.Debug("PluginManager: Begin loading '\\windows\\WindowPlugins.dll' (non threaded)");
       //LoadWindowPlugin(windowPluginsDLL);
@@ -323,8 +323,8 @@ namespace MediaPortal.GUI.Library
       string[] strFiles = MediaPortal.Util.Utils.GetFiles(Config.GetSubFolder(Config.Dir.Plugins, "windows"), "dll");
 
       // remove windowplugins.dll from list of window plugins to be loaded
-      int pluginIndex = Array.IndexOf(strFiles, windowPluginsDLL);
-      strFiles = strFiles.Where((val, idx) => idx != pluginIndex).ToArray();
+      //int pluginIndex = Array.IndexOf(strFiles, windowPluginsDLL);
+      //strFiles = strFiles.Where((val, idx) => idx != pluginIndex).ToArray();
 
       // load all window plugins in the main thread
       foreach (string file in strFiles)
@@ -369,7 +369,7 @@ namespace MediaPortal.GUI.Library
       // ReSharper restore EmptyGeneralCatchClause
 
       // need to load windowPlugins.dll first
-      string windowPluginsDLL = Config.GetFile(Config.Dir.Plugins, @"windows\WindowPlugins.dll");
+      //string windowPluginsDLL = Config.GetFile(Config.Dir.Plugins, @"windows\WindowPlugins.dll");
       //DateTime startTimeNonThreaded = DateTime.Now;
       //Log.Debug("PluginManager: Begin loading '\\windows\\WindowPlugins.dll' (non threaded)");
       //LoadWindowPlugin(windowPluginsDLL);
@@ -380,8 +380,8 @@ namespace MediaPortal.GUI.Library
       string[] strFiles = MediaPortal.Util.Utils.GetFiles(Config.GetSubFolder(Config.Dir.Plugins, "windows"), "dll");
 
       // remove windowplugins.dll from list of window plugins to be loaded
-      int pluginIndex = Array.IndexOf(strFiles, windowPluginsDLL);
-      strFiles = strFiles.Where((val, idx) => idx != pluginIndex).ToArray();
+      //int pluginIndex = Array.IndexOf(strFiles, windowPluginsDLL);
+      //strFiles = strFiles.Where((val, idx) => idx != pluginIndex).ToArray();
 
       int pluginsToLoad = strFiles.Length;
       using (var resetEvent = new ManualResetEvent(false))
