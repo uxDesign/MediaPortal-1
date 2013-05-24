@@ -21,6 +21,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using UPnP.Infrastructure.Common;
 using UPnP.Infrastructure.CP.DeviceTree;
 
 namespace TvLibrary.Implementations.Dri.Service
@@ -30,14 +31,15 @@ namespace TvLibrary.Implementations.Dri.Service
     protected CpDevice _device = null;
     protected CpService _service = null;
     protected StateVariableChangedDlgt _stateVariableDelegate = null;
+    protected string _unqualifiedServiceName = string.Empty;
 
     public BaseService(CpDevice device, string serviceName, bool isOptional = false)
     {
       _device = device;
+      _unqualifiedServiceName = serviceName.Substring(serviceName.LastIndexOf(":"));
       if (!device.Services.TryGetValue(serviceName, out _service) && !isOptional)
       {
-        string unqualifiedServicename = serviceName.Substring(serviceName.LastIndexOf(":"));
-        throw new NotImplementedException(string.Format("DRI: device does not implement a {0} service", unqualifiedServicename));
+        throw new NotImplementedException(string.Format("DRI: device does not implement a {0} service", _unqualifiedServiceName));
       }
     }
 
@@ -52,6 +54,7 @@ namespace TvLibrary.Implementations.Dri.Service
       if (svChangeDlg != null && _service != null)
       {
         _stateVariableDelegate = svChangeDlg;
+        _service.EventSubscriptionFailed += SubscribeFailed;
         _service.StateVariableChanged += _stateVariableDelegate;
         _service.SubscribeStateVariables();
       }
@@ -66,8 +69,14 @@ namespace TvLibrary.Implementations.Dri.Service
           _service.UnsubscribeStateVariables();
         }
         _service.StateVariableChanged -= _stateVariableDelegate;
+        _service.EventSubscriptionFailed -= SubscribeFailed;
         _stateVariableDelegate = null;
       }
+    }
+
+    private void SubscribeFailed(CpService service, UPnPError error)
+    {
+      Log.Log.Error("DRI: failed to subscribe to state variable events for service {0}, code = {1}, description = {2}", _unqualifiedServiceName, error.ErrorCode, error.ErrorDescription);
     }
   }
 }
