@@ -4461,7 +4461,7 @@ namespace TvService
 
       // Preload the device if configured to do so. Note that it should not be possible
       // to preload multiple parts of a hybrid device... but we're not checking that.
-      if (dbSettings.PreloadCard)
+      if (dbSettings.Enabled && dbSettings.PreloadCard)
       {
         // TODO: TvCardBase is library implementation detail. It should *not* be referenced here!
         TvCardBase tuner = device as TvCardBase;
