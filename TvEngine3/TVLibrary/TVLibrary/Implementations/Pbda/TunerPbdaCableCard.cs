@@ -296,12 +296,10 @@ namespace TvLibrary.Implementations.Pbda
     }
 
     /// <summary>
-    /// Method to check if card can tune to the channel specified
+    /// Check if the tuner can tune to a given channel.
     /// </summary>
-    /// <param name="channel"></param>
-    /// <returns>
-    /// true if card can tune to the channel otherwise false
-    /// </returns>
+    /// <param name="channel">The channel to check.</param>
+    /// <returns><c>true</c> if the tuner can tune to the channel, otherwise <c>false</c></returns>
     public override bool CanTune(IChannel channel)
     {
       ATSCChannel atscChannel = channel as ATSCChannel;
