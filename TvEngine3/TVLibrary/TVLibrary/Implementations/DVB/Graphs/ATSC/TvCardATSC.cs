@@ -364,15 +364,19 @@ namespace TvLibrary.Implementations.DVB
     }
 
     /// <summary>
-    /// Method to check if card can tune to the channel specified
+    /// Check if the tuner can tune to a given channel.
     /// </summary>
-    /// <param name="channel"></param>
-    /// <returns>
-    /// true if card can tune to the channel otherwise false
-    /// </returns>
+    /// <param name="channel">The channel to check.</param>
+    /// <returns><c>true</c> if the tuner can tune to the channel, otherwise <c>false</c></returns>
     public override bool CanTune(IChannel channel)
     {
-      return channel is ATSCChannel;
+      ATSCChannel atscChannel = channel as ATSCChannel;
+      if (atscChannel == null)
+      {
+        return false;
+      }
+      // We tune by physical channel and/or frequency.
+      return atscChannel.PhysicalChannel > 0;
     }
 
     protected override DVBBaseChannel CreateChannel(int networkid, int transportid, int serviceid, string name)
