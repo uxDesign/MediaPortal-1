@@ -687,6 +687,22 @@ namespace TvLibrary.Implementations.Dri
 
     #region tuning
 
+    /// <summary>
+    /// Check if the tuner can tune to a given channel.
+    /// </summary>
+    /// <param name="channel">The channel to check.</param>
+    /// <returns><c>true</c> if the tuner can tune to the channel, otherwise <c>false</c></returns>
+    public override bool CanTune(IChannel channel)
+    {
+      ATSCChannel atscChannel = channel as ATSCChannel;
+      if (atscChannel == null)
+      {
+        return false;
+      }
+      // Major channel holds the virtual channel number that we use for tuning.
+      return atscChannel.MajorChannel > 0;
+    }
+
     protected override bool BeforeTune(IChannel channel)
     {
       if (_graphState == GraphState.Idle)
