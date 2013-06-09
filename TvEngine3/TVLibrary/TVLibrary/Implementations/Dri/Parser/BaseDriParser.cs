@@ -66,15 +66,20 @@ namespace TvLibrary.Implementations.Dri.Parser
 
       if (tableVersionNumber > currentVersion || (currentVersion == 31 && tableVersionNumber < currentVersion))
       {
-        Log.Log.Info("DRI: new table version, version = {0}, section number = {1}, last section number = {2}", tableVersionNumber, sectionNumber, lastSectionNumber);
+        Log.Log.Info("DRI: new table version");
         _currentVersions[tableType] = tableVersionNumber;
         unseenSections.Clear();
         for (int s = 0; s <= lastSectionNumber; s++)
         {
           unseenSections.Add(s);
         }
+        unseenSections.Remove(sectionNumber);
       }
-      unseenSections.Remove(sectionNumber);
+      else
+      {
+        unseenSections.Remove(sectionNumber);
+        Log.Log.Info("DRI: existing table version, unseen section count = {0}", unseenSections.Count);
+      }
     }
   }
 }
