@@ -275,108 +275,6 @@ namespace TvLibrary.Implementations.Dri
       }
     }
 
-    /// <summary>
-    /// Build the graph.
-    /// </summary>
-    public override void BuildGraph()
-    {
-      try
-      {
-        if (_graphState != GraphState.Idle)
-        {
-          Log.Log.Info("DRI CC: device already initialised");
-          return;
-        }
-
-        bool useKeepAlive = !_isCetonDevice;
-        Log.Log.Info("DRI CC: connect to device, keep-alive = {0}", useKeepAlive);
-        _deviceConnection = _controlPoint.Connect(_descriptor.RootDescriptor, _descriptor.DeviceUUID, ResolveDataType, useKeepAlive);
-
-        // services
-        Log.Log.Debug("DRI CC: setup services");
-        _tunerService = new TunerService(_deviceConnection.Device);
-        _fdcService = new FdcService(_deviceConnection.Device);
-        _auxService = new AuxService(_deviceConnection.Device);
-        _encoderService = new EncoderService(_deviceConnection.Device);
-        _casService = new CasService(_deviceConnection.Device);
-        _muxService = new MuxService(_deviceConnection.Device);
-        _securityService = new SecurityService(_deviceConnection.Device);
-        _diagService = new DiagService(_deviceConnection.Device);
-        _avTransportService = new AvTransportService(_deviceConnection.Device);
-        _connectionManagerService = new ConnectionManagerService(_deviceConnection.Device);
-
-        Log.Log.Debug("DRI CC: subscribe services");
-        _stateVariableDelegate = new StateVariableChangedDlgt(OnStateVariableChanged);
-        _tunerService.SubscribeStateVariables(_stateVariableDelegate);
-        _auxService.SubscribeStateVariables(_stateVariableDelegate);
-        _encoderService.SubscribeStateVariables(_stateVariableDelegate);
-        _casService.SubscribeStateVariables(_stateVariableDelegate);
-        _securityService.SubscribeStateVariables(_stateVariableDelegate);
-        _avTransportService.SubscribeStateVariables(_stateVariableDelegate);
-        _connectionManagerService.SubscribeStateVariables(_stateVariableDelegate);
-
-        // Give time for the device to notify us about initial state variable values.
-        // Attempting to continue with other actions now can overload the puny device
-        // processors.
-        Thread.Sleep(2000);
-
-        int rcsId = -1;
-        _connectionManagerService.PrepareForConnection(string.Empty, string.Empty, -1, UpnpConnectionDirection.Output, out _connectionId, out _avTransportId, out rcsId);
-        Log.Log.Debug("DRI CC: PrepareForConnection, connection ID = {0}, AV transport ID = {1}", _connectionId, _avTransportId);
-
-        // Check that the device is not already in use.
-        if (IsTunerInUse())
-        {
-          throw new TvExceptionGraphBuildingFailed("DRI CC: tuner appears to be in use");
-        }
-
-        ReadDeviceInfo();
-
-        Log.Log.Info("DRI CC: build graph");
-        _graphBuilder = (IFilterGraph2)new FilterGraph();
-        _capBuilder = (ICaptureGraphBuilder2)new CaptureGraphBuilder2();
-        _capBuilder.SetFiltergraph(_graphBuilder);
-        _rotEntry = new DsROTEntry(_graphBuilder);
-        AddTsWriterFilterToGraph();
-        AddStreamSourceFilter();
-
-        // This shouldn't be required, but it enables us to reuse TvCardDvbBase
-        // and use CI menus for delivering messages from the CableCARD to the
-        // user.
-        _conditionalAccess = new ConditionalAccess(null, null, null, this);
-
-        _graphState = GraphState.Created;
-      }
-      catch (Exception)
-      {
-        Dispose();
-        throw;
-      }
-    }
-
-    public override void PauseGraph()
-    {
-      if (_avTransportService != null && _gotTunerControl)
-      {
-        _avTransportService.Pause((uint)_avTransportId);
-        _transportState = UpnpAvTransportState.PAUSED_PLAYBACK;
-      }
-      _gotTunerControl = false;
-      base.PauseGraph();
-    }
-
-    public override void StopGraph()
-    {
-      if (_avTransportService != null && _gotTunerControl)
-      {
-        _avTransportService.Stop((uint)_avTransportId);
-        _transportState = UpnpAvTransportState.STOPPED;
-      }
-      _gotTunerControl = false;
-      base.StopGraph();
-      _previousChannel = null;
-    }
-
     private bool IsTunerInUse()
     {
       if (_gotTunerControl)
@@ -618,6 +516,109 @@ namespace TvLibrary.Implementations.Dri
       }
     }
 
+    #region graph handling
+
+    /// <summary>
+    /// Build the graph.
+    /// </summary>
+    public override void BuildGraph()
+    {
+      try
+      {
+        if (_graphState != GraphState.Idle)
+        {
+          Log.Log.Info("DRI CC: device already initialised");
+          return;
+        }
+
+        bool useKeepAlive = !_isCetonDevice;
+        Log.Log.Info("DRI CC: connect to device, keep-alive = {0}", useKeepAlive);
+        _deviceConnection = _controlPoint.Connect(_descriptor.RootDescriptor, _descriptor.DeviceUUID, ResolveDataType, useKeepAlive);
+
+        // services
+        Log.Log.Debug("DRI CC: setup services");
+        _tunerService = new TunerService(_deviceConnection.Device);
+        _fdcService = new FdcService(_deviceConnection.Device);
+        _auxService = new AuxService(_deviceConnection.Device);
+        _encoderService = new EncoderService(_deviceConnection.Device);
+        _casService = new CasService(_deviceConnection.Device);
+        _muxService = new MuxService(_deviceConnection.Device);
+        _securityService = new SecurityService(_deviceConnection.Device);
+        _diagService = new DiagService(_deviceConnection.Device);
+        _avTransportService = new AvTransportService(_deviceConnection.Device);
+        _connectionManagerService = new ConnectionManagerService(_deviceConnection.Device);
+
+        Log.Log.Debug("DRI CC: subscribe services");
+        _stateVariableDelegate = new StateVariableChangedDlgt(OnStateVariableChanged);
+        _tunerService.SubscribeStateVariables(_stateVariableDelegate);
+        _auxService.SubscribeStateVariables(_stateVariableDelegate);
+        _encoderService.SubscribeStateVariables(_stateVariableDelegate);
+        _casService.SubscribeStateVariables(_stateVariableDelegate);
+        _securityService.SubscribeStateVariables(_stateVariableDelegate);
+        _avTransportService.SubscribeStateVariables(_stateVariableDelegate);
+        _connectionManagerService.SubscribeStateVariables(_stateVariableDelegate);
+
+        // Give time for the device to notify us about initial state variable values.
+        // Attempting to continue with other actions now can overload the puny device
+        // processors.
+        Thread.Sleep(2000);
+
+        int rcsId = -1;
+        _connectionManagerService.PrepareForConnection(string.Empty, string.Empty, -1, UpnpConnectionDirection.Output, out _connectionId, out _avTransportId, out rcsId);
+        Log.Log.Debug("DRI CC: PrepareForConnection, connection ID = {0}, AV transport ID = {1}", _connectionId, _avTransportId);
+
+        // Check that the device is not already in use.
+        if (IsTunerInUse())
+        {
+          throw new TvExceptionGraphBuildingFailed("DRI CC: tuner appears to be in use");
+        }
+
+        ReadDeviceInfo();
+
+        Log.Log.Info("DRI CC: build graph");
+        _graphBuilder = (IFilterGraph2)new FilterGraph();
+        _capBuilder = (ICaptureGraphBuilder2)new CaptureGraphBuilder2();
+        _capBuilder.SetFiltergraph(_graphBuilder);
+        _rotEntry = new DsROTEntry(_graphBuilder);
+        AddTsWriterFilterToGraph();
+        AddStreamSourceFilter();
+
+        // This shouldn't be required, but it enables us to reuse TvCardDvbBase
+        // and use CI menus for delivering messages from the CableCARD to the
+        // user.
+        _conditionalAccess = new ConditionalAccess(null, null, null, this);
+
+        _graphState = GraphState.Created;
+      }
+      catch (Exception)
+      {
+        Dispose();
+        throw;
+      }
+    }
+
+    public override void PauseGraph()
+    {
+      if (_avTransportService != null && _gotTunerControl)
+      {
+        _avTransportService.Pause((uint)_avTransportId);
+        _transportState = UpnpAvTransportState.PAUSED_PLAYBACK;
+      }
+      base.PauseGraph();
+    }
+
+    public override void StopGraph()
+    {
+      if (_avTransportService != null && _gotTunerControl)
+      {
+        _avTransportService.Stop((uint)_avTransportId);
+        _transportState = UpnpAvTransportState.STOPPED;
+      }
+      _gotTunerControl = false;
+      base.StopGraph();
+      _previousChannel = null;
+    }
+
     /// <summary>
     /// Add the stream source filter to the graph.
     /// </summary>
@@ -682,13 +683,12 @@ namespace TvLibrary.Implementations.Dri
       }
     }
 
+    #endregion
+
+    #region tuning
+
     protected override bool BeforeTune(IChannel channel)
     {
-      ATSCChannel atscChannel = channel as ATSCChannel;
-      if (atscChannel == null)
-      {
-        throw new TvException("DRI CC: received tune request for unsupported channel");
-      }
       if (_graphState == GraphState.Idle)
       {
         BuildGraph();
@@ -705,10 +705,13 @@ namespace TvLibrary.Implementations.Dri
     /// Actually tune to a channel.
     /// </summary>
     /// <param name="channel">The channel to tune to.</param>
-    protected override ITvSubChannel SubmitTuneRequest(int subChannelId, IChannel channel, ITuneRequest tuneRequest,
-                                              bool performTune)
+    protected override ITvSubChannel SubmitTuneRequest(int subChannelId, IChannel channel, ITuneRequest tuneRequest, bool performTune)
     {
       ATSCChannel atscChannel = channel as ATSCChannel;
+      if (atscChannel == null)
+      {
+        throw new TvException("DRI CC: received tune request for unsupported channel");
+      }
       Log.Log.Info("DRI CC: tune channel {0} \"{1}\", sub channel ID {2}", atscChannel.PhysicalChannel, channel.Name, subChannelId);
 
       bool newSubChannel = false;
@@ -774,6 +777,10 @@ namespace TvLibrary.Implementations.Dri
 
       return subChannel;
     }
+
+    #endregion
+
+    #region signal
 
     public override void LockInOnSignal()
     {
@@ -847,6 +854,10 @@ namespace TvLibrary.Implementations.Dri
       }
     }
 
+    #endregion
+
+    #region scanning
+
     public override ITVScanning ScanningInterface
     {
       get { return new ScannerDri(this, _fdcService); }
@@ -914,6 +925,8 @@ namespace TvLibrary.Implementations.Dri
         throw;
       }
     }
+
+    #endregion
 
     /// <summary>
     /// Handle UPnP evented state variable changes.
