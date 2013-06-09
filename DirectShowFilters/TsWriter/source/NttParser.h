@@ -20,12 +20,15 @@
  */
 #pragma once
 #include <Windows.h>
+#include <map>
+#include <vector>
 #include "..\..\shared\SectionDecoder.h"
+using namespace std;
 
 class INttCallBack
 {
   public:
-    virtual void OnNttReceived(int sourceId, int applicationType, char* name, unsigned int language) = 0;
+    virtual void OnNttReceived(int sourceId, bool applicationType, char* name, unsigned int language) = 0;
 };
 
 class CNttParser : public CSectionDecoder
@@ -37,9 +40,21 @@ class CNttParser : public CSectionDecoder
     void Reset();
     void SetCallBack(INttCallBack* callBack);
     void OnNewSection(CSection& sections);
+    bool IsReady();
 
   private:
+    bool DecodeTransponderName(byte* section, int& pointer, int endOfSection, unsigned int languageCode);
+    bool DecodeSatelliteText(byte* section, int& pointer, int endOfSection, unsigned int languageCode);
+    bool DecodeRatingsText(byte* section, int& pointer, int endOfSection, unsigned int languageCode);
+    bool DecodeRatingSystem(byte* section, int& pointer, int endOfSection, unsigned int languageCode);
+    bool DecodeCurrencySystem(byte* section, int& pointer, int endOfSection, unsigned int languageCode);
+    bool DecodeSourceName(byte* section, int& pointer, int endOfSection, unsigned int languageCode);
+    bool DecodeMapName(byte* section, int& pointer, int endOfSection, unsigned int languageCode);
     void DecodeMultilingualText(byte* b, int length, char** string);
+    void DecodeRevisionDetectionDescriptor(byte* b, int length, int tableSubtype);
 
     INttCallBack* m_pCallBack;
+    map<int, int> m_mCurrentVersions;
+    map<int, vector<int>*> m_mUnseenSections;
+    bool m_bIsReady;
 };

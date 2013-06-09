@@ -443,6 +443,7 @@ STDMETHODIMP CMpOobSiFilterPin::Receive(IMediaSample *pSample)
 
     CSection s;
     s.table_id = pbData[0];
+    s.section_length = sampleLength;
     memcpy(s.Data, pbData, sampleLength);
 
     if (m_rawSectionWriter != NULL)
@@ -455,7 +456,7 @@ STDMETHODIMP CMpOobSiFilterPin::Receive(IMediaSample *pSample)
     }
     m_pWriterFilter->AnalyzeOobSiSection(s);
   }
-  catch(...)
+  catch (...)
   {
     LogDebug("CMpOobSiFilterPin: receive exception");
   }

@@ -21,7 +21,7 @@
 #pragma once
 #include <Windows.h>
 #include <map>
-#include "..\..\shared\ChannelInfo.h"
+#include <vector>
 #include "..\..\shared\SectionDecoder.h"
 
 using namespace std;
@@ -29,7 +29,9 @@ using namespace std;
 class ISvctCallBack
 {
   public:
-    virtual void OnSvctReceived(const CChannelInfo& vctInfo) = 0;
+    virtual void OnSvctReceived(int transmissionMedium, int vctId, int virtualChannelNumber, bool applicationVirtualChannel,
+                                int bitstreamSelect, int pathSelect, int channelType, int sourceId, byte cdsReference,
+                                int programNumber, byte mmsReference) = 0;
 };
 
 class CSvctParser : public CSectionDecoder
@@ -41,14 +43,18 @@ class CSvctParser : public CSectionDecoder
     void Reset();
     void SetCallBack(ISvctCallBack* callBack);
     void OnNewSection(CSection& sections);
+    bool IsReady();
 
   private:
-    void DecodeVirtualChannelMap(byte* b, int sectionLength, int* mapLength);
-    void DecodeDefinedChannelMap(byte* b, int sectionLength, map<int, bool>* dcm, int* mapLength);
-    void DecodeInverseChannelMap(byte* b, int sectionLength, map<int, int>* icm, int* mapLength);
-    void DecodeVirtualChannel(byte* b, CChannelInfo** info);
+    bool DecodeVirtualChannelMap(byte* section, int& pointer, int endOfSection, int transmissionMedium, int vctId);
+    bool DecodeDefinedChannelMap(byte* section, int& pointer, int endOfSection);
+    bool DecodeInverseChannelMap(byte* section, int& pointer, int endOfSection);
+    void DecodeRevisionDetectionDescriptor(byte* b, int length, int tableSubtype);
 
     ISvctCallBack* m_pCallBack;
-    map<int, bool> m_mDefinedChannelMap;
-    map<int, int> m_mInverseChannelMap;   // source/application ID -> virtual channel number
+    map<int, int> m_mCurrentVersions;
+    map<int, vector<int>*> m_mUnseenSections;
+    bool m_bIsReady;
+    map<int, bool> m_mSeenVirtualChannels;
+    map<int, bool> m_mDefinedChannelMap;  // this map only holds the defined channels
 };

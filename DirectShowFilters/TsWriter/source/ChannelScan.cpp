@@ -30,111 +30,156 @@
 #include "..\..\shared\channelinfo.h"
 #include "tswriter.h"
 
-extern void LogDebug(const char *fmt, ...) ;
+extern void LogDebug(const char* fmt, ...);
 
 CChannelScan::CChannelScan(LPUNKNOWN pUnk, HRESULT *phr, CMpTsFilter* filter) 
-:CUnknown( NAME ("MpTsChannelScan"), pUnk)
+  : CUnknown( NAME ("MpTsChannelScan"), pUnk), m_atscParser(PID_ATSC_BASE_PID)
 {
   m_bIsParsingNIT=false;
 	m_bIsParsing=false;
-  m_bIsCableScan = false;
 	m_pFilter=filter;
-	m_pCallback=NULL;
+	m_pCallBack=NULL;
 }
+
 CChannelScan::~CChannelScan(void)
 {
-  CleanUp();
 }
 
 STDMETHODIMP CChannelScan::SetCallBack(IChannelScanCallback* callback)
 {
-	m_pCallback=callback;
+	m_pCallBack=callback;
 	return S_OK;
 }
-STDMETHODIMP CChannelScan::Start(bool waitForVCT, bool isCableScan)
+
+STDMETHODIMP CChannelScan::Start(TransportStreamStandard tsStandard)
 {
-	CEnterCriticalSection enter(m_section);
-	try
-	{
-		m_patParser.Reset(m_pCallback,waitForVCT);
-		m_bIsParsing=true;
-    m_bIsCableScan = isCableScan;
-    if (isCableScan)
+  CEnterCriticalSection enter(m_section);
+  try
+  {
+    LogDebug("ChannelScan: start, TS standard = %d", tsStandard);
+    m_tsStandard = tsStandard;
+    m_bMpeg2PsipMerged = false;
+    m_bReceivedOobSection = false;
+    m_patParser.Reset(tsStandard == TransportStreamStandard_Default);
+
+    if (tsStandard != TransportStreamStandard_Default)
     {
-      CleanUp();
-      m_nttParser.Reset();
-      m_nttParser.SetCallBack(this);
-      m_svctParser.Reset();
-      m_svctParser.SetCallBack(this);
+      m_atscParser.Reset();
+      m_scteParser.Reset();
     }
-	}
-	catch(...)
-	{
-		LogDebug("analyzer CChannelScan::Start exception");
-	}
-	return S_OK;
+
+    m_bIsParsing = true;
+  }
+  catch (...)
+  {
+    LogDebug("analyzer CChannelScan::Start exception");
+  }
+  return S_OK;
 }
+
 STDMETHODIMP CChannelScan::Stop()
 {
-	CEnterCriticalSection enter(m_section);
-	m_bIsParsing=false;
-	try
-	{
-		m_pCallback=NULL;
-		m_patParser.Reset(NULL,false);
-    m_nttParser.SetCallBack(NULL);
-    m_svctParser.SetCallBack(NULL);
-	}
-	catch(...)
-	{
-		LogDebug("analyzer CChannelScan::Stop exception");
-	}
-	return S_OK;
+  CEnterCriticalSection enter(m_section);
+  try
+  {
+    LogDebug("ChannelScan: stop");
+    m_bIsParsing = false;
+    m_pCallBack = NULL;
+    m_atscParser.SetCallBack(NULL);
+  }
+  catch (...)
+  {
+    LogDebug("analyzer CChannelScan::Stop exception");
+  }
+  return S_OK;
 }
 
 STDMETHODIMP CChannelScan::GetCount(int* channelCount)
 {
-	CEnterCriticalSection enter(m_section);
-	try
-	{
-    if (m_bIsCableScan)
+  CEnterCriticalSection enter(m_section);
+  try
+  {
+    if (m_tsStandard == TransportStreamStandard_Default)
     {
-      *channelCount = m_mCableServices.size();
-    }
-    else
-    {
-		  *channelCount=m_patParser.Count();
-    }
-	}
-	catch(...)
-	{
-		LogDebug("analyzer CChannelScan::GetCount exception");
-	}
-	return S_OK;
-}
-
-STDMETHODIMP CChannelScan::IsReady( BOOL* yesNo) 
-{
-	CEnterCriticalSection enter(m_section);
-	try
-	{
-    if (m_bIsCableScan)
-    {
-      *yesNo = false;
+      *channelCount = m_patParser.Count();
+      LogDebug("ChannelScan: channel count = %d", *channelCount);
       return S_OK;
     }
-		*yesNo=m_patParser.IsReady();
-		if (*yesNo)
-		{
-			m_bIsParsing=false;
-		}
-	}
-	catch(...)
-	{
-		LogDebug("analyzer CChannelScan::IsReady exception");
-	}
-	return S_OK;
+    if (m_bMpeg2PsipMerged || m_bReceivedOobSection)
+    {
+      *channelCount = m_scteParser.GetChannelCount();
+      LogDebug("ChannelScan: channel count = %d", *channelCount);
+      return S_OK;
+    }
+
+    // For ATSC over-the-air and cable scans with non-CableCARD tuners we have
+    // to merge the services found by the VCT parsers with the services found
+    // by the PAT parser.
+    LogDebug("ChannelScan: merging PMT info with other SI info");
+    int patServiceCount = m_patParser.Count();
+    int scteServiceCount = m_scteParser.GetChannelCount();
+    int tableId = 0xc8;
+    if (m_tsStandard == TransportStreamStandard_Scte)
+    {
+      tableId = 0xc9;
+    }
+    for (int s1 = 0; s1 < patServiceCount; s1++)
+    {
+      CChannelInfo* patInfo = NULL;
+      m_patParser.GetChannel(s1, &patInfo);
+
+      CChannelInfo* vctInfo = NULL;
+      for (int s2 = 0; s2 < scteServiceCount; s2++)
+      {
+        if (!m_scteParser.GetChannel(s2, &vctInfo))
+        {
+          vctInfo = NULL;
+          break;
+        }
+        if (vctInfo->ServiceId == patInfo->ServiceId)
+        {
+          break;
+        }
+        vctInfo = NULL;
+      }
+
+      // Did we find the corresponding VCT record?
+      if (vctInfo == NULL)
+      {
+        // Channel without VCT info. Fake an L-VCT callback to add the channel
+        // to the SCTE parser.
+        LogDebug("ChannelScan: adding PMT service 0x%x to VCT", patInfo->ServiceId);
+        vector<unsigned int> languages;
+        m_scteParser.OnLvctReceived(tableId, NULL, 0, 0, 0, 0, patInfo->TransportId, patInfo->ServiceId, 0, patInfo->hasCaDescriptor != 0, false, 0,
+          false, false, 0, 0, patInfo->hasVideo, patInfo->hasAudio, languages);
+      }
+    }
+    m_bMpeg2PsipMerged = true;
+
+    *channelCount = m_scteParser.GetChannelCount();
+    LogDebug("ChannelScan: channel count = %d", *channelCount);
+  }
+  catch (...)
+  {
+    LogDebug("analyzer CChannelScan::GetCount exception");
+  }
+  return S_OK;
 }
+
+STDMETHODIMP CChannelScan::IsReady(BOOL* yesNo) 
+{
+  CEnterCriticalSection enter(m_section);
+  try
+  {
+    *yesNo = m_bIsReady;
+  }
+  catch (...)
+  {
+    LogDebug("analyzer CChannelScan::IsReady exception");
+  }
+  return S_OK;
+}
+
 STDMETHODIMP CChannelScan::GetChannel(int index,
 									 long* networkId,
 									 long* transportId,
@@ -158,62 +203,49 @@ STDMETHODIMP CChannelScan::GetChannel(int index,
 	CEnterCriticalSection enter(m_section);
 	try
 	{
-		strcpy(sServiceName,"");
-		strcpy(sProviderName,"");
-		*networkId=0;
-		*transportId=0;
-		*serviceId=0;
-		*pmtPid=0;
-		*lcn=10000;
-
-    if (m_bIsCableScan)
+    CChannelInfo* info = NULL;
+    bool gotInfo = false;
+    if (m_tsStandard == TransportStreamStandard_Default)
     {
-      map<int, CChannelInfo*>::iterator it = m_mCableServices.begin();
-      int pos = 0;
-      while (it != m_mCableServices.end())
-      {
-        if (pos == index)
-        {
-          CChannelInfo* info = it->second;
-          *networkId = it->first; // source_id
-          *serviceId = info->ServiceId;
-          *lcn = info->LCN;
-          *pmtPid = 0;
-          strcpy(sServiceName, info->ServiceName);
-          *serviceName = sServiceName;
-          *serviceType = 2; // digital TV
-          LogDebug("%4d) %-25s  source ID = 0x%4x service ID = 0x%4x LCN = %d",
-            index, info->ServiceName, info->NetworkId, info->ServiceId, info->LCN);
-          return S_OK;
-        }
-        pos++;
-        it++;
-      }
-      return S_OK;
+      gotInfo = m_patParser.GetChannel(index, &info);
+    }
+    else
+    {
+      gotInfo = m_scteParser.GetChannel(index, &info);
+    }
+    if (!gotInfo)
+    {
+      info = new CChannelInfo();
+    }
+    if (info == NULL)
+    {
+      LogDebug("ChannelScan: failed to retrieve channel info for index %d", index);
+      return E_FAIL;
     }
 
-		CChannelInfo info;
-		info.Reset();
-		if ( m_patParser.GetChannel(index, info))
-		{
-			*lcn=info.LCN;
-			*networkId=info.NetworkId;
-			*transportId=info.TransportId;
-			*serviceId=info.ServiceId;
-			*majorChannel=info.MajorChannel;
-			*minorChannel=info.MinorChannel;
-			*serviceType=info.ServiceType;
-			*modulation=info.Modulation;
-			strcpy(sProviderName,info.ProviderName);
-			strcpy(sServiceName,info.ServiceName);
-			*providerName=sProviderName;
-			*serviceName=sServiceName;
-			*pmtPid=info.PidTable.PmtPid;
-			*freeCAMode=info.FreeCAMode;
-			*hasVideo=info.hasVideo;
-			*hasAudio=info.hasAudio;
-			*hasCaDescriptor=info.hasCaDescriptor;
-		}
+		*networkId=info->NetworkId;
+		*transportId=info->TransportId;
+		*serviceId=info->ServiceId;
+		*majorChannel=info->MajorChannel;
+		*minorChannel=info->MinorChannel;
+		*frequency=info->Frequency;
+		*lcn=info->LCN;
+		*freeCAMode=info->FreeCAMode;
+		*serviceType=info->ServiceType;
+		*modulation=info->Modulation;
+		strcpy(sProviderName,info->ProviderName);
+		strcpy(sServiceName,info->ServiceName);
+		*providerName=sProviderName;
+		*serviceName=sServiceName;
+		*pmtPid=info->PidTable.PmtPid;
+		*hasVideo=info->hasVideo;
+		*hasAudio=info->hasAudio;
+		*hasCaDescriptor=info->hasCaDescriptor;
+
+    if (!gotInfo)
+    {
+      delete info;
+    }
 	}
 	catch(...)
 	{
@@ -224,90 +256,71 @@ STDMETHODIMP CChannelScan::GetChannel(int index,
 
 void CChannelScan::OnTsPacket(byte* tsPacket)
 {
-	CEnterCriticalSection enter(m_section);
+  CEnterCriticalSection enter(m_section);
 
-	if (m_bIsParsing)
-		m_patParser.OnTsPacket(tsPacket);
-
-	if (m_bIsParsingNIT)
-    m_nit.OnTsPacket(tsPacket);
-}
-
-void CChannelScan::CleanUp()
-{
-  map<int, CChannelInfo*>::iterator it = m_mCableServices.begin();
-  while (it != m_mCableServices.end())
+  if (m_bIsParsing)
   {
-    CChannelInfo* info = it->second;
-    if (info != NULL)
+    bool isReady = false;
+    int pid = ((tsPacket[1] & 0x1f) << 8) + tsPacket[2];
+    if (pid == PID_ATSC_BASE_PID)
     {
-      delete info;
+      m_atscParser.OnTsPacket(tsPacket);
+      m_bIsReady = m_atscParser.IsReady() && m_patParser.IsReady();
+    }
+    else if (pid == PID_SCTE_BASE_PID)
+    {
+      m_scteParser.OnTsPacket(tsPacket);
+      m_bIsReady = m_scteParser.IsReady() && m_patParser.IsReady();
+    }
+    else
+    {
+      m_patParser.OnTsPacket(tsPacket);
+      m_bIsReady = m_patParser.IsReady() && (
+        m_tsStandard == TransportStreamStandard_Default ||
+        (m_tsStandard == TransportStreamStandard_Atsc && m_atscParser.IsReady()) ||
+        (m_tsStandard == TransportStreamStandard_Scte && m_scteParser.IsReady())
+      );
+    }
+    if (m_bIsReady && m_pCallBack != NULL)
+    {
+      m_pCallBack->OnScannerDone();
+      m_pCallBack = NULL;
+      m_bIsParsing = false;
     }
   }
-  m_mCableServices.clear();
+
+  if (m_bIsParsingNIT)
+    m_nit.OnTsPacket(tsPacket);
 }
 
 void CChannelScan::OnOobSiSection(CSection& section)
 {
-	CEnterCriticalSection enter(m_section);
-
-	if (m_bIsParsing && m_bIsCableScan)
+  CEnterCriticalSection enter(m_section);
+  if (!m_bIsParsing || m_tsStandard != TransportStreamStandard_Scte)
   {
-    m_nttParser.OnNewSection(section);
-    m_svctParser.OnNewSection(section);
-  }
-}
-
-void CChannelScan::OnSvctReceived(const CChannelInfo& vctInfo)
-{
-  CChannelInfo* info = NULL;
-  map<int, CChannelInfo*>::iterator it = m_mCableServices.find(vctInfo.NetworkId);
-  if (it == m_mCableServices.end())
-  {
-    info = new CChannelInfo();
-    m_mCableServices[vctInfo.NetworkId] = info;
-  }
-  else
-  {
-    info = it->second;
-  }
-
-  if (info != NULL)
-  {
-    info->NetworkId = vctInfo.NetworkId;
-    info->LCN = vctInfo.LCN;
-    info->ServiceId = vctInfo.ServiceId;
-    info->SdtReceived = true;
-  }
-}
-
-void CChannelScan::OnNttReceived(int sourceId, int applicationType, char* name, unsigned int lang)
-{
-  if (applicationType == 1)
-  {
-    // Not supported - a data service.
     return;
   }
-  CChannelInfo* info = NULL;
-  map<int, CChannelInfo*>::iterator it = m_mCableServices.find(sourceId);
-  if (it == m_mCableServices.end())
-  {
-    info = new CChannelInfo();
-    m_mCableServices[sourceId] = info;
-  }
-  else
-  {
-    info = it->second;
-  }
 
-  if (info != NULL)
+  m_bReceivedOobSection = true;
+  m_scteParser.OnNewSection(section);
+  if (m_scteParser.IsReady() && m_pCallBack != NULL)
   {
-    info->NetworkId = sourceId;
-    if (name != NULL && strlen(name) < 254)
-    {
-      strcpy(info->ServiceName, name);
-    }
+    m_pCallBack->OnScannerDone();
+    m_pCallBack = NULL;
+    m_bIsParsing = false;
   }
+}
+
+void CChannelScan::OnLvctReceived(int tableId, char* name, int majorChannelNumber, int minorChannelNumber, int modulationMode, 
+                                  unsigned int carrierFrequency, int channelTsid, int programNumber, int etmLocation,
+                                  bool accessControlled, bool hidden, int pathSelect, bool outOfBand, bool hideGuide,
+                                  int serviceType, int sourceId, int videoStreamCount, int audioStreamCount,
+                                  vector<unsigned int>& languages)
+{
+  // Pass handling to the SCTE parser. Avoids logic duplication.
+  m_scteParser.OnLvctReceived(tableId, name, majorChannelNumber, minorChannelNumber, modulationMode, carrierFrequency,
+    channelTsid, programNumber, etmLocation, accessControlled, hidden, pathSelect, outOfBand, hideGuide, serviceType,
+    sourceId, videoStreamCount, audioStreamCount, languages);
 }
 
 STDMETHODIMP CChannelScan::ScanNIT()

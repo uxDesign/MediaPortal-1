@@ -176,9 +176,9 @@ namespace TvLibrary.Implementations.DVB
     private ManualResetEvent _event;
 
     /// <summary>
-    /// Enable wait for VCT indicator
+    /// What standard should the analyser expect to find in the transport stream?
     /// </summary>
-    protected bool _enableWaitForVCT;
+    protected TransportStreamStandard _transportStreamStandard;
 
     #endregion
 
@@ -191,6 +191,7 @@ namespace TvLibrary.Implementations.DVB
     public DvbBaseScanning(TvCardDvbBase card)
     {
       _card = card;
+      _transportStreamStandard = TransportStreamStandard.Default;
     }
 
     #endregion
@@ -278,7 +279,7 @@ namespace TvLibrary.Implementations.DVB
     /// <param name="channel">The channel.</param>
     /// <param name="settings">The settings.</param>
     /// <returns></returns>
-    public List<IChannel> Scan(IChannel channel, ScanParameters settings)
+    public virtual List<IChannel> Scan(IChannel channel, ScanParameters settings)
     {
       try
       {
@@ -296,6 +297,10 @@ namespace TvLibrary.Implementations.DVB
           return new List<IChannel>();
         }
         ResetSignalUpdate();
+
+        // Note we don't check lock for PBDA CableCARD tuners because
+        // they scan using the out of band tuner. OOB lock has already
+        // been checked.
         if (_card.IsTunerLocked == false && !isDigitalCableScan)
         {
           Thread.Sleep(settings.TimeOutTune * 1000);
@@ -309,7 +314,7 @@ namespace TvLibrary.Implementations.DVB
           {
             _event = new ManualResetEvent(false);
             _analyzer.SetCallBack(this);
-            _analyzer.Start(_enableWaitForVCT, isDigitalCableScan);
+            _analyzer.Start(_transportStreamStandard);
             _event.WaitOne(settings.TimeOutSDT * 1000, true);
 
             int found = 0;
@@ -322,19 +327,19 @@ namespace TvLibrary.Implementations.DVB
               int networkId;
               int transportId;
               int serviceId;
-              short majorChannel;
-              short minorChannel;
-              short frequency;
+              int majorChannel;
+              int minorChannel;
+              int frequency;
               short freeCAMode;
               short serviceType;
               short modulation;
               IntPtr providerName;
               IntPtr serviceName;
-              short pmtPid;
+              int pmtPid;
               short hasVideo;
               short hasAudio;
               short hasCaDescriptor;
-              short lcn;
+              int lcn;
               _analyzer.GetChannel((short)i,
                                    out networkId, out transportId, out serviceId, out majorChannel, out minorChannel,
                                    out frequency, out lcn, out freeCAMode, out serviceType, out modulation,
