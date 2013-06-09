@@ -96,7 +96,7 @@ namespace TvLibrary.Implementations.Dri.Parser
         return;
       }
       int sectionLength = ((section[3] & 0x0f) << 8) + section[4];
-      if (section.Length != 2 + sectionLength + 3)
+      if (section.Length != 2 + sectionLength + 3)  // 2 for section length bytes, 3 for table ID and PID
       {
         Log.Log.Error("S-VCT: invalid section length = {0}, byte count = {1}", sectionLength, section.Length);
         return;
@@ -105,8 +105,8 @@ namespace TvLibrary.Implementations.Dri.Parser
       AtscTransmissionMedium transmissionMedium = (AtscTransmissionMedium)(section[6] >> 4);
       TableSubtype tableSubtype = (TableSubtype)(section[6] & 0x0f);
       int vctId = (section[7] << 8) + section[8];
-      Log.Log.Debug("S-VCT: protocol version = {0}, transmission medium = {1}, table subtype = {2}, VCT ID = 0x{3}",
-        protocolVersion, transmissionMedium, tableSubtype, vctId);
+      Log.Log.Debug("S-VCT: section length = {0}, protocol version = {1}, transmission medium = {2}, table subtype = {3}, VCT ID = 0x{4:x}",
+        sectionLength, protocolVersion, transmissionMedium, tableSubtype, vctId);
 
       int pointer = 9;
       int endOfSection = section.Length - 4;
