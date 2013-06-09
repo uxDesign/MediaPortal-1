@@ -1006,7 +1006,7 @@ namespace MediaPortal.MusicPlayer.BASS
       {
         case 0:
           return 1;
-        
+
         case 1:
           return 2;
 
@@ -1114,7 +1114,7 @@ namespace MediaPortal.MusicPlayer.BASS
 
     #endregion
 
-    #region Clenaup / Free Resources
+    #region Cleanup / Free Resources
 
     /// <summary>
     /// Dispose the BASS Audio engine. Free all BASS and Visualisation related resources
@@ -1209,7 +1209,7 @@ namespace MediaPortal.MusicPlayer.BASS
         VizWindow.Visible = false;
       }
 
-      //if (!Stopped) // Check if stopped already to avoid that Stop() is called two or three times
+      if (!Stopped) // Check if stopped already to avoid that Stop() is called two or three times
       {
         Stop();
       }
@@ -1502,7 +1502,8 @@ namespace MediaPortal.MusicPlayer.BASS
         if (currentStream != null && filePath.ToLowerInvariant().CompareTo(currentStream.FilePath.ToLowerInvariant()) == 0)
         {
           // Selected file is equal to current stream
-          if (_state == PlayState.Paused)
+          // Extend detection to permit to play the file if it failed.
+          if (_state == PlayState.Paused || _state == PlayState.Init || _state == PlayState.Ended)
           {
             // Resume paused stream
             currentStream.ResumePlayback();
@@ -1565,7 +1566,7 @@ namespace MediaPortal.MusicPlayer.BASS
         {
           return false;
         }
-        
+
         _streams.Add(stream);
         if (stream.Filetype.FileMainType == FileMainType.CDTrack)
         {
@@ -1813,7 +1814,7 @@ namespace MediaPortal.MusicPlayer.BASS
       if (_mixer == null)
       {
         Log.Debug("BASS: Already stopped. Don't execute Stop a second time");
-        //return;
+        return;
       }
 
       // Execute the Stop in a separate thread, so that it doesn't block the Main UI Render thread
@@ -1833,13 +1834,19 @@ namespace MediaPortal.MusicPlayer.BASS
 
                            // Wait until the slide is done
                            // Sometimes the slide is causing troubles, so we wait a maximum of CrossfadeIntervals + 100 ms
-                           DateTime start = DateTime.Now;
-                           while (Bass.BASS_ChannelIsSliding(stream.BassStream, BASSAttribute.BASS_ATTRIB_VOL))
+                           // Enable only if it's music playing
+                           if (g_Player.IsMusic && g_Player._currentMediaForBassEngine != g_Player.MediaType.Video &&
+                               g_Player._currentMediaForBassEngine != g_Player.MediaType.TV &&
+                               g_Player._currentMediaForBassEngine != g_Player.MediaType.Recording)
                            {
-                             System.Threading.Thread.Sleep(20);
-                             if ((DateTime.Now - start).TotalMilliseconds > Config.CrossFadeIntervalMs + 100)
+                             DateTime start = DateTime.Now;
+                             while (Bass.BASS_ChannelIsSliding(stream.BassStream, BASSAttribute.BASS_ATTRIB_VOL))
                              {
-                               break;
+                               System.Threading.Thread.Sleep(20);
+                               if ((DateTime.Now - start).TotalMilliseconds > Config.CrossFadeIntervalMs + 100)
+                               {
+                                 break;
+                               }
                              }
                            }
                          }
@@ -1941,7 +1948,7 @@ namespace MediaPortal.MusicPlayer.BASS
     {
       PlayState oldState = _state;
 
-      if (!Util.Utils.IsAudio(_filePath))
+      if (!Util.Utils.IsAudio(_filePath) || g_Player._currentMediaForBassEngine == g_Player.MediaType.Video)
       {
         GUIGraphicsContext.IsFullScreenVideo = false;
       }
