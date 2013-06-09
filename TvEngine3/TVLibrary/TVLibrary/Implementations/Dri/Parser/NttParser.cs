@@ -24,7 +24,7 @@ using TvLibrary.Implementations.DVB;
 
 namespace TvLibrary.Implementations.Dri.Parser
 {
-  public delegate void NttSourceNameDelegate(AtscTransmissionMedium transmissionMedium, bool isApplication, int sourceId, string name);
+  public delegate void NttSourceNameDelegate(AtscTransmissionMedium transmissionMedium, bool applicationType, int sourceId, string name);
 
   /// <summary>
   /// ATSC/SCTE network text table parser. Refer to ATSC A-56 and SCTE 65.
@@ -420,7 +420,7 @@ namespace TvLibrary.Implementations.Dri.Parser
         {
           throw new Exception(string.Format("NTT: detected source name table number of SNT records {0} is invalid, pointer = {1}, end of section = {2}, loop = {3}", numberOfSntRecords, pointer, endOfSection, i));
         }
-        bool isApplication = ((section[pointer++] & 0x80) != 0);
+        bool applicationType = ((section[pointer++] & 0x80) != 0);
         int sourceId = (section[pointer] << 8) + section[pointer + 1];
         pointer += 2;
         byte nameLength = section[pointer++];
@@ -429,10 +429,10 @@ namespace TvLibrary.Implementations.Dri.Parser
           throw new Exception(string.Format("NTT: invalid source name table string length {0}, pointer = {1}, end of section = {2}, loop = {3}", nameLength, pointer, endOfSection, i));
         }
         string sourceName = DecodeMultilingualText(section, pointer + nameLength, ref pointer);
-        Log.Log.Debug("NTT: source name, source ID = 0x{0:x}, name = {1}, is application = {2}", sourceId, sourceName, isApplication);
+        Log.Log.Debug("NTT: source name, source ID = 0x{0:x}, name = {1}, application type = {2}", sourceId, sourceName, applicationType);
         if (OnSourceName != null)
         {
-          OnSourceName(transmissionMedium, isApplication, sourceId, sourceName);
+          OnSourceName(transmissionMedium, applicationType, sourceId, sourceName);
         }
 
         // table descriptors

@@ -76,41 +76,6 @@ namespace TvLibrary.Implementations.Dri
       _scanEvent = new ManualResetEvent(false);
     }
 
-    private static int GetPhysicalChannelFromFrequency(int carrierFrequency)
-    {
-      // Calculate the physical channel number corresponding with a frequency
-      // in the QAM standard frequency plan.
-      if (carrierFrequency >= 651000)
-      {
-        return 100 + ((carrierFrequency - 651000) / 6000);
-      }
-      if (carrierFrequency >= 219000)
-      {
-        return 23 + ((carrierFrequency - 219000) / 6000);
-      }
-      if (carrierFrequency >= 177000)
-      {
-        return 7 + ((carrierFrequency - 177000) / 6000);
-      }
-      if (carrierFrequency >= 123000)
-      {
-        return 14 + ((carrierFrequency - 123000) / 6000);
-      }
-      if (carrierFrequency >= 93000)
-      {
-        return 95 + ((carrierFrequency - 93000) / 6000);
-      }
-      if (carrierFrequency >= 79000)
-      {
-        return 5 + ((carrierFrequency - 79000) / 6000);
-      }
-      if (carrierFrequency >= 57000)
-      {
-        return 2 + ((carrierFrequency - 57000) / 6000);
-      }
-      return 1;
-    }
-
     private void OnTableSection(CpStateVariable stateVariable, object newValue)
     {
       try
@@ -208,7 +173,7 @@ namespace TvLibrary.Implementations.Dri
         // This is a BDA convention.
         PhysicalChannel channel = new PhysicalChannel();
         channel.Frequency = carrierFrequency - 1750;
-        channel.Channel = GetPhysicalChannelFromFrequency(carrierFrequency);
+        channel.Channel = ATSCChannel.GetPhysicalChannelFromFrequency(carrierFrequency);
         _carrierFrequencies[index] = channel;
       }
     }
@@ -223,9 +188,9 @@ namespace TvLibrary.Implementations.Dri
       _modulationModes[index] = modulationFormat;
     }
 
-    public void OnLvctChannelDetail(string shortName, int majorChannelNumber, int minorChannelNumber, ModulationMode modulationMode, 
-      uint carrierFrequency, int channelTsid, int programNumber, EtmLocation etmLocation, bool accessControlled, bool hidden,
-      int pathSelect, bool outOfBand, bool hideGuide, AtscServiceType serviceType, int sourceId)
+    public void OnLvctChannelDetail(MgtTableType tableType, string shortName, int majorChannelNumber, int minorChannelNumber,
+      ModulationMode modulationMode, uint carrierFrequency, int channelTsid, int programNumber, EtmLocation etmLocation,
+      bool accessControlled, bool hidden, int pathSelect, bool outOfBand, bool hideGuide, AtscServiceType serviceType, int sourceId)
     {
       if (programNumber == 0 || outOfBand || modulationMode == ModulationMode.Analog || modulationMode == ModulationMode.PrivateDescriptor ||
         (serviceType != AtscServiceType.Audio && serviceType != AtscServiceType.DigitalTelevision) || sourceId == 0)
@@ -251,7 +216,7 @@ namespace TvLibrary.Implementations.Dri
         // frequency. This is a BDA convention.
         channel.Frequency = carrierFrequency - 1750;
       }
-      channel.PhysicalChannel = GetPhysicalChannelFromFrequency((int)carrierFrequency);
+      channel.PhysicalChannel = ATSCChannel.GetPhysicalChannelFromFrequency((int)carrierFrequency);
 
       switch (modulationMode)
       {
@@ -271,25 +236,23 @@ namespace TvLibrary.Implementations.Dri
       channel.FreeToAir = !accessControlled;
       channel.IsTv = (serviceType == AtscServiceType.DigitalTelevision);
       channel.IsRadio = (serviceType == AtscServiceType.Audio);
-
-      // SCTE cable supports both one-part and two-part channel numbers where
-      // the major and minor channel number range is 0..999.
-      // ATSC supports only two-part channel numbers where the major range is
-      // 1..99 and the minor range is 0..999.
-      // When the minor channel number is 0 it indicates an analog channel.
-      if ((majorChannelNumber & 0x03f0) == 0x03f0)
+      if (minorChannelNumber == 0)
       {
-        channel.LogicalChannelNumber = ((majorChannelNumber & 0x0f) << 10) + minorChannelNumber;
-        channel.MajorChannel = channel.LogicalChannelNumber;
-        channel.MinorChannel = 0;
+        channel.LogicalChannelNumber = majorChannelNumber;
       }
       else
       {
         channel.LogicalChannelNumber = (majorChannelNumber * 1000) + minorChannelNumber;
-        channel.MajorChannel = majorChannelNumber;
-        channel.MinorChannel = minorChannelNumber;
       }
       channel.Name = shortName;
+      if (tableType == MgtTableType.TvctCurrentNext1 || tableType == MgtTableType.TvctCurrentNext0)
+      {
+        channel.Provider = "Terrestrial";
+      }
+      else
+      {
+        channel.Provider = "Cable";
+      }
       channel.NetworkId = sourceId;
       channel.PmtPid = 0;   // TV Server will automatically lookup the correct PID from the PAT
       channel.ServiceId = programNumber;
@@ -326,14 +289,15 @@ namespace TvLibrary.Implementations.Dri
       channel.NetworkId = sourceId;
       channel.PhysicalChannel = _carrierFrequencies[cdsReference].Channel;
       channel.PmtPid = 0;     // TV Server will automatically lookup the correct PID from the PAT
+      channel.Provider = "Cable";
       channel.ServiceId = programNumber;
       channel.TransportId = 0;  // We don't have these details.
       _sourcesWithoutNames.Add(sourceId);
     }
 
-    public void OnSourceName(AtscTransmissionMedium transmissionMedium,  bool isApplication, int sourceId, string name)
+    public void OnSourceName(AtscTransmissionMedium transmissionMedium, bool applicationType, int sourceId, string name)
     {
-      if (transmissionMedium != AtscTransmissionMedium.Cable || isApplication)
+      if (transmissionMedium != AtscTransmissionMedium.Cable || applicationType)
       {
         return;
       }

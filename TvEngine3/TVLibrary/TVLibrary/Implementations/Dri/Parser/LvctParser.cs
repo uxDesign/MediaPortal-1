@@ -79,9 +79,9 @@ namespace TvLibrary.Implementations.Dri.Parser
     ExtendedParameterised = 0x09
   }
 
-  public delegate void LvctChannelDetailDelegate(string shortName, int majorChannelNumber, int minorChannelNumber, ModulationMode modulationMode, 
-      uint carrierFrequency, int channelTsid, int programNumber, EtmLocation etmLocation, bool accessControlled, bool hidden,
-      int pathSelect, bool outOfBand, bool hideGuide, AtscServiceType serviceType, int sourceId);
+  public delegate void LvctChannelDetailDelegate(MgtTableType tableType, string shortName, int majorChannelNumber, int minorChannelNumber,
+      ModulationMode modulationMode, uint carrierFrequency, int channelTsid, int programNumber, EtmLocation etmLocation,
+      bool accessControlled, bool hidden, int pathSelect, bool outOfBand, bool hideGuide, AtscServiceType serviceType, int sourceId);
 
   /// <summary>
   /// ATSC/SCTE long form virtual channel table parser. Refer to ATSC A-65 and SCTE 65.
@@ -119,10 +119,15 @@ namespace TvLibrary.Implementations.Dri.Parser
       {
         return;
       }
+      MgtTableType tableType = MgtTableType.CvctCurrentNext1;
+      if (tableId == 0xc8)
+      {
+        tableType = MgtTableType.TvctCurrentNext1;
+      }
       bool sectionSyntaxIndicator = ((section[3] & 0x80) != 0);
       bool privateIndicator = ((section[3] & 0x40) != 0);
       int sectionLength = ((section[3] & 0x0f) << 8) + section[4];
-      if (section.Length != 2 + sectionLength + 3)
+      if (section.Length != 2 + sectionLength + 3)  // 2 for section length bytes, 3 for table ID and PID
       {
         Log.Log.Error("L-VCT: invalid section length = {0}, byte count = {1}", sectionLength, section.Length);
         return;
@@ -170,10 +175,22 @@ namespace TvLibrary.Implementations.Dri.Parser
 
         string shortName = System.Text.Encoding.Unicode.GetString(section, pointer, 14);
         pointer += 14;
+
+        // SCTE cable supports both one-part and two-part channel numbers where
+        // the major and minor channel number range is 0..999.
+        // ATSC supports only two-part channel numbers where the major range is
+        // 1..99 and the minor range is 0..999.
+        // When the minor channel number is 0 it indicates an analog channel.
         int majorChannelNumber = ((section[pointer] & 0x0f) << 6) + (section[pointer + 1] >> 2);
         pointer++;
         int minorChannelNumber = ((section[pointer] & 0x03) << 8) + section[pointer + 1];
         pointer += 2;
+        if ((majorChannelNumber & 0x03f0) == 0x03f0)
+        {
+          majorChannelNumber = ((majorChannelNumber & 0x0f) << 10) + minorChannelNumber;
+          minorChannelNumber = 0;
+        }
+
         ModulationMode modulationMode = (ModulationMode)section[pointer++];
         uint carrierFrequency = 0;   // Hz
         for (byte b = 0; b < 4; b++)
@@ -200,7 +217,7 @@ namespace TvLibrary.Implementations.Dri.Parser
 
         if (OnChannelDetail != null)
         {
-          OnChannelDetail(shortName, majorChannelNumber, minorChannelNumber, modulationMode, carrierFrequency, channelTsid,
+          OnChannelDetail(tableType, shortName, majorChannelNumber, minorChannelNumber, modulationMode, carrierFrequency, channelTsid,
             programNumber, etmLocation, accessControlled, hidden, pathSelect, outOfBand, hideGuide, serviceType, sourceId);
         }
 
@@ -260,7 +277,7 @@ namespace TvLibrary.Implementations.Dri.Parser
       _unseenSections.Remove(sectionKey);
       if (_unseenSections.Count == 0 && OnTableComplete != null)
       {
-        OnTableComplete(MgtTableType.CvctCurrentNext1);
+        OnTableComplete(tableType);
         OnTableComplete = null;
         OnChannelDetail = null;
       }
