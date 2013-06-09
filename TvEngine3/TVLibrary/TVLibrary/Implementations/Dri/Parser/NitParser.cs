@@ -117,7 +117,7 @@ namespace TvLibrary.Implementations.Dri.Parser
         return;
       }
       int sectionLength = ((section[3] & 0xf) << 8) + section[4];
-      if (section.Length != 2 + sectionLength + 3)
+      if (section.Length != 2 + sectionLength + 3)  // 2 for section length bytes, 3 for table ID and PID
       {
         Log.Log.Error("NIT: invalid section length = {0}, byte count = {1}", sectionLength, section.Length);
         return;
@@ -456,7 +456,7 @@ namespace TvLibrary.Implementations.Dri.Parser
       bool isVerticalRightPolarisation = ((section[pointer] & 0x40) != 0);
       int transponderNumber = (section[pointer++] & 0x3f);
       byte cdsReference = section[pointer++];
-      Log.Log.Debug("NIT: transponder data, is MPEG 2 transport = {0}, is vertical/right polarisation = {1}, transponder number = {2}, CDS reference = 0x{3:x}",
+      Log.Log.Debug("NIT: transponder data, is MPEG 2 transport = {0}, is vertical/right polarisation = {1}, transponder number = {2}, CDS reference = {3}",
         isMpeg2Transport, isVerticalRightPolarisation, transponderNumber, cdsReference);
       if (isMpeg2Transport)
       {
@@ -464,7 +464,7 @@ namespace TvLibrary.Implementations.Dri.Parser
         int vctId = (section[pointer] << 8) + section[pointer + 1];
         pointer += 2;
         bool isRootTransponder = ((section[pointer++] & 0x80) != 0);
-        Log.Log.Debug("NIT: MPEG 2 transponder data, MMS reference = 0x{0:x}, VCT ID = 0x{1:x}, is root transponder = {2}", mmsReference, vctId, isRootTransponder);
+        Log.Log.Debug("NIT: MPEG 2 transponder data, MMS reference = {0}, VCT ID = 0x{1:x}, is root transponder = {2}", mmsReference, vctId, isRootTransponder);
       }
       else
       {
