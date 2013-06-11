@@ -4445,18 +4445,16 @@ namespace TvService
       }
       dbSettings.IdServer = _ourServer.IdServer;
 
-      // Do we already have a handler for this device? If so, reuse it.
+      // Do we already have a handler for this device? If so, replace it.
       ITvCardHandler handler = null;
       if (_cards.TryGetValue(dbSettings.IdCard, out handler))
       {
         if (handler.Card.CardPresent)
         {
-          Log.Info("Controller: warn, device was already present", device.Name);
-          device.Dispose();
-          return;
+          Log.Info("Controller: warn, device was already present");
+          handler.Dispose();
         }
-        handler.Card.CardPresent = true;
-        device.Dispose();
+        handler = null;
       }
 
       // Preload the device if configured to do so. Note that it should not be possible
@@ -4479,13 +4477,6 @@ namespace TvService
         }
       }
 
-      // If we have a handler already (ie. device reconnected) then
-      // nothing else needs to be done.
-      if (handler != null)
-      {
-        return;
-      }
-
       // Check if the device is a member of any device groups.
       // Note that this implementation allows a device to be in a
       // maximum of one group.
@@ -4504,7 +4495,7 @@ namespace TvService
             }
             HybridCard hybridDevice = _deviceGroups[dbDeviceGroup.IdCardGroup].Add(dbSettings.IdCard, device);
 
-            Log.Info("Controller: creating handler");
+            Log.Info("Controller: creating group handler");
             handler = new TvCardHandler(dbSettings, hybridDevice);
             break;
           }
@@ -4582,7 +4573,7 @@ namespace TvService
         {
           Log.Info("Controller: remove device {0} {1}", handler.Card.Name, deviceIdentifier);
           handler.Card.CardPresent = false;
-          handler.Card.Dispose();
+          handler.Dispose();
           break;
         }
       }
