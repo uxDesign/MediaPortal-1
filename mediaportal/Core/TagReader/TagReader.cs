@@ -88,9 +88,13 @@ namespace MediaPortal.TagReader
         {
           musictag.AlbumSort = musictag.Album;
         }
-        
+
         musictag.HasAlbumArtist = false;
         string[] albumartists = tag.Tag.AlbumArtists;
+        for (var i = 0; i < albumartists.GetLength(0); i++)
+        {
+          albumartists[i] = albumartists[i].Trim(trimChars);
+        }
         if (albumartists.Length > 0)
         {
           musictag.AlbumArtist = String.Join(";", albumartists).Trim(trimChars);
@@ -108,6 +112,10 @@ namespace MediaPortal.TagReader
         }
 
         string[] artists = tag.Tag.Performers;
+        for (var i = 0; i < artists.GetLength(0); i++)
+        {
+          artists[i] = artists[i].Trim(trimChars);
+        }
         if (artists.Length > 0)
         {
           musictag.Artist = String.Join(";", artists).Trim(trimChars);
@@ -128,6 +136,10 @@ namespace MediaPortal.TagReader
         musictag.Comment = tag.Tag.Comment == null ? "" : tag.Tag.Comment.Trim(trimChars);
 
         string[] composer = tag.Tag.Composers;
+        for (var i = 0; i < composer.GetLength(0); i++)
+        {
+          composer[i] = composer[i].Trim(trimChars);
+        }
         if (composer.Length > 0)
         {
           musictag.Composer = string.Join(";", composer).Trim(trimChars);
@@ -140,8 +152,8 @@ namespace MediaPortal.TagReader
 
         musictag.Conductor = tag.Tag.Conductor == null ? "" : tag.Tag.Conductor.Trim(trimChars);
         musictag.Copyright = tag.Tag.Copyright ?? "";
-        
-          IPicture[] pics = new IPicture[] { };
+
+        IPicture[] pics = new IPicture[] { };
         pics = tag.Tag.Pictures;
         if (pics.Length > 0)
         {
@@ -153,6 +165,10 @@ namespace MediaPortal.TagReader
         musictag.DiscTotal = (int)tag.Tag.DiscCount;
 
         string[] genre = tag.Tag.Genres;
+        for (var i = 0; i < genre.GetLength(0); i++)
+        {
+          genre[i] = genre[i].Trim(trimChars);
+        }
         if (genre.Length > 0)
         {
           musictag.Genre = String.Join(";", genre).Trim(trimChars);
@@ -208,7 +224,7 @@ namespace MediaPortal.TagReader
 
         #endregion
 
-        #region Ratings 
+        #region Ratings
         if (tag.MimeType == "taglib/mp3")
         {
           bool foundPopm = false;
