@@ -113,16 +113,22 @@ namespace TvLibrary.Implementations
     public void Start()
     {
       Log.Log.Info("Starting async device detection...");
-      // Start detecting UPnP devices.
-      // IMPORTANT: you should start the control point before the network tracker.
-      _upnpControlPoint.Start();
-      _upnpAgent.Start();
-      SearchKnownUpnpDevices();
-
       // Start detecting BDA and WDM devices.
       _deviceEventListener.OnDeviceAdded(_rwsTuner);
       DetectBdaWdmDevices();
       _systemDeviceChangeEventWatcher.Start();
+
+      // Start detecting UPnP devices.
+      // IMPORTANT: this parameter must be set to allow devices with many sub-devices
+      // and/or services to be detected. The timer interval specifies how long the
+      // SSDP controller has from first detection of the root device SSDP packet
+      // until descriptions for all devices and services have been requested, received
+      // and processed. DRI tuners normally take about 5 seconds.
+      SSDPClientController.EXPIRATION_TIMER_INTERVAL = 60000;
+      // IMPORTANT: you should start the control point before the network tracker.
+      _upnpControlPoint.Start();
+      _upnpAgent.Start();
+      _upnpAgent.SharedControlPointData.SSDPController.SearchDeviceByDeviceTypeVersion("schemas-opencable-com:service:Tuner", "1", null);
     }
 
     public void Reset()
@@ -189,12 +195,20 @@ namespace TvLibrary.Implementations
     {
       // Often several events will be triggered within a very short period of
       // time when a device is added/removed. We only want to check for new
-      // devices once.
+      // devices once. Also, the first event may occur before the device is
+      // ready, so we apply the device detection delay here.
       if ((DateTime.Now - _previousSystemDeviceChange).TotalMilliseconds < 10000)
       {
         return;
       }
       _previousSystemDeviceChange = DateTime.Now;
+      TvBusinessLayer layer = new TvBusinessLayer();
+      Setting setting = layer.GetSetting("delayCardDetect", "0");
+      int delayDetect = Convert.ToInt32(setting.Value);
+      if (delayDetect >= 1)
+      {
+        Thread.Sleep(delayDetect * 1000);
+      }
       DetectBdaWdmDevices();
     }
 
@@ -679,34 +693,13 @@ namespace TvLibrary.Implementations
 
     #region UPnP device detection
 
-    private void SearchKnownUpnpDevices()
-    {
-      SSDPClientController ssdpController = _upnpAgent.SharedControlPointData.SSDPController;
-      TvBusinessLayer layer = new TvBusinessLayer();
-      IList<Card> allDevices = layer.Cards;
-      foreach (Card d in allDevices)
-      {
-        // Is the device a UPnP device?
-        if (!d.Enabled || d.DevicePath == null || !d.DevicePath.StartsWith("uuid:"))
-        {
-          continue;
-        }
-        string uuid = d.DevicePath.Substring(5);
-        ssdpController.SearchDeviceByUUID(uuid, null);
-      }
-    }
-
     private void OnUpnpRootDeviceAdded(RootDescriptor rootDescriptor)
     {
-      if (rootDescriptor == null || rootDescriptor.State != RootDescriptorState.Ready)
+      if (rootDescriptor == null || rootDescriptor.State != RootDescriptorState.Ready || _knownUpnpDevices.Contains(rootDescriptor.SSDPRootEntry.RootDeviceUUID))
       {
         return;
       }
 
-      if (_knownUpnpDevices.Contains(rootDescriptor.SSDPRootEntry.RootDeviceUUID))
-      {
-        return;
-      }
       _knownUpnpDevices.Add(rootDescriptor.SSDPRootEntry.RootDeviceUUID);
       DeviceDescriptor deviceDescriptor = DeviceDescriptor.CreateRootDeviceDescriptor(rootDescriptor);
       IEnumerator<DeviceEntry> childDeviceEn = rootDescriptor.SSDPRootEntry.Devices.Values.GetEnumerator();
