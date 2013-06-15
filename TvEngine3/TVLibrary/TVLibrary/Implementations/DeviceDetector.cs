@@ -611,6 +611,7 @@ namespace TvLibrary.Implementations
                 Log.Log.Debug("  failed to connect to MS NP");
               }
 
+              _graphBuilder.RemoveFilter(genericNp);
               Release.ComObject("device detection generic network provider", genericNp);
               genericNp = null;
             }
