@@ -260,6 +260,9 @@ ShowUninstDetails show
   ${KillProcess} "MPTray.exe"
   StrCpy $MPTray_Running $R0
   
+  ; ffmpeg
+  ${KillProcess} "ffmpeg.exe"
+  
   ; MovieThumbnailer
   ${KillProcess} "mtn.exe"
 !macroend
@@ -509,27 +512,14 @@ Section "MediaPortal core files (required)" SecCore
     !insertmacro InstallLib REGDLL NOTSHARED NOREBOOT_NOTPROTECTED "${git_DirectShowFilters}\MPAudioRenderer\bin\${BUILD_TYPE}\mpaudiorenderer.ax"                "$MPdir.Base\mpaudiorenderer.ax"         "$MPdir.Base"
   ${EndIf}
 
-  ; used for Default Skin Font
+  ; used for Default and Titan Skin Font
   StrCpy $FONT_DIR $FONTS
   !insertmacro InstallTTFFont "${MEDIAPORTAL.BASE}\skin\DefaultWide\MPDefaultFonts\MediaPortalDefault.ttf"
-  SendMessage ${HWND_BROADCAST} ${WM_FONTCHANGE} 0 0 /TIMEOUT=5000
-  
-  ; used for Titan Skin
-  StrCpy $FONT_DIR $FONTS
   !insertmacro InstallTTFFont "${MEDIAPORTAL.BASE}\skin\Titan\Fonts\TitanSmall.ttf"
-  SendMessage ${HWND_BROADCAST} ${WM_FONTCHANGE} 0 0 /TIMEOUT=5000  
-  
-  StrCpy $FONT_DIR $FONTS
   !insertmacro InstallTTFFont "${MEDIAPORTAL.BASE}\skin\Titan\Fonts\Titan.ttf"
-  SendMessage ${HWND_BROADCAST} ${WM_FONTCHANGE} 0 0 /TIMEOUT=5000    
-
-  StrCpy $FONT_DIR $FONTS
   !insertmacro InstallTTFFont "${MEDIAPORTAL.BASE}\skin\Titan\Fonts\TitanLight.ttf"
-  SendMessage ${HWND_BROADCAST} ${WM_FONTCHANGE} 0 0 /TIMEOUT=5000    
-
-  StrCpy $FONT_DIR $FONTS
   !insertmacro InstallTTFFont "${MEDIAPORTAL.BASE}\skin\Titan\Fonts\TitanMedium.ttf"
-  SendMessage ${HWND_BROADCAST} ${WM_FONTCHANGE} 0 0 /TIMEOUT=5000    
+  SendMessage ${HWND_BROADCAST} ${WM_FONTCHANGE} 0 0 /TIMEOUT=1000
   
 SectionEnd
 !macro Remove_${SecCore}
@@ -647,6 +637,9 @@ SectionEnd
   RMDir "$MPdir.Base\Docs"
   ; Wizards
   RMDir /r "$MPdir.Base\Wizards"
+  ; Log
+  Delete "$MPdir.Base\log4net.dll"
+  
 !macroend
 
 Section "-Powerscheduler Client plugin" SecPowerScheduler
