@@ -111,6 +111,7 @@ namespace MediaPortal.Music.Database
       URL = string.Empty;
       Favorite = false;
       Id = -1;
+      AlbumId = -1;
       Album = string.Empty;
       AlbumSort = string.Empty;
       AlbumArtist = string.Empty;
@@ -165,6 +166,7 @@ namespace MediaPortal.Music.Database
     {
       Song newsong = new Song();
       newsong.Id = Id;
+      newsong.AlbumId = AlbumId;
       newsong.Album = Album;
       newsong.AlbumSort = AlbumSort;
       newsong.Artist = Artist;
@@ -232,6 +234,7 @@ namespace MediaPortal.Music.Database
       URL = string.Empty;
       Favorite = false;
       Id = -1;
+      AlbumId = -1;
       Album = string.Empty;
       AlbumSort = string.Empty;
       AlbumArtist = string.Empty;
@@ -320,6 +323,8 @@ namespace MediaPortal.Music.Database
     public string AlbumArtist { get; set; }
 
     public string AlbumArtistSort { get; set; }
+
+    public int AlbumId { get; set; }
 
     public string Album { get; set; }
 
@@ -576,6 +581,7 @@ namespace MediaPortal.Music.Database
 
       tmpTag.Title = Title;
       tmpTag.TitleSort = TitleSort;
+      tmpTag.AlbumId = AlbumId;
       tmpTag.Album = Album;
       tmpTag.AlbumSort = AlbumSort;
       tmpTag.DiscID = DiscId;

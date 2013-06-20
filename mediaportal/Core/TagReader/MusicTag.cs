@@ -32,6 +32,8 @@ namespace MediaPortal.TagReader
     public MusicTag()
     {
       #region Tags
+
+      AlbumId = -1;
       Album = string.Empty;
       AlbumSort = string.Empty;
       HasAlbumArtist = false;
@@ -97,6 +99,8 @@ namespace MediaPortal.TagReader
     public MusicTag(MusicTag tag)
     {
       #region Init Tags
+
+      AlbumId = -1;
       Album = string.Empty;
       AlbumSort = string.Empty;
       HasAlbumArtist = false;
@@ -139,6 +143,7 @@ namespace MediaPortal.TagReader
       TrackTotal = 0;
       Track = 0;
       Year = 0;
+
       #endregion
 
       #region Init File Properties
@@ -200,6 +205,7 @@ namespace MediaPortal.TagReader
       TrackTotal = tag.TrackTotal;
       Track = tag.Track;
       Year = tag.Year;
+
       #endregion
 
       #region Set File Properties
@@ -226,6 +232,8 @@ namespace MediaPortal.TagReader
     public void Clear()
     {
       #region Tags
+
+      AlbumId = -1;
       Album = string.Empty;
       AlbumSort = string.Empty;
       HasAlbumArtist = false;
@@ -268,6 +276,7 @@ namespace MediaPortal.TagReader
       TrackTotal = 0;
       Track = 0;
       Year = 0;
+
       #endregion
 
       #region File Properties
@@ -303,6 +312,12 @@ namespace MediaPortal.TagReader
     #region Properties
 
     #region Tags
+
+    /// <summary>
+    /// Property to get/set the Album id 
+    /// </summary>
+    public int AlbumId { get; set; }
+
     /// <summary>
     /// Property to get/set the Album name 
     /// </summary>
