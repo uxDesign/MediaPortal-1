@@ -942,6 +942,7 @@ namespace MediaPortal.Music.Database
           ThreadPool.GetAvailableThreads(out maxThreads, out maxComplThreads);
 
           ThreadPool.SetMaxThreads(Environment.ProcessorCount, maxComplThreads);
+          _scanFoldersFinishedEvent = new ManualResetEvent(false);
 
           var di = new DirectoryInfo(share);
           foreach (var folder in GetFolders(di))
@@ -950,7 +951,6 @@ namespace MediaPortal.Music.Database
             _folderQueueLength++;
           }
 
-          _scanFoldersFinishedEvent = new ManualResetEvent(false);
           _scanFoldersFinishedEvent.WaitOne();
         }
         catch (Exception ex)
