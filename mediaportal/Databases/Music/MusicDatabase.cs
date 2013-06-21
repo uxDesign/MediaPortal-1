@@ -555,12 +555,6 @@ namespace MediaPortal.Music.Database
         ExecuteNonQuery("CREATE INDEX idxalbuminfo_idGenre ON albuminfo(idGenre ASC)");
         ExecuteNonQuery("CREATE INDEX idxartistinfo_strArtist ON artistinfo(strArtist ASC)");
 
-        // Scrobble table
-        ExecuteNonQuery("CREATE TABLE scrobbleusers ( idScrobbleUser integer primary key, strUsername text, strPassword text)");
-        ExecuteNonQuery("CREATE TABLE scrobblesettings ( idScrobbleSettings integer primary key, idScrobbleUser integer, iAddArtists integer, iAddTracks integer, iNeighbourMode integer, iRandomness integer, iScrobbleDefault integer, iSubmitOn integer, iDebugLog integer, iOfflineMode integer, iPlaylistLimit integer, iPreferCount integer, iRememberStartArtist integer, iAnnounce integer)");
-        ExecuteNonQuery("CREATE TABLE scrobblemode ( idScrobbleMode integer primary key, idScrobbleUser integer, iSortID integer, strModeName text)");
-        ExecuteNonQuery("CREATE TABLE scrobbletags ( idScrobbleTag integer primary key, idScrobbleMode integer, iSortID integer, strTagName text)");
-
         Log.Info("MusicDatabase: New Database created successfully");
         return true;
       }
