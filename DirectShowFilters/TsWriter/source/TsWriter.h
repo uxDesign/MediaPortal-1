@@ -121,10 +121,10 @@ public:
 class CMpTsFilterPin : public CRenderedInputPin,public CPacketSync
 {
     CMpTs*	const	m_pWriterFilter;   // Main renderer object
-    CCritSec*		const	m_pReceiveLock;    // Sample critical section
+
 public:
 
-    CMpTsFilterPin(CMpTs *pDump,LPUNKNOWN pUnk,CBaseFilter *pFilter,CCritSec *pLock,CCritSec *pReceiveLock,HRESULT *phr);
+    CMpTsFilterPin(CMpTs *pDump,LPUNKNOWN pUnk,CBaseFilter *pFilter,CCritSec *pLock,HRESULT *phr);
 
     // Do something with this media sample
     STDMETHODIMP Receive(IMediaSample *pSample);
@@ -138,7 +138,6 @@ public:
     HRESULT		CheckMediaType(const CMediaType *);
     // Break connection
     HRESULT		BreakConnect();
-		BOOL			IsReceiving();
 		void			Reset();
     // Track NewSegment
     STDMETHODIMP NewSegment(REFERENCE_TIME tStart,REFERENCE_TIME tStop,double dRate);
@@ -161,8 +160,8 @@ class CMpTs : public CUnknown, public ITSFilter
     friend class CMpTsFilterPin;
     CMpTsFilter*	m_pFilter;       // Methods for filter interfaces
     CMpTsFilterPin*	m_pPin;          // A simple rendered input pin
-    CCritSec 		m_Lock;                // Main renderer critical section
-    CCritSec 		m_ReceiveLock;         // Sublock for received samples
+    CCritSec 		m_filterLock;          // Main renderer critical section
+
 public:
     DECLARE_IUNKNOWN
 
@@ -228,6 +227,7 @@ private:
 		bool b_dumpRawPakets;
 		CChannelLinkageScanner* m_pChannelLinkageScanner;
 		vector<CTsChannel*> m_vecChannels;
+		CCritSec m_channelLock;         // Lock for protecting access to m_vecChannels.
     typedef vector<CTsChannel*>::iterator ivecChannels;
 		int m_id;
 };
