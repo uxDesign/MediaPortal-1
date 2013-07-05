@@ -107,6 +107,15 @@
     <Compile Include="MiniDisplayPlugin\ByteArray.cs">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="MiniDisplayPlugin\Drivers\ImonBase.cs" />
+    <Compile Include="MiniDisplayPlugin\Drivers\ImonLcd.cs" />
+    <Compile Include="MiniDisplayPlugin\Drivers\ImonLcd_AdvancedSetupForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="MiniDisplayPlugin\Drivers\ImonLcd_AdvancedSetupForm.Designer.cs">
+      <DependentUpon>ImonLcd_AdvancedSetupForm.cs</DependentUpon>
+    </Compile>
+    <Compile Include="MiniDisplayPlugin\Drivers\ImonVfd.cs" />
     <Compile Include="MiniDisplayPlugin\Drivers\ShuttlePF27.cs" />
     <Compile Include="MiniDisplayPlugin\Drivers\DM140GINK.cs" />
     <Compile Include="MiniDisplayPlugin\Drivers\FicSpectra.cs" />
@@ -344,6 +353,11 @@
     <EmbeddedResource Include="MiniDisplayPlugin\Drivers\iMONLCDg_AdvancedSetupForm.resx">
       <DependentUpon>iMONLCDg_AdvancedSetupForm.cs</DependentUpon>
     </EmbeddedResource>
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="MiniDisplayPlugin\API\Soundgraph\iMONDisplay.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>

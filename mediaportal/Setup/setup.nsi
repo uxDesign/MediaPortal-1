@@ -443,6 +443,8 @@ Section "MediaPortal core files (required)" SecCore
   File "${git_DirectShowFilters}\mpc-hc_subs\bin\${BUILD_TYPE}\mpcSubs.dll"
   File "${git_DirectShowFilters}\DXErr9\bin\${BUILD_TYPE}\Dxerr9.dll"
   File "${git_MP}\MiniDisplayLibrary\bin\${BUILD_TYPE}\MiniDisplayLibrary.dll"
+  File "${git_MP}\MiniDisplayLibrary\bin\${BUILD_TYPE}\iMONDisplayWrapper.dll"
+  File "${git_MP}\MiniDisplayLibrary\bin\${BUILD_TYPE}\MiniDisplayPlugin\API\SoundGraph\iMONDisplay.dll"
   ; Utils
   File "${git_MP}\Utils\bin\${BUILD_TYPE}\Utils.dll"
   ; Common Utils
@@ -596,6 +598,8 @@ SectionEnd
   Delete "$MPdir.Base\Dxerr9.dll"
   Delete "$MPdir.Base\mpcSubs.dll"
   Delete "$MPdir.Base\MiniDisplayLibrary.dll"
+  Delete "$MPdir.Base\iMONDisplayWrapper.dll"
+  Delete "$MPdir.Base\iMONDisplay.dll"
   ; Utils
   Delete "$MPdir.Base\Utils.dll"
   ; Common Utils

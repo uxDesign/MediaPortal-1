@@ -319,6 +319,16 @@ namespace MediaPortal.ProcessPlugins.MiniDisplayPlugin
       list.Add(new ShuttlePF27());
       if (this.ExtensiveLogging)
       {
+        Log.Info("MiniDisplay.Settings.LoadDrivers(): Loading iMON VFD...");
+      }
+      list.Add(new ImonVfd());
+      if (this.ExtensiveLogging)
+      {
+        Log.Info("MiniDisplay.Settings.LoadDrivers(): Loading iMON LCD...");
+      }
+      list.Add(new ImonLcd());
+      if (this.ExtensiveLogging)
+      {
         Log.Info("MiniDisplay.Settings.LoadDrivers(): Loading Debug Display...");
       }
       list.Add(new DebugForm());
