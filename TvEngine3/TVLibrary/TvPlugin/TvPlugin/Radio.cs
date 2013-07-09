@@ -859,7 +859,7 @@ namespace TvPlugin
       
       GUIPropertyManager.SetProperty("#Play.Current.Thumb", strLogo);
 
-      if (g_Player.Playing)
+      if (g_Player.Playing && !_currentChannel.IsWebstream())
       {
         if (!g_Player.IsTimeShifting || (g_Player.IsTimeShifting && _currentChannel.IsWebstream()))
         {
@@ -910,7 +910,7 @@ namespace TvPlugin
 
     public bool HasSetup()
     {
-      return true;
+      return false;
     }
 
     public bool DefaultEnabled()
@@ -943,11 +943,7 @@ namespace TvPlugin
       return "Connect to TV service to listen to analog, DVB and internet radio";
     }
 
-    public void ShowPlugin()
-    {
-      RadioSetupForm setup = new RadioSetupForm();
-      setup.ShowDialog();
-    }
+    public void ShowPlugin() { }
 
     #endregion
 

@@ -362,6 +362,8 @@ ${MementoSection} "MediaPortal TV Server" SecServer
   ${LOG_TEXT} "INFO" "Terminating processes ..."
   ${StopService} "TVservice"
   ${KillProcess} "SetupTv.exe"
+  ; ffmpeg
+  ${KillProcess} "ffmpeg.exe"
 
   SetOverwrite on
 
@@ -430,6 +432,11 @@ ${MementoSection} "MediaPortal TV Server" SecServer
   File "${TVSERVER.BASE}\ttdvbacc.dll"
   File "${TVSERVER.BASE}\tevii.dll"
   File "${TVSERVER.BASE}\Ionic.Zip.dll"
+  
+  ; thumbnail software
+  File "${TVSERVER.BASE}\ffmpeg.exe"
+  File "${git_TVServer}\TvThumbnails\bin\${BUILD_TYPE}\TvThumbnails.dll"
+  
 
   ; protocol implementations for MPIPTVSource.ax
   File "${git_DirectShowFilters}\MPIPTVSource\bin\${BUILD_TYPE}\MPIPTV_FILE.dll"
@@ -502,6 +509,8 @@ ${MementoSectionEnd}
   ${LOG_TEXT} "INFO" "Terminating processes ..."
   ${StopService} "TVservice"
   ${KillProcess} "SetupTv.exe"
+  ; ffmpeg
+  ${KillProcess} "ffmpeg.exe"
 
   #---------------------------------------------------------------------------
   # CLEARING DATABASE if RemoveAll was selected
@@ -599,6 +608,8 @@ ${MementoSectionEnd}
   Delete "$INSTDIR\tevii.dll"
   Delete "$INSTDIR\Ionic.Zip.dll"
   ;Delete "$INSTDIR\Interop.SHDocVw.dll"
+  Delete "$INSTDIR\ffmpeg.exe"
+  Delete "$INSTDIR\TvThumbnails.dll"
 
   ; protocol implementations for MPIPTVSource.ax
   Delete "$INSTDIR\MPIPTV_FILE.dll"
