@@ -220,7 +220,7 @@ void CLvctParser::OnNewSection(CSection& sections)
           {
             shortNameLength = strlen(name);
           }
-          for (int i = 0; i < extendedNames.size(); i++)
+          for (size_t i = 0; i < extendedNames.size(); i++)
           {
             int extendedNameLength = strlen(extendedNames[i]);
             if (extendedNameLength == shortNameLength && strcmp(name, extendedNames[0]) == 0)
