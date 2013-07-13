@@ -214,15 +214,25 @@ void CLvctParser::OnNewSection(CSection& sections)
         {
           vector<char*> extendedNames;
           DecodeMultipleStrings(&section[pointer], length, &extendedNames);
-          // Copy the first extended name onto the end of the short name... carefully!
-          if (extendedNames.size() > 0)
+          // Combine the first different extended name with the short name... carefully!
+          int shortNameLength = 0;
+          if (name != NULL)
           {
+            shortNameLength = strlen(name);
+          }
+          for (int i = 0; i < extendedNames.size(); i++)
+          {
+            int extendedNameLength = strlen(extendedNames[i]);
+            if (extendedNameLength == shortNameLength && strcmp(name, extendedNames[0]) == 0)
+            {
+              continue;
+            }
             int nameBufferSize = 0;
             if (name != NULL)
             {
-              nameBufferSize += strlen(" ()") + strlen(name);
+              nameBufferSize += strlen(" ()") + shortNameLength;
             }
-            nameBufferSize += strlen(extendedNames[0]) + 1; // + 1 for NULL termination
+            nameBufferSize += extendedNameLength + 1; // + 1 for NULL termination
             char* newName = new char[nameBufferSize];
             if (newName == NULL)
             {
@@ -230,17 +240,13 @@ void CLvctParser::OnNewSection(CSection& sections)
             }
             else
             {
+              strcpy(newName, extendedNames[i]);
               if (name != NULL)
               {
-                strcpy(newName, name);
                 strcat(newName, " (");
-                strcat(newName, extendedNames[0]);
+                strcat(newName, name);
                 strcat(newName, ")");
                 delete[] name;
-              }
-              else
-              {
-                strcat(newName, extendedNames[0]);
               }
               name = newName;
             }
@@ -341,7 +347,7 @@ void CLvctParser::DecodeServiceLocationDescriptor(byte* b, int length, int* vide
           streamType == SERVICE_TYPE_VIDEO_H264 ||
           streamType == SERVICE_TYPE_VIDEO_MPEG2_DCII)
       {
-        *videoStreamCount++;
+        (*videoStreamCount)++;
       }
       else if (streamType == SERVICE_TYPE_AUDIO_MPEG1 ||
           streamType == SERVICE_TYPE_AUDIO_MPEG2 ||
@@ -350,7 +356,7 @@ void CLvctParser::DecodeServiceLocationDescriptor(byte* b, int length, int* vide
           streamType == SERVICE_TYPE_AUDIO_AC3 ||
           streamType == SERVICE_TYPE_AUDIO_E_AC3)
       {
-        *audioStreamCount++;
+        (*audioStreamCount)++;
       }
     }
     //LogDebug("LvctParser: video stream count = %d, audio stream count = %d", *videoStreamCount, *audioStreamCount);
@@ -396,7 +402,7 @@ void CLvctParser::DecodeMultipleStrings(byte* b, int length, vector<char*>* stri
         }
 
         char* string = NULL;
-        DecodeString(b, compressionType, mode, numberBytes, &string);
+        DecodeString(&b[pointer], compressionType, mode, numberBytes, &string);
         if (string != NULL)
         {
           strings->push_back(string);
@@ -430,6 +436,6 @@ void CLvctParser::DecodeString(byte* b, int compressionType, int mode, int numbe
   LogDebug("LvctParser: unsupported compression type or mode in DecodeString(), compression type = 0x%x, mode = 0x%x", compressionType, mode);
   for (int i = 0; i < numberBytes; i++)
   {
-    LogDebug(" %d: 0x%x", b[i]);
+    LogDebug(" %d: 0x%x", i, b[i]);
   }
 }
