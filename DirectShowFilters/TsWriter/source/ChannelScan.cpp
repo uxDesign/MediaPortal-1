@@ -118,7 +118,6 @@ STDMETHODIMP CChannelScan::GetCount(int* channelCount)
     // by the PAT parser.
     LogDebug("ChannelScan: merging PMT info with other SI info");
     int patServiceCount = m_patParser.Count();
-    int scteServiceCount = m_scteParser.GetChannelCount();
     int tableId = 0xc8;
     if (m_tsStandard == TransportStreamStandard_Scte)
     {
@@ -130,6 +129,7 @@ STDMETHODIMP CChannelScan::GetCount(int* channelCount)
       m_patParser.GetChannel(s1, &patInfo);
 
       CChannelInfo* vctInfo = NULL;
+      int scteServiceCount = m_scteParser.GetChannelCount();
       for (int s2 = 0; s2 < scteServiceCount; s2++)
       {
         if (!m_scteParser.GetChannel(s2, &vctInfo))
