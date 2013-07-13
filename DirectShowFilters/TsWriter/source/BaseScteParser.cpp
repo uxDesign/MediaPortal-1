@@ -155,9 +155,12 @@ void CBaseScteParser::OnLvctReceived(int tableId, char* name, int majorChannelNu
   }
 
   // Source ID may not be set when scanning for cable channels with a clear QAM
-  // tuner (ie. in-band L-VCT). Since our service map is keyed on source ID...
-  // well, that is quite a big problem. What we do is make up a source ID that
-  // we hope will be unique.
+  // tuner (ie. in-band L-VCT). Also, source ID is almost certainly not unique
+  // across transport streams and may not be unique within a transport stream
+  // when scanning for over-the-air digital terrestrial channels.
+  // These two possibilities are both problems because our service map is keyed
+  // on source ID. What we do is make up an alternate service map key that we
+  // hope will be unique.
   int originalSourceId = sourceId;
   CChannelInfo* info = NULL;
   if (sourceId != 0)
@@ -165,15 +168,22 @@ void CBaseScteParser::OnLvctReceived(int tableId, char* name, int majorChannelNu
     map<int, CChannelInfo*>::iterator it = m_mServices.find(sourceId);
     if (it != m_mServices.end())
     {
-      LogDebug("BaseScteParser: warning, found existing channel info for L-VCT source 0x%x (service ID = 0x%x)", sourceId, programNumber);
-      info = it->second;
-      m_mServicesWithoutNames.erase(sourceId);
+      if ((it->second)->ServiceId == programNumber)
+      {
+        LogDebug("BaseScteParser: warning, found existing channel info for L-VCT source 0x%x (service ID = 0x%x)", sourceId, programNumber);
+        info = it->second;
+        m_mServicesWithoutNames.erase(sourceId);
+      }
+      else
+      {
+        sourceId = 0;
+      }
     }
   }
-  else
+  if (sourceId == 0)
   {
     sourceId = m_mServices.size() + 1;
-    LogDebug("BaseScteParser: using fake source ID 0x%x to store service 0x%x", programNumber);
+    LogDebug("BaseScteParser: using fake source ID 0x%x to store service 0x%x", sourceId, programNumber);
   }
   if (info == NULL)
   {

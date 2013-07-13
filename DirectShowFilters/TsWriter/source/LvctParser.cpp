@@ -169,8 +169,13 @@ void CLvctParser::OnNewSection(CSection& sections)
       bool hidden = ((section[pointer] >> 4) & 0x1);
 
       // cable only
-      int pathSelect = ((section[pointer] >> 3) & 0x1);
-      bool outOfBand = ((section[pointer] >> 2) & 0x1);
+      int pathSelect = 0;
+      bool outOfBand = false;
+      if (sections.table_id == 0xc9)
+      {
+        pathSelect = ((section[pointer] >> 3) & 0x1);
+        outOfBand = ((section[pointer] >> 2) & 0x1);
+      }
 
       bool hideGuide = ((section[pointer++] >> 1) & 0x1);
       int serviceType = (section[pointer++] & 0x3f);
@@ -193,7 +198,7 @@ void CLvctParser::OnNewSection(CSection& sections)
       {
         int tag = section[pointer++];
         int length = section[pointer++];
-        //LogDebug("LvctParser: descriptor, tag = 0x%x, length = %d, pointer = %d, end of descriptor = %d", tag, length, pointer, pointer + length);
+        LogDebug("LvctParser: descriptor, tag = 0x%x, length = %d, pointer = %d, end of descriptor = %d", tag, length, pointer, pointer + length);
         if (pointer + length > endOfDescriptors)
         {
           LogDebug("LvctParser: invalid descriptor length = %d, pointer = %d, end of descriptor = %d, end of descriptors = %d, end of section = %d, section length = %d", length, pointer, pointer + length, endOfDescriptors, endOfSection, sectionLength);
@@ -273,7 +278,7 @@ void CLvctParser::OnNewSection(CSection& sections)
     {
       int tag = section[pointer++];
       int length = section[pointer++];
-      //LogDebug("LvctParser: descriptor, tag = 0x%x, length = %d, pointer = %d, end of descriptor = %d", tag, length, pointer, pointer + length);
+      LogDebug("LvctParser: descriptor, tag = 0x%x, length = %d, pointer = %d, end of descriptor = %d", tag, length, pointer, pointer + length);
       if (pointer + length > endOfDescriptors)
       {
         LogDebug("LvctParser: invalid descriptor length = %d, pointer = %d, end of descriptor = %d, end of descriptors = %d, end of section = %d, section length = %d", length, pointer, pointer + length, endOfDescriptors, endOfSection, sectionLength);
@@ -368,25 +373,25 @@ void CLvctParser::DecodeMultipleStrings(byte* b, int length, vector<char*>* stri
   }
   try
   {
-    int numberOfStrings = b[0];
+    int numberStrings = b[0];
 
-    //LogDebug("LvctParser: parse multiple strings, number of strings = %d", numberOfStrings);
+    //LogDebug("LvctParser: parse multiple strings, number of strings = %d", numberStrings);
     int pointer = 1;
-    for (int i = 0; i < numberOfStrings && pointer + 3 < length; i++)
+    for (int i = 0; i < numberStrings && pointer + 3 < length; i++)
     {
       unsigned int iso639LanguageCode = b[pointer] + (b[pointer + 1] << 8) + (b[pointer + 2] << 16);
       pointer += 3;
-      int numberOfSegments = b[pointer++];
-      //LogDebug("LvctParser: string %d, number of segments = %d", i, numberOfSegments);
-      for (int j = 0; j < numberOfSegments && pointer + 2 < length; j++)
+      int numberSegments = b[pointer++];
+      //LogDebug("LvctParser: string %d, number of segments = %d", i, numberSegments);
+      for (int j = 0; j < numberSegments && pointer + 2 < length; j++)
       {
         int compressionType = b[pointer++];
         int mode = b[pointer++];
         int numberBytes = b[pointer++];
         //LogDebug("LvctParser: segment %d, compression type = 0x%x, mode = 0x%x, number of bytes = %d", j, compressionType, mode, numberBytes);
-        if (pointer + numberBytes >= length)
+        if (pointer + numberBytes > length)
         {
-          LogDebug("LvctParser: invalid string length %d in multiple string structure, pointer = %d, structure length = %d", numberBytes, pointer, length);
+          LogDebug("LvctParser: invalid string length %d in multiple string structure, pointer = %d, number of bytes = %d, structure length = %d", pointer, numberBytes, length);
           return;
         }
 

@@ -65,6 +65,7 @@ STDMETHODIMP CChannelScan::Start(TransportStreamStandard tsStandard)
     if (tsStandard != TransportStreamStandard_Default)
     {
       m_atscParser.Reset();
+      m_atscParser.SetCallBack(this);
       m_scteParser.Reset();
     }
 
@@ -317,7 +318,7 @@ void CChannelScan::OnLvctReceived(int tableId, char* name, int majorChannelNumbe
                                   int serviceType, int sourceId, int videoStreamCount, int audioStreamCount,
                                   vector<unsigned int>& languages)
 {
-  // Pass handling to the SCTE parser. Avoids logic duplication.
+  // Pass ATSC over-the-air handling to the SCTE cable parser. Avoids logic duplication.
   m_scteParser.OnLvctReceived(tableId, name, majorChannelNumber, minorChannelNumber, modulationMode, carrierFrequency,
     channelTsid, programNumber, etmLocation, accessControlled, hidden, pathSelect, outOfBand, hideGuide, serviceType,
     sourceId, videoStreamCount, audioStreamCount, languages);
