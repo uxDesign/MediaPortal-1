@@ -213,6 +213,9 @@ STDMETHODIMP CChannelScan::GetChannel(int index,
     else
     {
       gotInfo = m_scteParser.GetChannel(index, &info);
+      LogDebug("%4d) %-25s TSID = 0x%04x, service ID = 0x%04x, source ID = 0x%04x, maj. ch. # = %-4d, min. ch. # = %-4d, access controlled = %d, type = %d, video stream count = %d, audio stream count = %d, frequency = %-6d kHz, modulation = %d",
+        index, info->ServiceName, info->TransportId, info->ServiceId, info->NetworkId, info->MajorChannel, info->MinorChannel,
+        info->FreeCAMode, info->ServiceType, info->hasVideo, info->hasVideo, info->Frequency, info->Modulation);
     }
     if (!gotInfo)
     {

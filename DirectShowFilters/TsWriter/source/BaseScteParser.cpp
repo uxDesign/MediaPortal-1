@@ -99,10 +99,6 @@ bool CBaseScteParser::GetChannel(int index, CChannelInfo** info)
     toReturn->Modulation = m_nitParser.GetModulationMode(toReturn->Modulation);
   }
 
-  LogDebug("%4d) %-25s TSID = 0x%04x, service ID = 0x%04x, source ID = 0x%04x, maj. ch. # = %-4d, min. ch. # = %-4d, access controlled = %d, type = %d, video stream count = %d, audio stream count = %d, frequency = %-6d kHz, modulation = %d",
-    originalIndex, toReturn->ServiceName, toReturn->TransportId, toReturn->ServiceId, toReturn->NetworkId, toReturn->MajorChannel, toReturn->MinorChannel,
-    toReturn->FreeCAMode, toReturn->ServiceType, toReturn->hasVideo, toReturn->hasVideo, toReturn->Frequency, toReturn->Modulation);
-
   *info = toReturn;
   return true;
 }
