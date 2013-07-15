@@ -109,13 +109,13 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
     if (NO_MP_AUD_REND)
     {
       Log("--------------------------------------------------------------");
-      Log("---- v1.6.%d Unicode with DWM queue support --- instance 0x%x", DSHOWHELPER_VERSION, this);
+      Log("---- v1.7.%d Unicode with DWM queue support --- instance 0x%x", DSHOWHELPER_VERSION, this);
       Log("--------------------------------------------------------------");
     }
     else
     {
       Log("--------------------------------------------------------------");
-      Log("--- v1.6.%d Unicode with DWM queue support --- instance 0x%x", DSHOWHELPER_VERSION, this);
+      Log("--- v1.7.%d Unicode with DWM queue support --- instance 0x%x", DSHOWHELPER_VERSION, this);
       Log("--- MP Audio Renderer control enabled");
       Log("--------------------------------------------------------------");
     }
@@ -1392,10 +1392,7 @@ HRESULT MPEVRCustomPresenter::LogOutputTypes()
 //The caller must perform any necessary worker/scheduler thread locking !!!
 HRESULT MPEVRCustomPresenter::RenegotiateMediaOutputType()
 {
-  m_bFirstInputNotify = FALSE;
-  Log("RenegotiateMediaOutputType 1");
-  DoFlush(TRUE);
-  Log("RenegotiateMediaOutputType 3");
+  Log("RenegotiateMediaOutputType() - start");
   HRESULT hr = S_OK;
   BOOL fFoundMediaType = FALSE;
 
@@ -1404,6 +1401,8 @@ HRESULT MPEVRCustomPresenter::RenegotiateMediaOutputType()
 
   if (!m_pMixer)
   {
+    m_bFirstInputNotify = FALSE;
+    DoFlush(TRUE);
     return MF_E_INVALIDREQUEST;
   }
 
@@ -1411,6 +1410,7 @@ HRESULT MPEVRCustomPresenter::RenegotiateMediaOutputType()
   DWORD iTypeIndex = 0;
   while (!fFoundMediaType && (hr != MF_E_NO_MORE_TYPES))
   {
+    BOOL bHasChanged = false;
     pMixerType.Release();
     pType.Release();
     Log("Testing media type...");
@@ -1446,17 +1446,20 @@ HRESULT MPEVRCustomPresenter::RenegotiateMediaOutputType()
     if (SUCCEEDED(hr))
     {
       Log("New media type successfully negotiated!");
-      BOOL bHasChanged;
-      hr = SetMediaType(pType, &bHasChanged);
+      hr = SetMediaType(+pType, &bHasChanged);
       if (SUCCEEDED(hr))
       {
         if (bHasChanged)
         {
+          m_bFirstInputNotify = FALSE;
+          Log("RenegotiateMediaOutputType() - MediaType has changed");
+          DoFlush(TRUE);
           ReAllocSurfaces();
         }
       }
       else
       {
+        bHasChanged = FALSE;
         Log("ERR: Could not set media type on self: 0x%x!", hr);
       }
     }
@@ -1477,9 +1480,19 @@ HRESULT MPEVRCustomPresenter::RenegotiateMediaOutputType()
 
     if (SUCCEEDED(hr))
     {
-      SetupAudioRenderer();
+      if (bHasChanged)
+      {
+        SetupAudioRenderer();
+      }
       fFoundMediaType = TRUE;
     }
+  }
+  
+  if (!fFoundMediaType)
+  {
+    Log("RenegotiateMediaOutputType - no usable MediaType found");
+    m_bFirstInputNotify = FALSE;
+    DoFlush(TRUE);
   }
 
   Log("RenegotiateMediaOutputType - done");
