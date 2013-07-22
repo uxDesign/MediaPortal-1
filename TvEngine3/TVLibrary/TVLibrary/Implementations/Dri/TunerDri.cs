@@ -728,7 +728,7 @@ namespace TvLibrary.Implementations.Dri
       {
         throw new TvException("DRI CC: received tune request for unsupported channel");
       }
-      Log.Log.Info("DRI CC: tune channel {0} \"{1}\", sub channel ID {2}", atscChannel.PhysicalChannel, channel.Name, subChannelId);
+      Log.Log.Info("DRI CC: tune channel {0} \"{1}\", sub channel ID {2}", atscChannel.MajorChannel, channel.Name, subChannelId);
 
       bool newSubChannel = false;
       BaseSubChannel subChannel;
