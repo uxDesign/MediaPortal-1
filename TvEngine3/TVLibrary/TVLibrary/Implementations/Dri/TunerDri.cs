@@ -475,7 +475,12 @@ namespace TvLibrary.Implementations.Dri
         Log.Log.Debug("  write status       = {0}", writeStatus);
         _streamUrl = currentUri;
 
-        /*Log.Log.Debug("DRI CC: position info...");
+        /*
+         * Ceton tuners set relCount and absCount to NOT_IMPLEMENTED. Those
+         * parameters are meant to be type i4 (32 bit integers), so those
+         * values are invalid. This is confirmed in the UPnP specs which state
+         * such parameters should be set to the max value for i4.
+        Log.Log.Debug("DRI CC: position info...");
         uint track = 0;
         string duration = string.Empty;
         string metaData = string.Empty;
