@@ -90,6 +90,7 @@ namespace TvLibrary.Implementations.Dri
     private ManualResetEvent _eventSignalLock = null;
 
     private readonly bool _isCetonDevice = false;
+    private bool _canPause = false;
 
     #endregion
 
@@ -284,7 +285,7 @@ namespace TvLibrary.Implementations.Dri
       UpnpAvTransportStatus transportStatus = UpnpAvTransportStatus.OK;
       string speed = string.Empty;
       _avTransportService.GetTransportInfo((uint)_avTransportId, out _transportState, out transportStatus, out speed);
-      if (_transportState == UpnpAvTransportState.STOPPED || _transportState == UpnpAvTransportState.PAUSED_PLAYBACK || _transportState == UpnpAvTransportState.NO_MEDIA_PRESENT)
+      if (_transportState == UpnpAvTransportState.STOPPED)
       {
         return false;
       }
@@ -439,10 +440,15 @@ namespace TvLibrary.Implementations.Dri
           }
         }
 
+        _canPause = false;
         IList<UpnpAvTransportAction> actions;
         if (_avTransportService.GetCurrentTransportActions((uint)_avTransportId, out actions))
         {
           Log.Log.Debug("DRI CC: supported AV transport actions = {0}", string.Join(", ", actions.Select(x => x.ToString()).ToArray()));
+          if (actions.Contains(UpnpAvTransportAction.Pause))
+          {
+            _canPause = true;
+          }
         }
         IList<UpnpAvStorageMedium> playMedia;
         IList<UpnpAvStorageMedium> recordMedia;
@@ -606,8 +612,16 @@ namespace TvLibrary.Implementations.Dri
     {
       if (_avTransportService != null && _gotTunerControl)
       {
-        _avTransportService.Pause((uint)_avTransportId);
-        _transportState = UpnpAvTransportState.PAUSED_PLAYBACK;
+        if (_canPause)
+        {
+          _avTransportService.Pause((uint)_avTransportId);
+          _transportState = UpnpAvTransportState.PAUSED_PLAYBACK;
+        }
+        else
+        {
+          _avTransportService.Stop((uint)_avTransportId);
+          _transportState = UpnpAvTransportState.STOPPED;
+        }
       }
       base.PauseGraph();
     }
