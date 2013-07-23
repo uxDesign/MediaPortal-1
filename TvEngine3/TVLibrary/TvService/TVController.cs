@@ -4542,13 +4542,16 @@ namespace TvService
           if (groupDevice.IdCard == dbSettings.IdCard)
           {
             Log.Info("Controller: adding to group {0}", dbDeviceGroup.Name);
-            if (!_deviceGroups.ContainsKey(dbDeviceGroup.IdCardGroup))
+            device.IsHybrid = true;
+            HybridCardGroup deviceGroup;
+            if (!_deviceGroups.TryGetValue(dbDeviceGroup.IdCardGroup, out deviceGroup))
             {
-              _deviceGroups.Add(dbDeviceGroup.IdCardGroup, new HybridCardGroup());
+              deviceGroup = new HybridCardGroup();
+              _deviceGroups.Add(dbDeviceGroup.IdCardGroup, deviceGroup);
             }
-            HybridCard hybridDevice = _deviceGroups[dbDeviceGroup.IdCardGroup].Add(dbSettings.IdCard, device);
+            HybridCard hybridDevice = deviceGroup.Add(dbSettings.IdCard, device);
 
-            Log.Info("Controller: creating group handler");
+            Log.Info("Controller: creating hybrid handler");
             handler = new TvCardHandler(dbSettings, hybridDevice);
             break;
           }
@@ -4561,7 +4564,7 @@ namespace TvService
 
       if (handler == null)
       {
-        Log.Info("Controller: creating handler");
+        Log.Info("Controller: creating standard handler");
         handler = new TvCardHandler(dbSettings, device);
       }
       _cards[dbSettings.IdCard] = handler;
