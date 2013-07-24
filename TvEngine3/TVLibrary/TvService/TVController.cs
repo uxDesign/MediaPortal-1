@@ -104,7 +104,7 @@ namespace TvService
     private int _maxFreeCardsToTry;
 
     private Dictionary<int, ITvCardHandler> _cards;
-    private Dictionary<int, HybridCardGroup> _deviceGroups = new Dictionary<int, HybridCardGroup>();
+    private Dictionary<int, HybridCardGroup> _deviceGroups;
 
     /// 
     // contains a cached copy of all the channels in the user defined groups (excl. the all channels group)
@@ -569,13 +569,7 @@ namespace TvService
 
         _maxFreeCardsToTry = Int32.Parse(_layer.GetSetting("timeshiftMaxFreeCardsToTry", "0").Value);
 
-        Log.Info("Controller: setup device groups");
-        IList<CardGroup> deviceGroups = CardGroup.ListAll();
-        foreach (CardGroup group in deviceGroups)
-        {
-          _deviceGroups.Add(group.IdCardGroup, new HybridCardGroup());
-        }
-
+        _deviceGroups = new Dictionary<int, HybridCardGroup>();
         _cards = new Dictionary<int, ITvCardHandler>();
         _deviceDetector = new DeviceDetector(this);
         // Logic here to delay starting to detect devices.
@@ -4551,7 +4545,7 @@ namespace TvService
             }
             HybridCard hybridDevice = deviceGroup.Add(dbSettings.IdCard, device);
 
-            Log.Info("Controller: creating hybrid handler");
+            Log.Debug("Controller: creating hybrid handler");
             handler = new TvCardHandler(dbSettings, hybridDevice);
             break;
           }
@@ -4564,7 +4558,7 @@ namespace TvService
 
       if (handler == null)
       {
-        Log.Info("Controller: creating standard handler");
+        Log.Debug("Controller: creating standard handler");
         handler = new TvCardHandler(dbSettings, device);
       }
       _cards[dbSettings.IdCard] = handler;
