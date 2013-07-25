@@ -424,7 +424,12 @@ ${MementoSection} "MediaPortal TV Server" SecServer
   File "${git_TVServer}\TVLibrary.Utils\bin\${BUILD_TYPE}\TVLibrary.Utils.dll"
   ;File "${git_TVServer}\TVLibrary.Utils\bin\${BUILD_TYPE}\Interop.SHDocVw.dll"
 
-  ; 3rd party assemblys
+  ; MP2 assemblies
+  File "${TVSERVER.BASE}\HttpServer.dll"
+  File "${TVSERVER.BASE}\MediaPortal.Utilities.dll"
+  File "${TVSERVER.BASE}\UPnP.dll"
+
+  ; 3rd party assemblies
   File "${TVSERVER.BASE}\hauppauge.dll"
   File "${TVSERVER.BASE}\hcwWinTVCI.dll"
   File "${TVSERVER.BASE}\KNCBDACTRL.dll"
@@ -432,7 +437,7 @@ ${MementoSection} "MediaPortal TV Server" SecServer
   File "${TVSERVER.BASE}\ttdvbacc.dll"
   File "${TVSERVER.BASE}\tevii.dll"
   File "${TVSERVER.BASE}\Ionic.Zip.dll"
-  
+
   ; thumbnail software
   File "${TVSERVER.BASE}\ffmpeg.exe"
   File "${git_TVServer}\TvThumbnails\bin\${BUILD_TYPE}\TvThumbnails.dll"
@@ -597,7 +602,12 @@ ${MementoSectionEnd}
   Delete "$INSTDIR\TvService.exe.config"
   Delete "$INSTDIR\SetupControls.dll"
 
-  ; 3rd party assemblys
+  ; MP2 assemblies
+  Delete "$INSTDIR\HttpServer.dll"
+  Delete "$INSTDIR\MediaPortal.Utilities.dll"
+  Delete "$INSTDIR\UPnP.dll"
+
+  ; 3rd party assemblies
   Delete "$INSTDIR\dxerr9.dll"
   Delete "$INSTDIR\hauppauge.dll"
   Delete "$INSTDIR\hcwWinTVCI.dll"
