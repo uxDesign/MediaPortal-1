@@ -71,6 +71,12 @@
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\TVDatabase\references\Gentle.Provider.SQLServer.dll</HintPath>
     </Reference>
+    <Reference Include="HttpServer">
+      <HintPath>..\TVServer.Base\HttpServer.dll</HintPath>
+    </Reference>
+    <Reference Include="MediaPortal.Utilities">
+      <HintPath>..\TVServer.Base\MediaPortal.Utilities.dll</HintPath>
+    </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core">
       <RequiredTargetFramework>3.5</RequiredTargetFramework>
@@ -81,7 +87,7 @@
     <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Xml" />
     <Reference Include="UPnP">
-      <HintPath>..\..\..\..\DLLs\MP2 UPnP 3.5\Release\UPnP.dll</HintPath>
+      <HintPath>..\TVServer.Base\UPnP.dll</HintPath>
     </Reference>
   </ItemGroup>
   <ItemGroup>
