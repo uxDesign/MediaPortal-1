@@ -385,6 +385,7 @@ protected:
   void           DoFlush(BOOL forced);
   void           ScheduleSample(IMFSample* pSample);
   IMFSample*     PeekSample();
+  IMFSample*     PeekNextSample();
   BOOL           PopSample();
   BOOL           PutSample(IMFSample* pSample);
   bool           SampleAvailable();

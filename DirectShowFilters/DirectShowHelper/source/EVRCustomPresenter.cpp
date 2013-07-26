@@ -1814,11 +1814,24 @@ HRESULT MPEVRCustomPresenter::CheckForScheduledSample(LONGLONG *pTargetTime, LON
       nextSampleTime = (realSampleTime + (frameTime/2)) - m_hnsAvgNSToffset;
     }
 
-    // update video to display FPS ratio data
+    // Calculate the duration of this current sample (i.e. time until the *next* sample presentation point)
     LONGLONG GetDuration;
-    pSample->GetSampleDuration(&GetDuration);
+    pSample->GetSampleDuration(&GetDuration);  // fallback value
+    IMFSample* pNextSample = PeekNextSample();
+    if (pNextSample != NULL) //There is a 'next' sample in the queue
+    {
+      LONGLONG sTime;
+      LONGLONG sNextTime;
+      pSample->GetSampleTime(&sTime);
+      pNextSample->GetSampleTime(&sNextTime);
+      if ((sTime > 0) && (sNextTime > 0) && (sNextTime > sTime))
+      {
+        GetDuration = sNextTime - sTime;
+      }
+    }
+    
     m_DetectedFrameTime = ((double)GetDuration)/10000000.0;    
-    GetFrameRateRatio();     
+    GetFrameRateRatio(); // update video to display FPS ratio data     
     if (m_DetectedFrameTime > DFT_THRESH)
     {
       frameTime = GetDuration;
@@ -2452,6 +2465,18 @@ IMFSample* MPEVRCustomPresenter::PeekSample()
   }
   return m_qScheduledSamples.Peek();
 }
+
+IMFSample* MPEVRCustomPresenter::PeekNextSample()
+{
+  CAutoLock sLock(&m_lockSamples);
+  if (m_qScheduledSamples.IsEmpty() || (m_iFreeSamples >= m_regNumSamples))
+  {
+    //Log("ERR: PeekNextSample: empty queue!");
+    return NULL;
+  }
+  return m_qScheduledSamples.PeekNext();
+}
+
 
 void MPEVRCustomPresenter::ScheduleSample(IMFSample* pSample)
 {
