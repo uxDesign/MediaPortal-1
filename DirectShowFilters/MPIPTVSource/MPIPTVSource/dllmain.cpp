@@ -54,11 +54,12 @@ const AMOVIESETUP_PIN iptvOutputPin =
 
 const AMOVIESETUP_FILTER iptvPushSource =
 {
-  &CLSID_MPIPTVSource,    // Filter CLSID
-  g_wszPushSource,        // String name
-  MERIT_NORMAL,           // Filter merit
-  1,                      // Number pins
-  &iptvOutputPin          // Pin details
+  &CLSID_MPIPTVSource,          // Filter CLSID
+  g_wszPushSource,              // String name
+  MERIT_NORMAL,                 // Filter merit
+  1,                            // Number pins
+  &iptvOutputPin,               // Pin details
+  CLSID_LegacyAmFilterCategory  // Filter category
 };
 
 // List of class IDs and creator functions for the class factory. This
