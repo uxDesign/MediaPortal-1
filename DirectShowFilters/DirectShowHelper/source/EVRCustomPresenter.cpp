@@ -1746,6 +1746,7 @@ HRESULT MPEVRCustomPresenter::CheckForScheduledSample(LONGLONG *pTargetTime, LON
   LONGLONG systemTime = 0;
   LONGLONG lateLimit = hystersisTime;
   LONGLONG earlyLimit = hystersisTime;
+  bool hasDropped = false;
 
   LONGLONG frameTime = m_rtTimePerFrame;
   if (m_DetectedFrameTime > DFT_THRESH)
@@ -1813,19 +1814,20 @@ HRESULT MPEVRCustomPresenter::CheckForScheduledSample(LONGLONG *pTargetTime, LON
       nextSampleTime = (realSampleTime + (frameTime/2)) - m_hnsAvgNSToffset;
     }
 
+    // update video to display FPS ratio data
+    LONGLONG GetDuration;
+    pSample->GetSampleDuration(&GetDuration);
+    m_DetectedFrameTime = ((double)GetDuration)/10000000.0;    
+    GetFrameRateRatio();     
+    if (m_DetectedFrameTime > DFT_THRESH)
+    {
+      frameTime = GetDuration;
+    }
+
     // nextSampleTime == 0 means there is no valid presentation time, so we present it immediately without vsync correction
     // When scrubbing always display at least every eighth frame - even if it's late
     if ( (nextSampleTime >= -lateLimit) || m_bDVDMenu || !m_bFrameSkipping || (m_bScrubbing && !(m_iFramesProcessed % 8)) || m_bZeroScrub )
     {   
-      LONGLONG GetDuration;
-      pSample->GetSampleDuration(&GetDuration);
-      m_DetectedFrameTime = ((double)GetDuration)/10000000.0;    
-      GetFrameRateRatio(); // update video to display FPS ratio data     
-      if (m_DetectedFrameTime > DFT_THRESH)
-      {
-        frameTime = GetDuration;
-      }
-
       // Within the time window to 'present' a sample, or it's a special play mode
       if (!m_bZeroScrub)
       {   
@@ -1845,7 +1847,7 @@ HRESULT MPEVRCustomPresenter::CheckForScheduledSample(LONGLONG *pTargetTime, LON
         LONGLONG offsetTime = delErr; //used to widen vsync correction window
         LONGLONG rasterDelay = GetDelayToRasterTarget( pTargetTime, &offsetTime);
 
-        if (rasterDelay > 0)
+        if ((rasterDelay > 0) && !hasDropped)
         {
            // Not at the correct point in the display raster, so sleep until pTargetTime time
           m_earliestPresentTime = 0;
@@ -1860,7 +1862,7 @@ HRESULT MPEVRCustomPresenter::CheckForScheduledSample(LONGLONG *pTargetTime, LON
         // We're within the raster timing limits, so present the sample or delay because it's too early...
         
         // Calculate minimum delay to next possible PresentSample() time
-        if ((m_frameRateRatio <= 1 && !m_bScrubbing) || (m_rawFRRatio <= 1 && m_bScrubbing))
+        if ((m_frameRateRatio <= 1 && !m_bScrubbing) || (m_rawFRRatio <= 1 && m_bScrubbing || hasDropped))
         {
           m_earliestPresentTime = systemTime + offsetTime;
         }
@@ -1920,15 +1922,7 @@ HRESULT MPEVRCustomPresenter::CheckForScheduledSample(LONGLONG *pTargetTime, LON
       }     
       ReturnSample(pSample, TRUE, FALSE);
       m_iFramesProcessed++;
-      
-      // Notify EVR of sample latency
-      if( m_pEventSink )
-      {
-        LONGLONG sampleLatency = -realSampleTime;
-        m_pEventSink->Notify(EC_SAMPLE_LATENCY, (LONG_PTR)&sampleLatency, 0);
-        LOG_TRACE("Sample Latency: %I64d", sampleLatency);
-      }
-      
+            
       { //Context for CAutoLock
 	      CAutoLock sLock(&m_lockNST);
         m_llLastNST = nextSampleTime;
@@ -1954,6 +1948,8 @@ HRESULT MPEVRCustomPresenter::CheckForScheduledSample(LONGLONG *pTargetTime, LON
     else // Drop late frames when frame skipping is enabled during normal playback
     {         
       m_earliestPresentTime = 0;
+      *pTargetTime = 0;
+      hasDropped = true;
       
       if (!PopSample())
       {
@@ -1989,7 +1985,7 @@ HRESULT MPEVRCustomPresenter::CheckForScheduledSample(LONGLONG *pTargetTime, LON
              );
       }
            
-      Sleep(1); //Just to be friendly to other threads
+      //Sleep(1); //Just to be friendly to other threads
     }
     
     *pIdleWait = true; //in case there are no samples and we need to go idle
