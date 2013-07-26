@@ -33,7 +33,17 @@ namespace TvLibrary.Implementations.Dri.Service
     protected StateVariableChangedDlgt _stateVariableDelegate = null;
     protected string _unqualifiedServiceName = string.Empty;
 
-    public BaseService(CpDevice device, string serviceName, bool isOptional = false)
+    public BaseService(CpDevice device, string serviceName)
+    {
+      Initialise(device, serviceName, false);
+    }
+
+    public BaseService(CpDevice device, string serviceName, bool isOptional)
+    {
+      Initialise(device, serviceName, isOptional);
+    }
+
+    private void Initialise(CpDevice device, string serviceName, bool isOptional)
     {
       _device = device;
       _unqualifiedServiceName = serviceName.Substring(serviceName.LastIndexOf(":"));
