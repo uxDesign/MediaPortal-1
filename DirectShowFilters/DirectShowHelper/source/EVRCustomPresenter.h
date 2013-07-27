@@ -271,6 +271,7 @@ public:
   double         GetRealFramePeriod();
   double         GetVideoFramePeriod(FPS_SOURCE_METHOD fpsSource);
   void           GetFrameRateRatio();
+  void           GetTempFRRatio(LONGLONG sampleDuration, int* frameRateRatio, int* rawFRRatio);
   int            CheckQueueCount();
   void           NotifyTimer(LONGLONG targetTime);
   void           NotifySchedulerTimer();

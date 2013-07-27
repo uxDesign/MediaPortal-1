@@ -1746,7 +1746,7 @@ HRESULT MPEVRCustomPresenter::CheckForScheduledSample(LONGLONG *pTargetTime, LON
   LONGLONG systemTime = 0;
   LONGLONG lateLimit = hystersisTime;
   LONGLONG earlyLimit = hystersisTime;
-  bool hasDropped = false;
+//  bool hasDropped = false;
 
   LONGLONG frameTime = m_rtTimePerFrame;
   if (m_DetectedFrameTime > DFT_THRESH)
@@ -1815,8 +1815,9 @@ HRESULT MPEVRCustomPresenter::CheckForScheduledSample(LONGLONG *pTargetTime, LON
     }
 
     // Calculate the duration of this current sample (i.e. time until the *next* sample presentation point)
-    LONGLONG GetDuration;
-    pSample->GetSampleDuration(&GetDuration);  // fallback value
+    LONGLONG sampleDuration;
+    pSample->GetSampleDuration(&sampleDuration);  // fallback value
+    LONGLONG timeToNextSample = sampleDuration;
     IMFSample* pNextSample = PeekNextSample();
     if (pNextSample != NULL) //There is a 'next' sample in the queue
     {
@@ -1826,16 +1827,21 @@ HRESULT MPEVRCustomPresenter::CheckForScheduledSample(LONGLONG *pTargetTime, LON
       pNextSample->GetSampleTime(&sNextTime);
       if ((sTime > 0) && (sNextTime > 0) && (sNextTime > sTime))
       {
-        GetDuration = sNextTime - sTime;
+        timeToNextSample = sNextTime - sTime;
       }
     }
+
+    int sRawFRRatio;
+    int sFrameRateRatio;
+    GetTempFRRatio(timeToNextSample, &sFrameRateRatio, &sRawFRRatio);
     
-    m_DetectedFrameTime = ((double)GetDuration)/10000000.0;    
+    m_DetectedFrameTime = ((double)sampleDuration)/10000000.0;    
     GetFrameRateRatio(); // update video to display FPS ratio data     
     if (m_DetectedFrameTime > DFT_THRESH)
     {
-      frameTime = GetDuration;
+      frameTime = sampleDuration;
     }
+    
 
     // nextSampleTime == 0 means there is no valid presentation time, so we present it immediately without vsync correction
     // When scrubbing always display at least every eighth frame - even if it's late
@@ -1860,7 +1866,7 @@ HRESULT MPEVRCustomPresenter::CheckForScheduledSample(LONGLONG *pTargetTime, LON
         LONGLONG offsetTime = delErr; //used to widen vsync correction window
         LONGLONG rasterDelay = GetDelayToRasterTarget( pTargetTime, &offsetTime);
 
-        if ((rasterDelay > 0) && !hasDropped)
+        if (rasterDelay > 0)
         {
            // Not at the correct point in the display raster, so sleep until pTargetTime time
           m_earliestPresentTime = 0;
@@ -1875,17 +1881,17 @@ HRESULT MPEVRCustomPresenter::CheckForScheduledSample(LONGLONG *pTargetTime, LON
         // We're within the raster timing limits, so present the sample or delay because it's too early...
         
         // Calculate minimum delay to next possible PresentSample() time
-        if ((m_frameRateRatio <= 1 && !m_bScrubbing) || (m_rawFRRatio <= 1 && m_bScrubbing || hasDropped))
+        if ((sFrameRateRatio <= 1 && !m_bScrubbing) || (sRawFRRatio <= 1 && m_bScrubbing))
         {
           m_earliestPresentTime = systemTime + offsetTime;
         }
         else
         {
-          m_earliestPresentTime = systemTime + (displayTime * (m_rawFRRatio - 1)) + offsetTime;
+          m_earliestPresentTime = systemTime + (displayTime * (sRawFRRatio - 1)) + offsetTime;
         }    
         
       
-        if (nextSampleTime > (max(frameTime, displayTime) + earlyLimit))
+        if (nextSampleTime > (max(timeToNextSample, displayTime) + earlyLimit))
         {      
           if ((systemTime - m_lastPresentTime < (500*10000)) && (m_lastPresentTime > 0))
           {
@@ -1962,7 +1968,7 @@ HRESULT MPEVRCustomPresenter::CheckForScheduledSample(LONGLONG *pTargetTime, LON
     {         
       m_earliestPresentTime = 0;
       *pTargetTime = 0;
-      hasDropped = true;
+//      hasDropped = true;
       
       if (!PopSample())
       {
@@ -3884,7 +3890,6 @@ void MPEVRCustomPresenter::ResetFrameStats()
   
   m_LastScheduledUncorrectedSampleTime = -1;
   m_frameRateRatio = 0;
-  //  m_frameRateRatX2 = 0;
   m_rawFRRatio = 0;
   m_dRawFRmult = 0.0;
 
@@ -4093,6 +4098,29 @@ double MPEVRCustomPresenter::GetRealFramePeriod()
   return rtimePerFrame;
 }
 
+void MPEVRCustomPresenter::GetTempFRRatio(LONGLONG sampleDuration, int* frameRateRatio, int* rawFRRatio)
+{
+  double rtimePerFrameMs = ((double)sampleDuration)/10000.0; // in ms
+  double currentDispCycle = GetDisplayCycle(); // in ms
+    
+  // Compensate to get actual time per frame after MPAR/ReClock speed up/down
+  rtimePerFrameMs /= m_fPCDMean;
+  
+  int F2DRatioP6 = (int)((rtimePerFrameMs * 1.015)/currentDispCycle); // Allow +1.5% tolerance
+  int F2DRatioN6 = (int)((rtimePerFrameMs * 0.985)/currentDispCycle); // Allow -1.5% tolerance
+
+  *rawFRRatio = F2DRatioP6;
+  
+  if (F2DRatioP6 == 0 || (F2DRatioP6 == F2DRatioN6) || (m_iFramesDrawn < FRAME_PROC_THRESH)) 
+  {
+    *frameRateRatio = 0;
+  }
+  else
+  {
+    *frameRateRatio = F2DRatioP6;
+  } 
+}
+
 void MPEVRCustomPresenter::GetFrameRateRatio()
 {
   double rtimePerFrameMs; // in ms
@@ -4125,24 +4153,11 @@ void MPEVRCustomPresenter::GetFrameRateRatio()
     m_dRawFRmult = (rtimePerFrameMs/(currentDispCycle * (double)F2DRatioP6)) - 1.0;
     m_frameRateRatio = F2DRatioP6;
   }
-
-  //  int F4DRatX2P6 = (int)((rtimePerFrameMs * 2.03)/currentDispCycle); // Allow +1.5% tolerance
-  //  int F4DRatX2N6 = (int)((rtimePerFrameMs * 1.97)/currentDispCycle); // Allow -1.5% tolerance
-  //
-  //  if (F4DRatX2P6 == 0 || (F4DRatX2P6 == F4DRatX2N6)) 
-  //  {
-  //    m_frameRateRatX2 = 0;
-  //  }
-  //  else
-  //  {
-  //    m_frameRateRatX2 = F4DRatX2P6;
-  //  }
  
   if ((m_DetectedFrameTime <= DFT_THRESH) || (m_iFramesDrawn < FRAME_PROC_THRESH) )
   {
     //Force to zero until playback has settled down and we know the real video frame rate
     m_frameRateRatio = 0;
-    // m_frameRateRatX2 = 0;
   }
 }
 
