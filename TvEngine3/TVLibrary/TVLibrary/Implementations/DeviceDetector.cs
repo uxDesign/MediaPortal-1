@@ -371,7 +371,7 @@ namespace TvLibrary.Implementations
         }
         else if (name.Equals("Elecard NWSource-Plus"))
         {
-          for (int i = 1; i <= iptvTunerCount; i++)
+          for (int i = 0; i < iptvTunerCount; i++)
           {
             TvCardDVBIP iptvTuner = new TvCardDVBIPElecard(connectedDevice, i);
             knownDevices.Add(iptvTuner.DevicePath);
@@ -388,7 +388,7 @@ namespace TvLibrary.Implementations
         }
         else if (name.Equals("MediaPortal IPTV Source Filter"))
         {
-          for (int i = 1; i <= iptvTunerCount; i++)
+          for (int i = 0; i < iptvTunerCount; i++)
           {
             TvCardDVBIP iptvTuner = new TvCardDVBIPBuiltIn(connectedDevice, i);
             knownDevices.Add(iptvTuner.DevicePath);
