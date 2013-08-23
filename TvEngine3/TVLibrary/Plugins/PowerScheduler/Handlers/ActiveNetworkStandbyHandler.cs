@@ -158,12 +158,12 @@ namespace TvEngine.PowerScheduler.Handlers
             setting.Set<bool>(enabled);
             if (enabled) // Start
             {
-              Log.Debug("NetworkMonitorHandler: Network monitor started");
+              Log.PSDebug("NetworkMonitorHandler: Network monitor started");
               StartNetworkMonitor();
             }
             else // Stop
             {
-              Log.Debug("NetworkMonitorHandler: Network monitor stopped");
+              Log.PSDebug("NetworkMonitorHandler: Network monitor stopped");
               StopNetworkMonitor();
             }
           }
@@ -176,7 +176,7 @@ namespace TvEngine.PowerScheduler.Handlers
             if (setting.Get<Int32>() != _idleLimit)
             {
               setting.Set<Int32>(_idleLimit);
-              Log.Debug("NetworkMonitorHandler: Idle limit in KB/s: {0}", _idleLimit);
+              Log.PSDebug("NetworkMonitorHandler: Idle limit in KB/s: {0}", _idleLimit);
             }
 
             // Check if away mode should be used
@@ -185,7 +185,7 @@ namespace TvEngine.PowerScheduler.Handlers
             if (setting.Get<bool>() != _useAwayMode)
             {
               setting.Set<bool>(_useAwayMode);
-              Log.Debug("NetworkMonitorHandler: Use away mode: {0}", _useAwayMode);
+              Log.PSDebug("NetworkMonitorHandler: Use away mode: {0}", _useAwayMode);
             }
           }
 
@@ -216,8 +216,8 @@ namespace TvEngine.PowerScheduler.Handlers
       }    
       catch (Exception ex)
       {
-        Log.Error("NetworkMonitorHandler: Exception in StartNetworkMonitor: {0}", ex);
-        Log.Info("NetworkMonitorHandler: Exception in StartNetworkMonitor: {0}", ex);
+        Log.PSError("NetworkMonitorHandler: Exception in StartNetworkMonitor: {0}", ex);
+        Log.PSInfo("NetworkMonitorHandler: Exception in StartNetworkMonitor: {0}", ex);
       }
     }
 
@@ -260,16 +260,16 @@ namespace TvEngine.PowerScheduler.Handlers
             adapter.Update();
             if ((adapter.DlSpeed >= _idleLimit) || (adapter.UlSpeed >= _idleLimit))
             {
-              // Log.Debug("NetworkMonitorHandler: standby prevented: {0}", adapter.Name);
-              // Log.Debug("NetworkMonitorHandler: dlSpeed: {0}", adapter.DlSpeed);
-              // Log.Debug("NetworkMonitorHandler: ulSpeed: {0}", adapter.UlSpeed);
+              // Log.PSDebug("NetworkMonitorHandler: standby prevented: {0}", adapter.Name);
+              // Log.PSDebug("NetworkMonitorHandler: dlSpeed: {0}", adapter.DlSpeed);
+              // Log.PSDebug("NetworkMonitorHandler: ulSpeed: {0}", adapter.UlSpeed);
               _preventers++;
             }
           }
           catch (Exception ex)
           {
-            Log.Error("NetworkMonitorHandler: Exception in updating adapter {0}: {1}", adapter.Name, ex.Message);
-            Log.Info("NetworkMonitorHandler: Exception in updating adapter {0}: {1}", adapter.Name, ex.Message);
+            Log.PSError("NetworkMonitorHandler: Exception in updating adapter {0}: {1}", adapter.Name, ex.Message);
+            Log.PSInfo("NetworkMonitorHandler: Exception in updating adapter {0}: {1}", adapter.Name, ex.Message);
           }
         }
 

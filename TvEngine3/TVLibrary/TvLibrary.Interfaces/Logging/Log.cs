@@ -50,7 +50,23 @@ namespace TvLibrary.Log
       /// <summary>
       /// epg logging
       /// </summary>
-      Epg
+      Epg,
+      /// <summary>
+      /// PS debug logging
+      /// </summary>
+      PSDebug,
+      /// <summary>
+      /// PS info logging
+      /// </summary>
+      PSInfo,
+      /// <summary>
+      /// PS warn logging
+      /// </summary>
+      PSWarn,
+      /// <summary>
+      /// PS error logging
+      /// </summary>
+      PSError,
     }
 
     /// <summary>
@@ -193,6 +209,46 @@ namespace TvLibrary.Log
     public static void Epg(string format, params object[] arg)
     {
       WriteToFile(LogType.Epg, format, arg);
+    }
+
+    /// <summary>
+    /// Logs the message to the PS debug log
+    /// </summary>
+    /// <param name="format">The format.</param>
+    /// <param name="arg">The arg.</param>
+    public static void PSDebug(string format, params object[] arg)
+    {
+      WriteToFile(LogType.PSDebug, format, arg);
+    }
+
+    /// <summary>
+    /// Logs the message to the PS info log
+    /// </summary>
+    /// <param name="format">The format.</param>
+    /// <param name="arg">The arg.</param>
+    public static void PSInfo(string format, params object[] arg)
+    {
+      WriteToFile(LogType.PSInfo, format, arg);
+    }
+
+    /// <summary>
+    /// Logs the message to the PS warn log
+    /// </summary>
+    /// <param name="format">The format.</param>
+    /// <param name="arg">The arg.</param>
+    public static void PSWarn(string format, params object[] arg)
+    {
+      WriteToFile(LogType.PSWarn, format, arg);
+    }
+
+    /// <summary>
+    /// Logs the message to the PS error log
+    /// </summary>
+    /// <param name="format">The format.</param>
+    /// <param name="arg">The arg.</param>
+    public static void PSError(string format, params object[] arg)
+    {
+      WriteToFile(LogType.PSError, format, arg);
     }
 
     /// <summary>
@@ -428,10 +484,30 @@ namespace TvLibrary.Log
           // implementation
           switch (logType)
           {
-            case LogType.Debug: CommonLogger.Instance.Debug(CommonLogType.Log, format, arg); break;
-            case LogType.Info: CommonLogger.Instance.Info(CommonLogType.Log, format, arg); break;
-            case LogType.Error:CommonLogger.Instance.Error(CommonLogType.Log, format, arg); break;
-            case LogType.Epg: CommonLogger.Instance.Info(CommonLogType.EPG, format, arg); break;
+            case LogType.Debug:
+              CommonLogger.Instance.Debug(CommonLogType.Log, format, arg);
+              break;
+            case LogType.Info:
+              CommonLogger.Instance.Info(CommonLogType.Log, format, arg);
+              break;
+            case LogType.Error:
+              CommonLogger.Instance.Error(CommonLogType.Log, format, arg);
+              break;
+            case LogType.Epg:
+              CommonLogger.Instance.Info(CommonLogType.EPG, format, arg);
+              break;
+            case LogType.PSDebug:
+              CommonLogger.Instance.Debug(CommonLogType.PS, format, arg);
+              break;
+            case LogType.PSInfo:
+              CommonLogger.Instance.Info(CommonLogType.PS, format, arg);
+              break;
+            case LogType.PSWarn:
+              CommonLogger.Instance.Warn(CommonLogType.PS, format, arg);
+              break;
+            case LogType.PSError:
+              CommonLogger.Instance.Error(CommonLogType.PS, format, arg);
+              break;
           }
           
 

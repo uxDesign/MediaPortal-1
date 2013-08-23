@@ -107,7 +107,7 @@ namespace TvEngine.PowerScheduler.Handlers
         {
           MonitoringType = ShareType.UserFromClientUsingShare;
         }
-        Log.Debug("ActiveSharesHandler: Monitor connections to share '{0}' from client '{1}' by user '{2}' (Type '{3}')", _share, _client, _user, MonitoringType);
+        Log.PSDebug("ActiveSharesHandler: Monitor connections to share '{0}' from client '{1}' by user '{2}' (Type '{3}')", _share, _client, _user, MonitoringType);
       }
 
       internal bool Equals(ServerConnection serverConnection)
@@ -226,7 +226,7 @@ namespace TvEngine.PowerScheduler.Handlers
           if (setting.Get<bool>() != _enabled)
           {
             setting.Set<bool>(_enabled);
-            Log.Debug("ActiveSharesHandler: Monitoring active shares {0}", _enabled ? "enabled" : "disabled");
+            Log.PSDebug("ActiveSharesHandler: Monitoring active shares {0}", _enabled ? "enabled" : "disabled");
           }
 
           if (_enabled)
@@ -260,7 +260,7 @@ namespace TvEngine.PowerScheduler.Handlers
           if (setting.Get<bool>() != _useAwayMode)
           {
             setting.Set<bool>(_useAwayMode);
-            Log.Debug("ActiveSharesHandler: Use away mode: {0}", _useAwayMode);
+            Log.PSDebug("ActiveSharesHandler: Use away mode: {0}", _useAwayMode);
           }
 
           break;
@@ -325,7 +325,7 @@ namespace TvEngine.PowerScheduler.Handlers
               {
                 if (shareBeingMonitored.Equals(connection))
                 {
-                  Log.Debug("{0}: Standby is not allowed due to connection to share '{1}' from client '{2}' by user '{3}'", HandlerName, connection.ShareName, connection.ComputerName, connection.UserName);
+                  Log.PSDebug("{0}: Standby is not allowed due to connection to share '{1}' from client '{2}' by user '{3}'", HandlerName, connection.ShareName, connection.ComputerName, connection.UserName);
                   return _useAwayMode ? StandbyMode.AwayModeRequested : StandbyMode.StandbyPrevented;
                 }
               }
