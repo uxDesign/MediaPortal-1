@@ -248,10 +248,9 @@ void LogDebug(const wchar_t *fmt, ...)
   SYSTEMTIME systemTime;
   GetLocalTime(&systemTime);
   wchar_t msg[5000];
-  swprintf_s(msg, 5000,L"%02.2d-%02.2d-%04.4d %02.2d:%02.2d:%02.2d.%03.3d [%x] [%x]%s\n",
-    systemTime.wDay, systemTime.wMonth, systemTime.wYear,
-    systemTime.wHour,systemTime.wMinute,systemTime.wSecond,
-    systemTime.wMilliseconds,
+  swprintf_s(msg, 5000,L"[%04.4d-%02.2d-%02.2d %02.2d:%02.2d:%02.2d,%03.3d] [%x] [%x] - %s\n",
+    systemTime.wYear, systemTime.wMonth, systemTime.wDay,
+    systemTime.wHour, systemTime.wMinute, systemTime.wSecond, systemTime.wMilliseconds,
     instanceID,
     GetCurrentThreadId(),
     buffer);

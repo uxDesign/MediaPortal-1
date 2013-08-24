@@ -1127,7 +1127,7 @@ void CEpgDecoder::ResetEPG()
 	m_prevEventIndex=-1;
 
 	m_mapEPG.clear();
-	//m_bParseEPG=false;
+	m_bParseEPG=false;
 	m_bEpgDone=false;
     m_bSorted=false;
 	m_epgTimeout=time(NULL);
