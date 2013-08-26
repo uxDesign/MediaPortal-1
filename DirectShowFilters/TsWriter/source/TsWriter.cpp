@@ -31,6 +31,7 @@
 #include <tchar.h>
 #include <queue>
 #include "TsWriter.h"
+#include "version.h"
 #include "..\..\shared\tsheader.h"
 #include "..\..\shared\DebugSettings.h"
 
@@ -513,7 +514,8 @@ CMpTs::CMpTs(LPUNKNOWN pUnk, HRESULT *phr)
   LogDebug("=================== New filter instance =========================");
   LogDebug("  Logging format: Date Time [InstanceID] [ThreadID] Message....  ");
   LogDebug("=================================================================");
-  LogDebug("--------------- EXP-TsWriter_async_logging ----------------------");
+  LogDebug("---------------------- v%d.%d.%d.0 ------------------------------", TSWRITER_MAJOR_VERSION,TSWRITER_MID_VERSION,TSWRITER_VERSION);
+  LogDebug("--- TsWriter with async logging and V3 EPG deadlock mods --------");
   LogDebug(" ");  
   		
 	b_dumpRawPakets=false;

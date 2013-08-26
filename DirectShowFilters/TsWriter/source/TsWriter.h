@@ -37,6 +37,7 @@ class CMpTsFilterPin;
 class CMpTs;
 class CMpTsFilter;
 
+// {FC50BED6-FE38-42D3-B831-771690091A6E}
 DEFINE_GUID(CLSID_MpTsFilter, 0xfc50bed6, 0xfe38, 0x42d3, 0xb8, 0x31, 0x77, 0x16, 0x90, 0x9, 0x1a, 0x6e);
 
 // {5EB9F392-E7FD-4071-8E44-3590E5E767BA}
