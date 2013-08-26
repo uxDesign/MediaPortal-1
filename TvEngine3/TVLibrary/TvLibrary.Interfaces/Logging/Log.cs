@@ -29,46 +29,26 @@ using MediaPortal.Common.Utils.Logger;
 namespace TvLibrary.Log
 {
   /// <summary>
+  /// Type of log (default is "Log")
+  /// </summary>
+  public enum LogType
+  {
+    Log,
+    Recorder,
+    Error,
+    EPG,
+    VMR9,
+    Config,
+    MusicShareWatcher,
+    WebEPG,
+    PS
+  }
+
+  /// <summary>
   /// An implementation of a log mechanism for the GUI library.
   /// </summary>
   public class Log
   {
-    private enum LogType
-    {
-      /// <summary>
-      /// Debug logging
-      /// </summary>
-      Debug,
-      /// <summary>
-      /// normal logging
-      /// </summary>
-      Info,
-      /// <summary>
-      /// error logging
-      /// </summary>
-      Error,
-      /// <summary>
-      /// epg logging
-      /// </summary>
-      Epg,
-      /// <summary>
-      /// PS debug logging
-      /// </summary>
-      PSDebug,
-      /// <summary>
-      /// PS info logging
-      /// </summary>
-      PSInfo,
-      /// <summary>
-      /// PS warn logging
-      /// </summary>
-      PSWarn,
-      /// <summary>
-      /// PS error logging
-      /// </summary>
-      PSError,
-    }
-
     /// <summary>
     /// Configure after how many days the log file shall be rotated when a new line is added
     /// </summary>
@@ -151,7 +131,7 @@ namespace TvLibrary.Log
       //		MethodBase methodBase = stackFrame.GetMethod();
       //		WriteFile(LogType.Log, "{0}", methodBase.Name);
 
-      WriteToFile(LogType.Info, format, arg);
+      WriteToFile(LogLevel.Information, format, arg);
     }
 
     /// <summary>
@@ -168,7 +148,7 @@ namespace TvLibrary.Log
       //		MethodBase methodBase = stackFrame.GetMethod();
       //		WriteFile(LogType.Log, "{0}", methodBase.Name);
       string log = String.Format("{0:X} {1}", Thread.CurrentThread.ManagedThreadId, String.Format(format, arg));
-      WriteToFile(LogType.Info, log);
+      WriteToFile(LogLevel.Information, log);
     }
 
     /// <summary>
@@ -178,7 +158,39 @@ namespace TvLibrary.Log
     /// <param name="arg">The arg.</param>
     public static void Error(string format, params object[] arg)
     {
-      WriteToFile(LogType.Error, format, arg);
+      WriteToFile(LogLevel.Error, format, arg);
+    }
+
+    /// <summary>
+    /// Logs an error message to the log specified
+    /// </summary>
+    /// <param name="logType">logger</param>
+    /// <param name="format">message format string</param>
+    /// <param name="arg">message arguments</param>
+    public static void Error(LogType logType, string format, params object[] arg)
+    {
+      WriteToFile(logType, LogLevel.Error, format, arg);
+    }
+
+    /// <summary>
+    /// Logs the message to the warning file
+    /// </summary>
+    /// <param name="format">The format.</param>
+    /// <param name="arg">The arg.</param>
+    public static void Warn(string format, params object[] arg)
+    {
+      WriteToFile(LogLevel.Warning, format, arg);
+    }
+
+    /// <summary>
+    /// Logs a warn message to the log specified
+    /// </summary>
+    /// <param name="logType">logger</param>
+    /// <param name="format">message format string</param>
+    /// <param name="arg">message arguments</param>
+    public static void Warn(LogType logType, string format, params object[] arg)
+    {
+      WriteToFile(logType, LogLevel.Warning, format, arg);
     }
 
     /// <summary>
@@ -188,7 +200,18 @@ namespace TvLibrary.Log
     /// <param name="arg">The arg.</param>
     public static void Info(string format, params object[] arg)
     {
-      WriteToFile(LogType.Info, format, arg);
+      WriteToFile(LogLevel.Information, format, arg);
+    }
+
+    /// <summary>
+    /// Logs an info message to the log specified
+    /// </summary>
+    /// <param name="logType">logType</param>
+    /// <param name="format">message format string</param>
+    /// <param name="arg">message arguments</param>
+    public static void Info(LogType logType, string format, params object[] arg)
+    {
+      WriteToFile(logType, LogLevel.Information, format, arg);
     }
 
     /// <summary>
@@ -198,7 +221,18 @@ namespace TvLibrary.Log
     /// <param name="arg">The arg.</param>
     public static void Debug(string format, params object[] arg)
     {
-      WriteToFile(LogType.Debug, format, arg);
+      WriteToFile(LogLevel.Debug, format, arg);
+    }
+
+    /// <summary>
+    /// Logs a debug message to the log specified
+    /// </summary>
+    /// <param name="logType">logType</param>
+    /// <param name="format">message format string</param>
+    /// <param name="arg">message arguments</param>
+    public static void Debug(LogType logType, string format, params object[] arg)
+    {
+      WriteToFile(logType, LogLevel.Debug, format, arg);
     }
 
     /// <summary>
@@ -208,47 +242,7 @@ namespace TvLibrary.Log
     /// <param name="arg">The arg.</param>
     public static void Epg(string format, params object[] arg)
     {
-      WriteToFile(LogType.Epg, format, arg);
-    }
-
-    /// <summary>
-    /// Logs the message to the PS debug log
-    /// </summary>
-    /// <param name="format">The format.</param>
-    /// <param name="arg">The arg.</param>
-    public static void PSDebug(string format, params object[] arg)
-    {
-      WriteToFile(LogType.PSDebug, format, arg);
-    }
-
-    /// <summary>
-    /// Logs the message to the PS info log
-    /// </summary>
-    /// <param name="format">The format.</param>
-    /// <param name="arg">The arg.</param>
-    public static void PSInfo(string format, params object[] arg)
-    {
-      WriteToFile(LogType.PSInfo, format, arg);
-    }
-
-    /// <summary>
-    /// Logs the message to the PS warn log
-    /// </summary>
-    /// <param name="format">The format.</param>
-    /// <param name="arg">The arg.</param>
-    public static void PSWarn(string format, params object[] arg)
-    {
-      WriteToFile(LogType.PSWarn, format, arg);
-    }
-
-    /// <summary>
-    /// Logs the message to the PS error log
-    /// </summary>
-    /// <param name="format">The format.</param>
-    /// <param name="arg">The arg.</param>
-    public static void PSError(string format, params object[] arg)
-    {
-      WriteToFile(LogType.PSError, format, arg);
+      WriteToFile(LogType.EPG, LogLevel.Information, format, arg);
     }
 
     /// <summary>
@@ -258,7 +252,7 @@ namespace TvLibrary.Log
     /// <param name="arg">The arg.</param>
     public static void WriteFile(string format, params object[] arg)
     {
-      WriteToFile(LogType.Info, format, arg);
+      WriteToFile(LogLevel.Information, format, arg);
     }
 
     ///<summary>
@@ -290,16 +284,12 @@ namespace TvLibrary.Log
       string Path = GetPathName();
       switch (logType)
       {
-        case LogType.Debug:
-        case LogType.Info:
-          return String.Format(@"{0}\log\tv.log", Path);
-
         case LogType.Error:
           return String.Format(@"{0}\log\error.log", Path);
-
-        case LogType.Epg:
+        case LogType.EPG:
           return String.Format(@"{0}\log\epg.log", Path);
-
+        case LogType.PS:
+          return String.Format(@"{0}\log\ps.log", Path);
         default:
           return String.Format(@"{0}\log\tv.log", Path);
       }
@@ -336,10 +326,10 @@ namespace TvLibrary.Log
       {
         List<string> physicalLogFiles = new List<string>(3);
         // Get all log types
-        foreach (LogType logtype in Enum.GetValues(typeof (LogType)))
+        foreach (LogType logType in Enum.GetValues(typeof(LogType)))
         {
           // Get full path for log
-          string name = GetFileName(logtype);
+          string name = GetFileName(logType);
           // Since e.g. debug and info might share the same file make sure we only rotate once
           if (!physicalLogFiles.Contains(name))
           {
@@ -467,9 +457,20 @@ namespace TvLibrary.Log
     /// <param name="logType">the type of logging.</param>
     /// <param name="format">The format.</param>
     /// <param name="arg">The arg.</param>
-    private static void WriteToFile(LogType logType, string format, params object[] arg)
+    private static void WriteToFile(LogLevel logLevel, string format, params object[] arg)
     {
-      lock (typeof (Log))
+      WriteToFile(LogType.Log, logLevel, format, arg);
+    }
+
+    /// <summary>
+    /// Writes the file.
+    /// </summary>
+    /// <param name="logType">the type of logging.</param>
+    /// <param name="format">The format.</param>
+    /// <param name="arg">The arg.</param>
+    private static void WriteToFile(LogType logType, LogLevel logLevel, string format, params object[] arg)
+    {
+      lock (typeof(Log))
       {
         try
         {
@@ -482,53 +483,51 @@ namespace TvLibrary.Log
           CacheLogLine(logLine);
 
           // implementation
-          switch (logType)
+          switch (logLevel)
           {
-            case LogType.Debug:
-              CommonLogger.Instance.Debug(CommonLogType.Log, format, arg);
+            case LogLevel.Debug:
+              CommonLogger.Instance.Debug(ConvertToCommonLogType(logType), format, arg);
               break;
-            case LogType.Info:
-              CommonLogger.Instance.Info(CommonLogType.Log, format, arg);
+            case LogLevel.Information:
+              CommonLogger.Instance.Info(ConvertToCommonLogType(logType), format, arg);
               break;
-            case LogType.Error:
-              CommonLogger.Instance.Error(CommonLogType.Log, format, arg);
+            case LogLevel.Warning:
+              CommonLogger.Instance.Warn(ConvertToCommonLogType(logType), format, arg);
               break;
-            case LogType.Epg:
-              CommonLogger.Instance.Info(CommonLogType.EPG, format, arg);
-              break;
-            case LogType.PSDebug:
-              CommonLogger.Instance.Debug(CommonLogType.PS, format, arg);
-              break;
-            case LogType.PSInfo:
-              CommonLogger.Instance.Info(CommonLogType.PS, format, arg);
-              break;
-            case LogType.PSWarn:
-              CommonLogger.Instance.Warn(CommonLogType.PS, format, arg);
-              break;
-            case LogType.PSError:
-              CommonLogger.Instance.Error(CommonLogType.PS, format, arg);
+            case LogLevel.Error:
+              CommonLogger.Instance.Error(ConvertToCommonLogType(logType), format, arg);
               break;
           }
-          
-
-          /*
-          string logFileName = GetFileName(logType);
-          if (CheckLogPrepared(logFileName))
-          {
-            using (StreamWriter writer = new StreamWriter(logFileName, true, Encoding.UTF8))
-            {
-              string threadName = Thread.CurrentThread.Name;
-              int threadId = Thread.CurrentThread.ManagedThreadId;
-
-              writer.BaseStream.Seek(0, SeekOrigin.End); // set the file pointer to the end of file
-              writer.WriteLine("{0:yyyy-MM-dd HH:mm:ss.ffffff} [{1}({2})]: {3}", DateTime.Now, threadName, threadId,
-                               logLine);
-              writer.Close();
-            }
-          }
-           */
         }
-        catch (Exception) {}
+        catch (Exception ex)
+        {
+          CommonLogger.Instance.Error(CommonLogType.Error, "Error in writing log entry", ex);
+        }
+      }
+    }
+
+    private static CommonLogType ConvertToCommonLogType(LogType logType)
+    {
+      switch (logType)
+      {
+        case LogType.Recorder:
+          return CommonLogType.Recorder;
+        case LogType.Error:
+          return CommonLogType.Error;
+        case LogType.EPG:
+          return CommonLogType.EPG;
+        case LogType.VMR9:
+          return CommonLogType.VMR9;
+        case LogType.Config:
+          return CommonLogType.Config;
+        case LogType.MusicShareWatcher:
+          return CommonLogType.MusicShareWatcher;
+        case LogType.WebEPG:
+          return CommonLogType.WebEPG;
+        case LogType.PS:
+          return CommonLogType.PS;
+        default:
+          return CommonLogType.Log;
       }
     }
 
@@ -543,7 +542,6 @@ namespace TvLibrary.Log
         default: return CommonLogLevel.All;
       }
     }
-
 
     #endregion
   }

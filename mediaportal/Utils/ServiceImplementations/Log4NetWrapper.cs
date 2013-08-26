@@ -92,6 +92,7 @@ namespace MediaPortal.ServiceImplementations
         case LogType.VMR9: return CommonLogType.VMR9;
         case LogType.MusicShareWatcher: return CommonLogType.MusicShareWatcher;
         case LogType.WebEPG: return CommonLogType.WebEPG;
+        case LogType.PS: return CommonLogType.PS;
         default: return CommonLogType.Log;
       }
     }
