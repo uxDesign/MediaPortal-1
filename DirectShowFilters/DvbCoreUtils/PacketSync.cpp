@@ -87,19 +87,51 @@ void CPacketSync::OnRawData(byte* pData, int nDataLen)
 void CPacketSync::OnRawData2(byte* pData, int nDataLen)
 {
   int syncOffset=0;
+  int tempBuffOffset=0;
   bool goodPacket = false;
-  if (m_tempBufferPos > 0 )
+
+
+  if (m_tempBufferPos > 0 ) //We have some residual data from the last call
   {
-    if (pData[TS_PACKET_LEN - m_tempBufferPos]==TS_PACKET_SYNC)
+    if (nDataLen <= (TS_PACKET_LEN - m_tempBufferPos)) 
     {
-      syncOffset = TS_PACKET_LEN - m_tempBufferPos;
-      if (syncOffset) memcpy(&m_tempBuffer[m_tempBufferPos], pData, syncOffset);
-      OnTsPacket(m_tempBuffer);
+      //not enough data to get to next packet start, so add the data to the tempBuffer
+      memcpy(&m_tempBuffer[m_tempBufferPos], pData, nDataLen);
+      m_tempBufferPos += nDataLen;
+      return ;
     }
-    m_tempBufferPos = 0;
+
+    syncOffset = TS_PACKET_LEN - m_tempBufferPos;
+    while ((nDataLen > syncOffset) && (m_tempBufferPos > tempBuffOffset)) 
+    {
+      if ((pData[syncOffset]==TS_PACKET_SYNC) &&
+          (m_tempBuffer[tempBuffOffset]==TS_PACKET_SYNC)) //found a good packet
+      {
+        if (syncOffset) 
+        {
+          memcpy(&m_tempBuffer[m_tempBufferPos], pData, syncOffset);
+        }
+        OnTsPacket(&m_tempBuffer[tempBuffOffset]);
+        goodPacket = true;
+        break;
+      }
+      else
+      {
+        syncOffset++;
+        tempBuffOffset++;
+      }
+    }    
+    
+    if (!goodPacket)
+    {
+      //Packet not found, so search from the start of pData buffer
+      syncOffset = 0;
+    }
   }
 
-  while ((syncOffset + TS_PACKET_LEN) < nDataLen)
+  m_tempBufferPos = 0; //We have consumed the residual data
+
+  while (nDataLen > (syncOffset + TS_PACKET_LEN)) //minimum of TS_PACKET_LEN+1 bytes available
   {
     if (!goodPacket && (syncOffset > (TS_PACKET_LEN * 8)) )
     {
@@ -117,21 +149,13 @@ void CPacketSync::OnRawData2(byte* pData, int nDataLen)
     else
       syncOffset++;
   }
-
-  // Here we have less than 188+1 bytes
-  while (syncOffset < nDataLen)
+  
+  // We have less than TS_PACKET_LEN+1 bytes available - store residual data for next time
+  m_tempBufferPos= nDataLen - syncOffset;
+  if (m_tempBufferPos)
   {
-    if (pData[syncOffset] == TS_PACKET_SYNC)
-    {
-      m_tempBufferPos= nDataLen - syncOffset;
-      memcpy( m_tempBuffer, &pData[syncOffset], m_tempBufferPos );
-      return ;
-    }
-    else
-      syncOffset++;
+    memcpy( m_tempBuffer, &pData[syncOffset], m_tempBufferPos );
   }
-
-  m_tempBufferPos=0 ;
 }
 
 void CPacketSync::OnTsPacket(byte* tsPacket)
