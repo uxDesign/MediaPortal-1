@@ -874,9 +874,11 @@ STDMETHODIMP CTsReaderFilter::Stop()
   ReleaseAVSyncClockInterface();
 
   { //Context for CAutoLock
+    LogDebug("CTsReaderFilter::Stop() 2");
     CAutoLock dLock (&m_DurationThreadLock);
+    LogDebug("CTsReaderFilter::Stop() 3");
     CAutoLock rLock (&m_ReadAheadLock);
-    LogDebug("CTsReaderFilter::Stop()  -stop source, state %d", m_State);
+    LogDebug("CTsReaderFilter::Stop() 4 -stop source, state %d", m_State);
     //stop filter
     hr = CSource::Stop();
     WakeThread(); //Encourage duration thread to see 'stopped' state
