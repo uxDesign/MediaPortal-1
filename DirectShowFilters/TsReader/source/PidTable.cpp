@@ -198,6 +198,8 @@ LPCTSTR CPidTable::StreamFormatAsString(int streamType)
 		return _T("DTS-HD");
 	case 0x86:
 		return _T("DTS-HD Master Audio");
+  case 0x87:
+    return _T("DD+");
   case 0x0f:
 		return _T("AAC");
 	case 0x11:

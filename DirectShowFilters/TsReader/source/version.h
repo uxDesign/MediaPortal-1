@@ -1,4 +1,4 @@
-// Copyright (C) 2005-2012 Team MediaPortal
+// Copyright (C) 2005-2013 Team MediaPortal
 // http://www.team-mediaportal.com
 // 
 // MediaPortal is free software: you can redistribute it and/or modify
@@ -16,11 +16,12 @@
 
 
 // Version numbers (used for resource and log display)
-#define TSREADER_MAJOR_VERSION 0,0
+#define TSREADER_MAJOR_VERSION 0
+#define TSREADER_MID_VERSION 0
 #define TSREADER_VERSION 77
 #define TSREADER_VERSION_STR "0.0.77.0\0"
 
-#define MP_VERSION 1,3,0,0
-#define MP_VERSION_STR "1.3.0.0\0"
+#define MP_VERSION 1,5,000,0
+#define MP_VERSION_STR "1.5.000.0\0"
 
 

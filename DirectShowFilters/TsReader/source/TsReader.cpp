@@ -226,10 +226,9 @@ void LogDebug(const char *fmt, ...)
   SYSTEMTIME systemTime;
   GetLocalTime(&systemTime);
   char msg[5000];
-  sprintf_s(msg, 5000,"%02.2d-%02.2d-%04.4d %02.2d:%02.2d:%02.2d.%03.3d [%8x] [%4x] %s\n",
-    systemTime.wDay, systemTime.wMonth, systemTime.wYear,
-    systemTime.wHour,systemTime.wMinute,systemTime.wSecond,
-    systemTime.wMilliseconds,
+  sprintf_s(msg, 5000,"[%04.4d-%02.2d-%02.2d %02.2d:%02.2d:%02.2d,%03.3d] [%8x] [%4x] - %s\n",
+    systemTime.wYear, systemTime.wMonth, systemTime.wDay,
+    systemTime.wHour, systemTime.wMinute, systemTime.wSecond, systemTime.wMilliseconds, 
     instanceID,
     GetCurrentThreadId(),
     buffer);
@@ -322,8 +321,7 @@ CTsReaderFilter::CTsReaderFilter(IUnknown *pUnk, HRESULT *phr):
   instanceID = this;  
 
   LogDebug("----- Experimental MPAR control version ----- instance 0x%x", this);
-  LogDebug("---------------- v0.0.%d XXX -------------------", TSREADER_VERSION);
-    
+  LogDebug("------------- v%d.%d.%d.0 XXX -------------", TSREADER_MAJOR_VERSION, TSREADER_MID_VERSION, TSREADER_VERSION);
   
   m_fileReader=NULL;
   m_fileDuration=NULL;
