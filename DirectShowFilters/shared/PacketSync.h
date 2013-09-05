@@ -38,4 +38,5 @@ public:
 private:
   byte  m_tempBuffer[400];
   int   m_tempBufferPos;
+  int   m_syncPosnCount;
 };

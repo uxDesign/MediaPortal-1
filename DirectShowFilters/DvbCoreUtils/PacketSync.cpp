@@ -25,7 +25,8 @@
 
 CPacketSync::CPacketSync(void)
 {
-  m_tempBufferPos=-1;
+  m_tempBufferPos = -1;
+  m_syncPosnCount = -1;
 }
 
 CPacketSync::~CPacketSync(void)
@@ -34,7 +35,8 @@ CPacketSync::~CPacketSync(void)
 
 void CPacketSync::Reset(void)
 {
-  m_tempBufferPos=-1;
+  m_tempBufferPos = -1;
+  m_syncPosnCount = -1;
 }
 
 // Ambass : Now, need to have 2 consecutive TS_PACKET_SYNC to try avoiding bad synchronisation.  
@@ -105,13 +107,27 @@ void CPacketSync::OnRawData2(byte* pData, int nDataLen)
 
     while ((nDataLen > syncOffset) && (m_tempBufferPos > tempBuffOffset)) 
     {
-      if ((pData[syncOffset]==TS_PACKET_SYNC) &&
-          (m_tempBuffer[tempBuffOffset]==TS_PACKET_SYNC)) //found a good packet
+      if ((m_tempBuffer[tempBuffOffset]==TS_PACKET_SYNC) &&
+          (pData[syncOffset]==TS_PACKET_SYNC)) //found a good packet
       {
         if (syncOffset) 
         {
           memcpy(&m_tempBuffer[m_tempBufferPos], pData, syncOffset);
         }
+        OnTsPacket(&m_tempBuffer[tempBuffOffset]);
+        goodPacket = true;
+        m_syncPosnCount = 0;
+        break;
+      }
+      else if ((m_syncPosnCount == 0) &&
+               ((m_tempBuffer[tempBuffOffset]==TS_PACKET_SYNC) ||
+                (pData[syncOffset]==TS_PACKET_SYNC))) //found a good packet
+      {
+        if (syncOffset) 
+        {
+          memcpy(&m_tempBuffer[m_tempBufferPos], pData, syncOffset);
+        }
+        m_tempBuffer[tempBuffOffset] = TS_PACKET_SYNC;
         OnTsPacket(&m_tempBuffer[tempBuffOffset]);
         goodPacket = true;
         break;
@@ -120,6 +136,10 @@ void CPacketSync::OnRawData2(byte* pData, int nDataLen)
       {
         syncOffset++;
         tempBuffOffset++;
+        if (m_syncPosnCount >= 0)
+        {
+          ++m_syncPosnCount %= TS_PACKET_LEN;
+        }
       }
     }    
     
@@ -151,18 +171,35 @@ void CPacketSync::OnRawData2(byte* pData, int nDataLen)
     if (!goodPacket && (syncOffset > (TS_PACKET_LEN * 8)) )
     {
       //No sync - abandon the buffer
-      m_tempBufferPos = -1;
+      Reset();
       return;
     }
+    
     if ((pData[syncOffset] == TS_PACKET_SYNC) &&
         (pData[syncOffset + TS_PACKET_LEN]==TS_PACKET_SYNC))
     {
       OnTsPacket( &pData[syncOffset] );
       syncOffset += TS_PACKET_LEN;
       goodPacket = true;
+      m_syncPosnCount = 0;
+    }
+    else if ((m_syncPosnCount == 0) &&
+             ((pData[syncOffset] == TS_PACKET_SYNC) ||
+              (pData[syncOffset + TS_PACKET_LEN]==TS_PACKET_SYNC)))
+    {
+      pData[syncOffset] = TS_PACKET_SYNC;
+      OnTsPacket( &pData[syncOffset] );
+      syncOffset += TS_PACKET_LEN;
+      goodPacket = true;
     }
     else
+    {
       syncOffset++;
+      if (m_syncPosnCount >= 0)
+      {
+        ++m_syncPosnCount %= TS_PACKET_LEN;
+      }
+    }
   }
   
   // We have less than TS_PACKET_LEN+1 bytes available - store residual data for next time
