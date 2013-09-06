@@ -36,6 +36,7 @@ public:
   void Reset(void);
 
 private:
-  byte  m_tempBuffer[200];
+  byte  m_tempBuffer[400];
   int   m_tempBufferPos;
+  int   m_syncPosnCount;
 };

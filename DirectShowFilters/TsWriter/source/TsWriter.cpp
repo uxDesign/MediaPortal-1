@@ -462,7 +462,7 @@ STDMETHODIMP CMpTsFilterPin::Receive(IMediaSample *pSample)
 		if (m_rawPaketWriter!=NULL)
 			if (!m_rawPaketWriter->IsFileInvalid())
 				m_rawPaketWriter->Write(pbData,sampleLen);
-		OnRawData(pbData, sampleLen);
+		OnRawData2(pbData, sampleLen);
 	}
 	catch(...)
 	{
@@ -511,11 +511,11 @@ CMpTs::CMpTs(LPUNKNOWN pUnk, HRESULT *phr)
   instanceID = this;
   
   LogDebug(" ");
-  LogDebug("=================== New filter instance =========================");
-  LogDebug("  Logging format: Date Time [InstanceID] [ThreadID] Message....  ");
-  LogDebug("=================================================================");
-  LogDebug("---------------------- v%d.%d.%d.0 ------------------------------", TSWRITER_MAJOR_VERSION,TSWRITER_MID_VERSION,TSWRITER_VERSION);
-  LogDebug("--- TsWriter with async logging and V3 EPG deadlock mods --------");
+  LogDebug("=================== New filter instance ===========================");
+  LogDebug("  Logging format: [Date Time] [InstanceID] [ThreadID] Message....  ");
+  LogDebug("===================================================================");
+  LogDebug("---------------------- v%d.%d.%d.0 --------------------------------", TSWRITER_MAJOR_VERSION,TSWRITER_MID_VERSION,TSWRITER_VERSION);
+  LogDebug("--- TsWriter with async logging and V3 EPG deadlock mods ----------");
   LogDebug(" ");  
   		
 	b_dumpRawPakets=false;
