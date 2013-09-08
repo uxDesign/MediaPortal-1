@@ -26,7 +26,7 @@
 CPacketSync::CPacketSync(void)
 {
   m_tempBufferPos = -1;
-  m_syncPosnCount = -1;
+  m_bInSync = false;
 }
 
 CPacketSync::~CPacketSync(void)
@@ -36,7 +36,7 @@ CPacketSync::~CPacketSync(void)
 void CPacketSync::Reset(void)
 {
   m_tempBufferPos = -1;
-  m_syncPosnCount = -1;
+  m_bInSync = false;
 }
 
 // Ambass : Now, need to have 2 consecutive TS_PACKET_SYNC to try avoiding bad synchronisation.  
@@ -116,10 +116,10 @@ void CPacketSync::OnRawData2(byte* pData, int nDataLen)
         }
         OnTsPacket(&m_tempBuffer[tempBuffOffset]);
         goodPacket = true;
-        m_syncPosnCount = 0;
+        m_bInSync = true;
         break;
       }
-      else if ((m_syncPosnCount == 0) &&
+      else if (m_bInSync &&
                ((m_tempBuffer[tempBuffOffset]==TS_PACKET_SYNC) ||
                 (pData[syncOffset]==TS_PACKET_SYNC))) //found a good packet
       {
@@ -128,18 +128,17 @@ void CPacketSync::OnRawData2(byte* pData, int nDataLen)
           memcpy(&m_tempBuffer[m_tempBufferPos], pData, syncOffset);
         }
         m_tempBuffer[tempBuffOffset] = TS_PACKET_SYNC;
+        pData[syncOffset] = TS_PACKET_SYNC;
         OnTsPacket(&m_tempBuffer[tempBuffOffset]);
         goodPacket = true;
+        m_bInSync = false;
         break;
       }
       else
       {
         syncOffset++;
         tempBuffOffset++;
-        if (m_syncPosnCount >= 0)
-        {
-          ++m_syncPosnCount %= TS_PACKET_LEN;
-        }
+        m_bInSync = false;
       }
     }    
     
@@ -181,24 +180,23 @@ void CPacketSync::OnRawData2(byte* pData, int nDataLen)
       OnTsPacket( &pData[syncOffset] );
       syncOffset += TS_PACKET_LEN;
       goodPacket = true;
-      m_syncPosnCount = 0;
+      m_bInSync = true;
     }
-    else if ((m_syncPosnCount == 0) &&
+    else if (m_bInSync &&
              ((pData[syncOffset] == TS_PACKET_SYNC) ||
               (pData[syncOffset + TS_PACKET_LEN]==TS_PACKET_SYNC)))
     {
       pData[syncOffset] = TS_PACKET_SYNC;
+      pData[syncOffset + TS_PACKET_LEN] = TS_PACKET_SYNC;
       OnTsPacket( &pData[syncOffset] );
       syncOffset += TS_PACKET_LEN;
       goodPacket = true;
+      m_bInSync = false;
     }
     else
     {
       syncOffset++;
-      if (m_syncPosnCount >= 0)
-      {
-        ++m_syncPosnCount %= TS_PACKET_LEN;
-      }
+      m_bInSync = false;
     }
   }
   
