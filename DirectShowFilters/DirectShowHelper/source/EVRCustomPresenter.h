@@ -53,6 +53,8 @@ using namespace std;
 #define ENABLE_DWM_INIT_SLEEP true
 //Enable DWM init for 24Hz true
 #define ENABLE_DWM_FOR_24Hz true
+//Enable LogAllFrameDrops when true
+#define LOG_ALL_FRAME_DROPS false
 
 //Maximum FPS rate limiter default settings
 #define FPS_LIM_RATE 0
@@ -280,6 +282,7 @@ public:
   void           ResetEVRStatCounters();
   void           ResetTraceStats(); // Reset tracing stats
   void           ResetFrameStats(); // Reset frame stats
+  void           LogRenderStats();
   
   void           NotifyRateChange(double pRate);
   void           NotifyDVDMenuState(bool pIsInMenu);
@@ -564,6 +567,7 @@ protected:
   bool          m_bLateDWMInit;
   bool          m_bDWMInitSleep;
   double        m_dDWMRefreshThresh;
+  bool          m_bLogAllFrameDrops;
   
   char          m_filterNames[FILTER_LIST_SIZE][MAX_FILTER_NAME];
   int           m_numFilters;

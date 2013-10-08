@@ -223,6 +223,7 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
   m_bLateDWMInit = ENABLE_LATE_DWM_INIT;
   m_bDWMInitSleep = ENABLE_DWM_INIT_SLEEP;
   m_dDWMRefreshThresh = DWM_REFRESH_THRESH;
+  m_bLogAllFrameDrops = LOG_ALL_FRAME_DROPS;
   
   if (ERROR_SUCCESS==RegCreateKeyEx(HKEY_CURRENT_USER, _T("Software\\Team MediaPortal\\EVR Presenter"), 0, NULL, 
                                     REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, NULL, &key, NULL))
@@ -465,6 +466,20 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
       m_dDWMRefreshThresh = DWM_REFRESH_THRESH;
     }
         
+    keyValue = m_bLogAllFrameDrops ? 1 : 0;
+    LPCTSTR LogAllFrameDrops_RRK = TEXT("LogAllFrameDrops");
+    ReadRegistryKeyDword(key, LogAllFrameDrops_RRK, keyValue);
+    if (keyValue)
+    {
+      Log("--- Enable LogAllFrameDrops");
+      m_bLogAllFrameDrops = true;
+    }
+    else
+    {
+      Log("--- Disable LogAllFrameDrops");
+      m_bLogAllFrameDrops = false;
+    }
+
     RegCloseKey(key);
   }
 
@@ -1956,7 +1971,7 @@ HRESULT MPEVRCustomPresenter::CheckForScheduledSample(LONGLONG *pTargetTime, LON
                   
       // If video frame rate is higher than display refresh then we'll get lots of dropped frames
       // so it's better to not report them in the log normally.          
-      if (m_bDrawStats && (m_frameRateRatio > 0) && !m_bScrubbing && !m_bDVDMenu)
+      if ((m_bDrawStats || m_bLogAllFrameDrops) && (m_frameRateRatio > 0) && !m_bScrubbing && !m_bDVDMenu)
       {
         Log("Dropping frame, nextSampleTime %.2f ms, last sleep %.2f ms, last pres %.2f ms, paint %.2f ms, queue count %d, SOP %d, EOP %d, RawFRRatio %d, dropped %d, drawn %d",
              (double)nextSampleTime/10000, 
@@ -2767,6 +2782,7 @@ HRESULT STDMETHODCALLTYPE MPEVRCustomPresenter::ProcessMessage(MFVP_MESSAGE_TYPE
       Log("ProcessMessage MFVP_MESSAGE_ENDSTREAMING");
       SetRenderState(MP_RENDER_STATE_STOPPED);
       m_EndOfStreamingEvent.Set();
+      LogRenderStats();
     break;
 
     case MFVP_MESSAGE_ENDOFSTREAM:
@@ -3826,8 +3842,22 @@ void MPEVRCustomPresenter::ResetTraceStats()
   m_bResetStats     = false;
 }
 
+void MPEVRCustomPresenter::LogRenderStats()
+{
+  Log("Render stats : Display-to-video ratio = %.4f(FRR %d)| Frames dropped %d, drawn %d, repeated %d | MPAR clk adj %d",
+       ((GetDisplayCycle() > 0.0) ? (((double) m_rtTimePerFrame)/10000.0)/GetDisplayCycle() : 0),
+       m_frameRateRatio,
+       m_iFramesDropped,
+       m_iFramesDrawn,
+       m_iEarlyFrCnt,
+       m_iClockAdjustmentsDone
+       );
+}
+
 void MPEVRCustomPresenter::ResetFrameStats()
 {
+  LogRenderStats();
+  
   CAutoLock sLock(&m_lockRenderStats);
 
   m_iFramesDrawn    = 0;
