@@ -517,7 +517,9 @@ void UnloadEVR()
 
 bool LoadEVR()
 {
-  Log("============================================================");
+  Log("======================= New instance ============================");
+  Log("  Logging format: Date Time [InstanceID] [ThreadID] Message....  ");
+  Log("=================================================================");
   Log("Loading EVR libraries");
   TCHAR systemFolder[MAX_PATH];
   TCHAR DLLFileName[MAX_PATH];

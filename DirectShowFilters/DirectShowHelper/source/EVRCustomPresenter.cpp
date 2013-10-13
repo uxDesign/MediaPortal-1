@@ -3844,7 +3844,7 @@ void MPEVRCustomPresenter::ResetTraceStats()
 
 void MPEVRCustomPresenter::LogRenderStats()
 {
-  Log("Render stats : Display-to-video ratio = %.4f(FRR %d)| Frames dropped %d, drawn %d, repeated %d | MPAR clk adj %d",
+  Log("Render stats : Display-to-video FPS ratio = %.4f(FRR %d)| Frames dropped %d, drawn %d, repeated %d | MPAR clk adj %d",
        ((GetDisplayCycle() > 0.0) ? (((double) m_rtTimePerFrame)/10000.0)/GetDisplayCycle() : 0),
        m_frameRateRatio,
        m_iFramesDropped,
