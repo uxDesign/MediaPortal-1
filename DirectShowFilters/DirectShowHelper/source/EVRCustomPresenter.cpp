@@ -171,7 +171,8 @@ MPEVRCustomPresenter::MPEVRCustomPresenter(IVMR9Callback* pCallback, IDirect3DDe
     m_DetSampleSum                        = 0;
     m_DetSampleAve                        = -1.0;
     m_DetectedLock                        = false;
-    m_DetectedFrameTimeStdDev             = 0;
+    m_DetectedFrameTimeStdDev             = 0.0;
+    m_LowSampTimeJitterCnt = 0;
     m_LastEndOfPaintScanline      = 0;
     m_LastStartOfPaintScanline    = 0;
     m_frameRateRatio              = 0;
@@ -1795,8 +1796,9 @@ HRESULT MPEVRCustomPresenter::CheckForScheduledSample(LONGLONG *pTargetTime, LON
     pSample->GetSampleDuration(&sampleDuration);  // fallback value
     LONGLONG timeToNextSample = sampleDuration;
     IMFSample* pNextSample = PeekNextSample();
-    if (pNextSample != NULL) //There is a 'next' sample in the queue
+    if ((pNextSample != NULL) && (m_LowSampTimeJitterCnt > (LOW_JITT_CNT_LIM/2)))
     {
+       //There is a 'next' sample in the queue, and the sample timestamp jitter is low enough
       LONGLONG sTime;
       LONGLONG sNextTime;
       pSample->GetSampleTime(&sTime);
@@ -1859,7 +1861,7 @@ HRESULT MPEVRCustomPresenter::CheckForScheduledSample(LONGLONG *pTargetTime, LON
         {
           m_earliestPresentTime = systemTime + (displayTime * (sRawFRRatio - 1)) + offsetTime;
         }    
-              
+            
         if (nextSampleTime > (max(timeToNextSample, displayTime) + earlyLimit))
         {      
           if ((systemTime - m_lastPresentTime < (500*10000)) && (m_lastPresentTime > 0))
@@ -3881,6 +3883,8 @@ void MPEVRCustomPresenter::ResetFrameStats()
   m_DetectedFrameTime     = -1.0;
   m_DetSampleSum          = 0;
   m_DectedSum             = 0;
+  m_DetectedFrameTimeStdDev = 0.0;
+  m_LowSampTimeJitterCnt = 0;
   ZeroMemory((void*)&m_DetectedFrameTimeHistory, sizeof(LONGLONG) * NB_DFTHSIZE);
   ZeroMemory((void*)&m_DetSampleHistory, sizeof(LONGLONG) * NB_DFTHSIZE);
   
@@ -4246,43 +4250,23 @@ void MPEVRCustomPresenter::VideoFpsFromSample(IMFSample* pSample)
     m_DetSampleSum -= m_DetSampleHistory[iPos];
     m_DetSampleHistory[iPos] = SetDuration;
     m_DetSampleSum += SetDuration;
-
-    double Average = (double)Diff;
-    double AveDur = (double)SetDuration;
     
     if (m_DetectedFrameTimePos >= NB_DFTHSIZE)
     {
-      Average = (double)m_DectedSum / (double)NB_DFTHSIZE;
-      AveDur = (double)m_DetSampleSum / (double)NB_DFTHSIZE;
-    }
-    else if (m_DetectedFrameTimePos >= 4)
-    {
-      Average = (double)m_DectedSum / (double)m_DetectedFrameTimePos;
-      AveDur = (double)m_DetSampleSum / (double)m_DetectedFrameTimePos;
-    }
+      double Average = (double)m_DectedSum / (double)NB_DFTHSIZE;
+      double AveDur = (double)m_DetSampleSum / (double)NB_DFTHSIZE;
 
-    if (m_DetectedFrameTimePos >= 4)
-    {     
-      if (m_bDrawStats)
+      //Calculate standard deviation of sample duration (to assess timestamp jitter)
+      double DeviationSum = 0.0;
+      for (int i = 0; i < NB_DFTHSIZE; ++i)
       {
-        int nFrames = min(m_DetectedFrameTimePos, NB_DFTHSIZE);
-        double DeviationSum = 0.0;
-        for (int i = 0; i < nFrames; ++i)
-        {
-          double Deviation = m_DetectedFrameTimeHistory[i] - Average;
-          DeviationSum += Deviation*Deviation;
-        }
-  
-        double StdDev = sqrt(DeviationSum/double(nFrames));
-  
-        m_DetectedFrameTimeStdDev = StdDev;
+        double Deviation = m_DetectedFrameTimeHistory[i] - Average;
+        DeviationSum += (Deviation*Deviation);
       }
+      m_DetectedFrameTimeStdDev = sqrt(DeviationSum/(double)NB_DFTHSIZE);
 
-      double DetectedTime = Average / 10000000.0;
-      
-      m_DetFrameTimeAve = DetectedTime;
-      m_DetSampleAve = AveDur / 10000000.0;
-      
+      m_DetFrameTimeAve = Average / 10000000.0;      
+      m_DetSampleAve = AveDur / 10000000.0;      
 
       double AllowedError = 0.015; //Allow 1.5% error to cover sample timing jitter
       static double AllowedValues[] = {1000.5/30000.0, 1000.0/25000.0, 1000.5/24000.0};  //30Hz and 24Hz are compromise values
@@ -4298,12 +4282,12 @@ void MPEVRCustomPresenter::VideoFpsFromSample(IMFSample* pSample)
       {
         for (int j = 1; j < nAllDivs; j++)
         {
-          currError = fabs(1.0 - (DetectedTime / (AllowedValues[i] / AllowedDivs[j]) ));
+          currError = fabs(1.0 - (m_DetFrameTimeAve / (AllowedValues[i] / AllowedDivs[j]) ));
           if (currError < AllowedError)
           {
             AllowedError = currError;
             BestVal = (AllowedValues[i] / AllowedDivs[j]);
-          }
+          }          
         }
       }
 	
@@ -4315,14 +4299,13 @@ void MPEVRCustomPresenter::VideoFpsFromSample(IMFSample* pSample)
       else
       {
         m_DetectedLock = false;
-        m_DetdFrameTimeLast = DetectedTime;
+        m_DetdFrameTimeLast = m_DetFrameTimeAve;
       }
     }
     else
     {
-      m_DetdFrameTimeLast = (double)SetDuration / 10000000.0;
+      m_DetdFrameTimeLast = (double)m_rtTimePerFrame / 10000000.0;
     }
-
   }
   else if ((Diff >= m_rtTimePerFrame*8) && m_rtTimePerFrame)
   {
@@ -4331,11 +4314,28 @@ void MPEVRCustomPresenter::VideoFpsFromSample(IMFSample* pSample)
     m_DetectedLock = false;
     m_DectedSum = 0;
     m_DetSampleSum = 0;
+    m_DetectedFrameTimeStdDev = 0.0;
     ZeroMemory((void*)&m_DetectedFrameTimeHistory, sizeof(LONGLONG) * NB_DFTHSIZE);
     ZeroMemory((void*)&m_DetSampleHistory, sizeof(LONGLONG) * NB_DFTHSIZE);
   }
+  else
+  {
+    m_DetdFrameTimeLast = (double)m_rtTimePerFrame / 10000000.0;
+  }
 
   LOG_TRACE("EVR: Time: %f %f %f\n", Time / 10000000.0, SetDuration / 10000000.0, m_DetdFrameTimeLast);
+  
+  if (m_DetectedFrameTimeStdDev > SDEV_JITTER_THRESH)
+  {
+    if (m_LowSampTimeJitterCnt > 0)
+    {
+      m_LowSampTimeJitterCnt--;
+    }
+  }
+  else if (m_LowSampTimeJitterCnt < LOW_JITT_CNT_LIM)
+  {
+    m_LowSampTimeJitterCnt++;
+  }
 
   // Put frame time into sample duration field
   SetDuration = (LONGLONG)(m_DetdFrameTimeLast * 10000000.0);

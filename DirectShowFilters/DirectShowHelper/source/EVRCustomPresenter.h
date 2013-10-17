@@ -101,6 +101,10 @@ using namespace std;
 // magic numbers
 #define DEFAULT_FRAME_TIME 200000 // used when fps information is not provided (PAL interlaced == 50fps)
 
+//Threshold for excessive (standard deviation) sample timestamp jitter in hns units - default is 1000 (0.1 ms)
+#define SDEV_JITTER_THRESH 1000.0
+#define LOW_JITT_CNT_LIM 128
+
 // uncomment the //Log to enable extra logging
 #define LOG_TRACE //Log
 
@@ -536,6 +540,8 @@ protected:
   double        m_DetectedFrameTimeStdDev;
   bool          m_DetectedLock;
   double        m_DetFrameTimeAve;
+  int           m_LowSampTimeJitterCnt;
+
 
   // Used for detecting the average video sample duration
   LONGLONG      m_DetSampleHistory[NB_DFTHSIZE];
