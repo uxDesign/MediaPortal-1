@@ -4031,7 +4031,6 @@ double MPEVRCustomPresenter::GetVideoFramePeriod(FPS_SOURCE_METHOD fpsSource)
 double MPEVRCustomPresenter::GetRealFramePeriod()
 {
   double rtimePerFrame ;
-  double currentDispCycle = GetDisplayCycle(); // in ms
   
   if (m_DetectedFrameTime > DFT_THRESH) 
   {
