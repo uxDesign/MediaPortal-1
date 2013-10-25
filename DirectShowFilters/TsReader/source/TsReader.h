@@ -58,10 +58,16 @@
 #define VID_BUF_SIZE_PREFETCH_LIM (MAX_VID_BUF_SIZE - 30)
 
 //File/RTSP ReadFromFile() block sizes
-#define READ_SIZE (65536)
-#define MIN_READ_SIZE (READ_SIZE/8)
-#define MIN_READ_SIZE_UNC (READ_SIZE/4)
-#define INITIAL_READ_SIZE (READ_SIZE * 512)
+//#define READ_SIZE (65536)
+//#define MIN_READ_SIZE (READ_SIZE/8)
+//#define MIN_READ_SIZE_UNC (READ_SIZE/4)
+//#define INITIAL_READ_SIZE (READ_SIZE * 512)
+
+//File/RTSP ReadFromFile() block sizes
+#define READ_SIZE (131072)
+#define MIN_READ_SIZE (READ_SIZE/16)
+#define MIN_READ_SIZE_UNC (READ_SIZE/8)
+#define INITIAL_READ_SIZE (READ_SIZE * 256)
 
 
 using namespace std;

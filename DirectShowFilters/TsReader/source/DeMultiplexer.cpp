@@ -3118,7 +3118,9 @@ void CDeMultiplexer::ThreadProc()
   DWORD timeNow = GET_TIME_NOW();
   DWORD  lastFlushTime = timeNow;
   DWORD  lastFileReadTime = timeNow;
+  DWORD  lastRetryLoopTime = timeNow;
   int sizeRead = 0;
+  bool retryRead = false;
 
   ::SetThreadPriority(GetCurrentThread(),THREAD_PRIORITY_NORMAL);
   do
@@ -3146,24 +3148,36 @@ void CDeMultiplexer::ThreadProc()
     }
 
     //File read prefetch
-    if (m_bReadAheadFromFile && (timeNow > (lastFileReadTime + (m_filter.IsUNCfile() ? 10 : 5))) )
+    if (m_bReadAheadFromFile && (timeNow > (lastFileReadTime + 10)) )
     {
       lastFileReadTime = timeNow; 
-      int sizeReadTemp = ReadAheadFromFile();      
-      if ((sizeReadTemp < 0) || !m_filter.IsRTSP() || (sizeRead >= READ_SIZE))
+      int sizeReadTemp = ReadAheadFromFile(); 
+           
+      // if ((sizeReadTemp < 0) || !m_filter.IsRTSP() || (sizeRead >= READ_SIZE))
+      if (
+            (sizeReadTemp < 0) || 
+            (sizeRead >= READ_SIZE) || 
+            (retryRead && ((timeNow > (lastRetryLoopTime + 3000)) || (sizeRead >= MIN_READ_SIZE))) 
+          )
       {
         sizeRead = 0;
+        retryRead = false;
         m_bReadAheadFromFile = false;
       }
       else
       {
         sizeRead += sizeReadTemp;
+        if (!retryRead)
+        {
+          lastRetryLoopTime = timeNow;
+          retryRead = true;
+        } 
       }
     }
               
     Sleep(1);
   }
-  while (!ThreadIsStopping(11)) ;
+  while (!ThreadIsStopping(12)) ;
   LogDebug("CDeMultiplexer::ThreadProc stopped()");
 }
 
