@@ -174,10 +174,11 @@ __int64 MultiFileReader::GetFilePointer()
 HRESULT MultiFileReader::Read(PBYTE pbData, ULONG lDataLength, ULONG *dwReadBytes)
 {
 	HRESULT hr;
+	HRESULT retval = S_OK;
 
 	// If the file has already been closed, don't continue
 	if (m_TSBufferFile.IsFileInvalid())
-		return S_FALSE;
+		return E_FAIL;
 
 	RefreshTSBufferFile();
   RefreshFileSize();
@@ -198,7 +199,7 @@ HRESULT MultiFileReader::Read(PBYTE pbData, ULONG lDataLength, ULONG *dwReadByte
 	if(!file)
   {
     LogDebug("MultiFileReader::no file");
-		return S_FALSE;
+		return E_FAIL;
   }
 	if (m_currentPosition < (file->startPosition + file->length))
 	{
@@ -236,6 +237,7 @@ HRESULT MultiFileReader::Read(PBYTE pbData, ULONG lDataLength, ULONG *dwReadByte
       if (FAILED(hr))
       {
         LogDebug("READ FAILED1");
+        retval = E_FAIL;
       }
 			m_currentPosition += bytesToRead;
 
@@ -243,6 +245,7 @@ HRESULT MultiFileReader::Read(PBYTE pbData, ULONG lDataLength, ULONG *dwReadByte
       if (FAILED(hr))
       {
         LogDebug("READ FAILED2");
+        retval = E_FAIL;
       }
 			*dwReadBytes += bytesRead;
 		}
@@ -251,7 +254,8 @@ HRESULT MultiFileReader::Read(PBYTE pbData, ULONG lDataLength, ULONG *dwReadByte
 			hr = m_TSFile.Read(pbData, lDataLength, dwReadBytes);
       if (FAILED(hr))
       {
-        LogDebug("READ FAILED2");
+        LogDebug("READ FAILED3");
+        retval = E_FAIL;
       }
 			m_currentPosition += lDataLength;
 		}
@@ -262,7 +266,7 @@ HRESULT MultiFileReader::Read(PBYTE pbData, ULONG lDataLength, ULONG *dwReadByte
 		*dwReadBytes = 0;
 	}
 
-	return S_OK;
+	return retval;
 }
 
 HRESULT MultiFileReader::Read(PBYTE pbData, ULONG lDataLength, ULONG *dwReadBytes, __int64 llDistanceToMove, DWORD dwMoveMethod)

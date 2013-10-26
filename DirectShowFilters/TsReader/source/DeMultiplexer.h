@@ -178,7 +178,7 @@ private:
 
   vector<struct stAudioStream> m_audioStreams;
   vector<struct stSubtitleStream> m_subtitleStreams;
-  int ReadFromFile(bool isAudio, bool isVideo);
+  int ReadFromFile();
   bool m_bEndOfFile;
   HRESULT RenderFilterPin(CBasePin* pin, bool isAudio, bool isVideo);
   CCritSec m_sectionFlushAudio;

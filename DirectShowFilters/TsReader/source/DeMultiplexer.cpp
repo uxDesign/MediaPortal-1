@@ -961,7 +961,7 @@ void CDeMultiplexer::Start()
   while((GET_TIME_NOW() - m_Time) < 10000)
   {
     m_bEndOfFile = false;  //reset eof every time through to ignore a false eof due to slow rtsp startup
-    int BytesRead = ReadFromFile(false,false);    
+    int BytesRead = ReadFromFile();    
     if (BytesRead <= 0)
     {
       BytesRead = 0;
@@ -1021,10 +1021,13 @@ int CDeMultiplexer::ReadAheadFromFile()
   //end of file has been reached or
   //demuxer should stop getting video packets
   //then return an error
-  if ((m_filter.State() == State_Stopped) || !m_filter.IsFilterRunning() || m_filter.m_bStopping || m_bEndOfFile) return -1;
+  if ((m_filter.State() == State_Stopped) || !m_filter.IsFilterRunning() || m_filter.m_bStopping || m_bEndOfFile) 
+  {
+    return -1;
+  }
   
 	//LogDebug("demux:ReadAheadFromFile");
-  int SizeRead = ReadFromFile(false,false) ;
+  int SizeRead = ReadFromFile() ;
   
   if (m_filter.State() != State_Running)
   {
@@ -1056,10 +1059,13 @@ int CDeMultiplexer::ReadAheadFromFile()
 /// and processes the raw data
 /// When a TS packet has been discovered, OnTsPacket(byte* tsPacket) gets called
 //  which in its turn deals with the packet
-int CDeMultiplexer::ReadFromFile(bool isAudio, bool isVideo)
+int CDeMultiplexer::ReadFromFile()
 {
    // Don't read if flush pending/running or no reader....
-  if (m_filter.IsSeeking() || m_bFlushDelgNow || m_bFlushRunning || (m_reader==NULL)) return -1;
+  if (m_filter.IsSeeking() || m_bFlushDelgNow || m_bFlushRunning || (m_reader==NULL)) 
+  {
+    return -1;
+  }
     
   CAutoLock lock (&m_sectionRead);
   byte buffer[READ_SIZE];
@@ -1103,7 +1109,7 @@ int CDeMultiplexer::ReadFromFile(bool isAudio, bool isVideo)
   }
   else
   {
-    //playing a local file.
+    //playing a local file or using UNC path
     //read raw data from the file
     if (SUCCEEDED(m_reader->Read(buffer,sizeof(buffer), (DWORD*)&dwReadBytes)))
     {
@@ -1132,14 +1138,11 @@ int CDeMultiplexer::ReadFromFile(bool isAudio, bool isVideo)
       //and return
       return dwReadBytes;
     }
-    else
-    {
-      int x=123;
-      LogDebug("Read failed...");
-    }
   }
-  //Failed to read any data
-  return 0;
+  //Read failure/error
+  LogDebug("Read failed...");
+  return -2;
+  // return 0;
 }
 
 
@@ -3155,16 +3158,16 @@ void CDeMultiplexer::ThreadProc()
            
       // if ((sizeReadTemp < 0) || !m_filter.IsRTSP() || (sizeRead >= READ_SIZE))
       if (
-            (sizeReadTemp < 0) || 
-            (sizeRead >= READ_SIZE) || 
-            (retryRead && ((timeNow > (lastRetryLoopTime + 3000)) || (sizeRead >= MIN_READ_SIZE))) 
+            (sizeReadTemp < 0) ||        //Read aborted or failed
+            (sizeRead >= READ_SIZE) ||   //Got all the data we requested
+            (retryRead && ((timeNow > (lastRetryLoopTime + 2000)) || (sizeRead >= MIN_READ_SIZE)))  //Looping retry mode exit
           )
       {
         sizeRead = 0;
         retryRead = false;
         m_bReadAheadFromFile = false;
       }
-      else
+      else //Looping retry mode
       {
         sizeRead += sizeReadTemp;
         if (!retryRead)
