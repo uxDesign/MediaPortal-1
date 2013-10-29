@@ -146,6 +146,9 @@ public:
   int  ReadAheadFromFile();
   bool CheckPrefetchState(bool isNormal, bool isForced);
 
+  void DelegatedFlush(bool forceNow);
+  void PrefetchData();
+
   bool m_DisableDiscontinuitiesFiltering;
   DWORD m_LastDataFromRtsp;
   bool m_bFlushDelegated;

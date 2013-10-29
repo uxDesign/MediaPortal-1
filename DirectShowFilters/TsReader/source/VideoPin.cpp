@@ -521,6 +521,13 @@ HRESULT CVideoPin::FillBuffer(IMediaSample *pSample)
                 //(m_AVDataLowCount is checked in CTsReaderFilter::ThreadProc())
                 _InterlockedExchangeAdd(&demux.m_AVDataLowCount, 1);   
               }
+              
+              if (fTime < -2.0)
+              { 
+                LogDebug("vidPin : Video to render very late, flushing") ;
+                //Very late - request internal flush and re-sync to stream
+                demux.DelegatedFlush(false);
+              }
             }
 
             //Discard late samples at start of play,

@@ -836,8 +836,7 @@ STDMETHODIMP CTsReaderFilter::Stop()
   {
     //m_demultiplexer.Flush(true) ;
     //Flushing is delegated
-    m_demultiplexer.m_bFlushDelgNow = true;
-    m_demultiplexer.WakeThread(); 
+    m_demultiplexer.DelegatedFlush(true);
     for(int i(0) ; ((i < 500) && (m_demultiplexer.m_bFlushDelgNow || m_demultiplexer.m_bFlushRunning)) ; i++)
     {
       Sleep(1);
@@ -910,13 +909,9 @@ STDMETHODIMP CTsReaderFilter::Pause()
             LogDebug("  -- Pause()  ->start rtsp from %f", startTime);
             m_buffer.Clear();
             
-            if (!m_demultiplexer.m_bFlushDelgNow && !m_demultiplexer.m_bFlushRunning) //Flush already pending
-            {
-              //m_demultiplexer.Flush(false);
-              //Flushing is delegated
-              m_demultiplexer.m_bFlushDelgNow = true;
-              m_demultiplexer.WakeThread(); 
-            }
+            //Flushing is delegated
+            m_demultiplexer.DelegatedFlush(true);
+            
             for(int i(0) ; ((i < 500) && (m_demultiplexer.m_bFlushDelgNow || m_demultiplexer.m_bFlushRunning)) ; i++)
             {
               Sleep(1);
@@ -1439,12 +1434,9 @@ HRESULT CTsReaderFilter::SeekPreStart(CRefTime& rtAbsSeek)
 
   if (!m_bOnZap || !m_demultiplexer.IsNewPatReady() || m_bAnalog) // On zapping, new PAT has occured, we should not flush to avoid loosing data.
   {                                                               //             new PAT has not occured, we should flush to avoid restart with old data.							
-    if (!m_demultiplexer.m_bFlushDelgNow && !m_demultiplexer.m_bFlushRunning) //Flush already pending
-    {
-      //Flushing is delegated
-      m_demultiplexer.m_bFlushDelgNow = true;
-      m_demultiplexer.WakeThread(); 
-    }
+    //Flushing is delegated
+    m_demultiplexer.DelegatedFlush(true);
+    
     for(int i(0) ; ((i < 500) && (m_demultiplexer.m_bFlushDelgNow || m_demultiplexer.m_bFlushRunning)) ; i++)
     {
       Sleep(1);
