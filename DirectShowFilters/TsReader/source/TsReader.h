@@ -57,6 +57,9 @@
 #define AUD_BUF_SIZE_PREFETCH_LIM (MAX_AUD_BUF_SIZE - 50)
 #define VID_BUF_SIZE_PREFETCH_LIM (MAX_VID_BUF_SIZE - 30)
 
+//File read prefetch 'looping retry' timeout limit (in ms)
+#define MAX_PREFETCH_LOOP_TIME 1000
+
 //File/RTSP ReadFromFile() block sizes
 //#define READ_SIZE (65536)
 //#define MIN_READ_SIZE (READ_SIZE/8)

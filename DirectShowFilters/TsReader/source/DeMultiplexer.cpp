@@ -3156,7 +3156,7 @@ void CDeMultiplexer::ThreadProc()
       if (
             (sizeReadTemp < 0) ||        //Read aborted or failed
             (sizeRead >= READ_SIZE) ||   //Got all the data we requested
-            (retryRead && ((timeNow > (lastRetryLoopTime + 500)) || !CheckPrefetchState(true, false)))  //Looping retry mode exit
+            (retryRead && ((timeNow > (lastRetryLoopTime + MAX_PREFETCH_LOOP_TIME)) || !CheckPrefetchState(true, false)))  //Looping retry mode exit
           )
       {
         sizeRead = 0;
