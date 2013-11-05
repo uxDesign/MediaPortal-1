@@ -131,6 +131,7 @@ CDeMultiplexer::CDeMultiplexer(CTsDuration& duration,CTsReaderFilter& filter)
   m_bSubtitleCompensationSet=false;
   m_initialAudioSamples = 3;
   m_initialVideoSamples = 12;
+  m_prefetchLoopDelay = PF_LOOP_DELAY_MIN;
 
   m_mpegPesParser = new CMpegPesParser();
   
@@ -651,6 +652,7 @@ void CDeMultiplexer::Flush(bool clearAVready)
     m_filter.m_bStreamCompensated=false ;
     m_initialAudioSamples = 3;
     m_initialVideoSamples = 12;
+    m_prefetchLoopDelay = PF_LOOP_DELAY_MIN;
   }
   
   m_bFlushRunning = false;
@@ -812,6 +814,7 @@ bool CDeMultiplexer::CheckCompensation(CRefTime rtStartTime)
     // Goal is to start with at least 500mS audio and 400mS video ahead. ( LiveTv and RTSP as TsReader cannot go ahead by itself)
     if (lastAudio.Millisecs() - firstAudio.Millisecs() < (310 + m_filter.m_regInitialBuffDelay)) return false ;       // Not enough audio to start.
 
+    int vidSampDuration = PF_LOOP_DELAY_MAX;
     if (m_filter.GetVideoPin()->IsConnected())
     {
       if (!m_bFrame0Found) return NULL ;
@@ -824,15 +827,19 @@ bool CDeMultiplexer::CheckCompensation(CRefTime rtStartTime)
       }  
            
       //Set video prefetch threshold
-      m_initialVideoSamples = (int)(((double)(210 + m_filter.m_regInitialBuffDelay))/((double)(lastVideo.Millisecs() - firstVideo.Millisecs())/(double)cntV));    
+      double fvidSampleDuration = ((double)(lastVideo.Millisecs() - firstVideo.Millisecs())/(double)cntV);
+      m_initialVideoSamples = (int)(((double)(210 + m_filter.m_regInitialBuffDelay))/fvidSampleDuration);    
       m_initialVideoSamples = max(12, m_initialVideoSamples);
+      vidSampDuration = max(PF_LOOP_DELAY_MIN,(int)fvidSampleDuration);
     }
 
     //Set audio prefetch threshold
-    m_initialAudioSamples = (int)(((double)(310 + m_filter.m_regInitialBuffDelay))/((double)(lastAudio.Millisecs() - firstAudio.Millisecs())/(double)cntA));
+    double faudSampleDuration = ((double)(lastAudio.Millisecs() - firstAudio.Millisecs())/(double)cntA);
+    m_initialAudioSamples = (int)(((double)(310 + m_filter.m_regInitialBuffDelay))/faudSampleDuration);
     m_initialAudioSamples = max(3, m_initialAudioSamples);
+    m_prefetchLoopDelay = min(vidSampDuration,(max(PF_LOOP_DELAY_MIN,(int)faudSampleDuration)));
 
-    LogDebug("Audio Samples : %d, First : %03.3f, Last : %03.3f, buffThresh : %d",cntA, (float)firstAudio.Millisecs()/1000.0f,(float)lastAudio.Millisecs()/1000.0f, m_initialAudioSamples);
+    LogDebug("Audio Samples : %d, First : %03.3f, Last : %03.3f, buffThresh : %d, pfLoopDel : %d",cntA, (float)firstAudio.Millisecs()/1000.0f,(float)lastAudio.Millisecs()/1000.0f, m_initialAudioSamples, m_prefetchLoopDelay);
     LogDebug("Video Samples : %d, First : %03.3f, Last : %03.3f, buffThresh : %d",cntV, (float)firstVideo.Millisecs()/1000.0f,(float)lastVideo.Millisecs()/1000.0f, m_initialVideoSamples);
 
     // Ambass : Find out the best compensation to apply in order to have fast Audio/Video delivery
@@ -943,6 +950,7 @@ void CDeMultiplexer::Start()
   m_filter.m_bStreamCompensated=false ;
   m_initialAudioSamples = 3;
   m_initialVideoSamples = 12;
+  m_prefetchLoopDelay = PF_LOOP_DELAY_MIN;
   m_vidPTScount = 0;
   m_vidDTScount = 0;
   m_bUsingGOPtimestamp = false;
@@ -3152,7 +3160,6 @@ void CDeMultiplexer::ThreadProc()
       lastFileReadTime = timeNow; 
       int sizeReadTemp = ReadAheadFromFile(); 
            
-      // if ((sizeReadTemp < 0) || !m_filter.IsRTSP() || (sizeRead >= READ_SIZE))
       if (
             (sizeReadTemp < 0) ||        //Read aborted or failed
             (sizeRead >= READ_SIZE) ||   //Got all the data we requested
@@ -3182,7 +3189,7 @@ void CDeMultiplexer::ThreadProc()
               
     Sleep(1);
   }
-  while (!ThreadIsStopping(12)) ;
+  while (!ThreadIsStopping(m_prefetchLoopDelay)) ;
   LogDebug("CDeMultiplexer::ThreadProc stopped()");
 }
 
