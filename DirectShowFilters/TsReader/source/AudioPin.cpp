@@ -567,6 +567,11 @@ HRESULT CAudioPin::FillBuffer(IMediaSample *pSample)
               LogDebug("Aud/Ref : %03.3f, Compensated = %03.3f ( %0.3f A/V buffers=%02d/%02d), Clk : %f, SampCnt %d, Sleep %d ms, stallPt %03.3f", (float)RefTime.Millisecs()/1000.0f, (float)cRefTime.Millisecs()/1000.0f, fTime,cntA,cntV, clock, m_sampleCount, m_FillBuffSleepTime, (float)stallPoint);
             }
             if (m_pTsReaderFilter->m_ShowBufferAudio) m_pTsReaderFilter->m_ShowBufferAudio--;
+              
+            if (((float)cRefTime.Millisecs()/1000.0f) > AUDIO_READY_POINT)
+            {
+              m_pTsReaderFilter->m_audioReady = true;
+            }
           }
           else
           {
@@ -742,6 +747,7 @@ HRESULT CAudioPin::OnThreadStartPlay()
   m_sampleCount = 0;
   m_bInFillBuffer=false;
   m_bDownstreamFlush=false;
+  m_pTsReaderFilter->m_audioReady = false;
 
   m_FillBuffSleepTime = 1;
   m_LastFillBuffTime = GET_TIME_NOW();

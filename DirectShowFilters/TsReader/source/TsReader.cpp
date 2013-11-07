@@ -703,12 +703,12 @@ STDMETHODIMP CTsReaderFilter::GetState(DWORD dwMilliSecsTimeout, FILTER_STATE *p
     }
 
     bool isAVReady =  m_bStreamCompensated
-              && (GET_TIME_NOW() > m_demultiplexer.m_targetAVready);
+              && (!m_bMPARinGraph || (GET_TIME_NOW() > m_demultiplexer.m_targetAVready) || m_audioReady);
     
     //FFWD is more responsive if we return VFW_S_CANT_CUE when rate != 1.0
     if (isAVReady || (playRate != 1.0) || m_demultiplexer.EndOfFile())
     {
-      //LogDebug("CTsReaderFilter::GetState(), VFW_S_CANT_CUE, playRate %f",(float)playRate);
+      LogDebug("CTsReaderFilter::GetState(), VFW_S_CANT_CUE, m_audioReady %d",m_audioReady);
       return VFW_S_CANT_CUE;
     }
     else
@@ -891,6 +891,10 @@ STDMETHODIMP CTsReaderFilter::Pause()
   
     if (!m_bPauseOnClockTooFast)
     {
+      if (m_State == State_Paused)
+      {
+        CheckForMPAR();
+      }
       //are we using rtsp?
       if (m_fileDuration==NULL)
       {

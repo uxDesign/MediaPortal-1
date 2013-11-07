@@ -653,6 +653,7 @@ void CDeMultiplexer::Flush(bool clearAVready)
     m_initialAudioSamples = 3;
     m_initialVideoSamples = 12;
     m_prefetchLoopDelay = PF_LOOP_DELAY_MIN;
+    m_filter.m_audioReady = false;
   }
   
   m_bFlushRunning = false;
@@ -837,7 +838,7 @@ bool CDeMultiplexer::CheckCompensation(CRefTime rtStartTime)
     double faudSampleDuration = ((double)(lastAudio.Millisecs() - firstAudio.Millisecs())/(double)cntA);
     m_initialAudioSamples = (int)(((double)(310 + m_filter.m_regInitialBuffDelay))/faudSampleDuration);
     m_initialAudioSamples = max(3, m_initialAudioSamples);
-    m_prefetchLoopDelay = min(vidSampDuration,(max(PF_LOOP_DELAY_MIN,(int)faudSampleDuration)));
+    m_prefetchLoopDelay = min(PF_LOOP_DELAY_MAX, min(vidSampDuration,(max(PF_LOOP_DELAY_MIN,(int)faudSampleDuration))));
 
     LogDebug("Audio Samples : %d, First : %03.3f, Last : %03.3f, buffThresh : %d, pfLoopDel : %d",cntA, (float)firstAudio.Millisecs()/1000.0f,(float)lastAudio.Millisecs()/1000.0f, m_initialAudioSamples, m_prefetchLoopDelay);
     LogDebug("Video Samples : %d, First : %03.3f, Last : %03.3f, buffThresh : %d",cntV, (float)firstVideo.Millisecs()/1000.0f,(float)lastVideo.Millisecs()/1000.0f, m_initialVideoSamples);
@@ -948,6 +949,7 @@ void CDeMultiplexer::Start()
   m_bSetVideoDiscontinuity=false;
   m_bReadAheadFromFile = false;
   m_filter.m_bStreamCompensated=false ;
+  m_filter.m_audioReady = false;
   m_initialAudioSamples = 3;
   m_initialVideoSamples = 12;
   m_prefetchLoopDelay = PF_LOOP_DELAY_MIN;
