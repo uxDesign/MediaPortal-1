@@ -151,6 +151,7 @@ namespace MediaPortal
     private bool                       _wasPlayingVideo;          //
     private bool                       _alwaysOnTop;              // tracks the always on top state
     private bool                       _firstTimeWindowDisplayed; // set to true when MP becomes Active the 1st time
+    private bool                       _firstTimeActivated;       // needed to focus on first start
     private int                        _lastActiveWindow;         //
     private long                       _lastTime;                 //
     private double                     _currentPlayerPos;         //
@@ -191,6 +192,7 @@ namespace MediaPortal
     protected D3D()
     {
       _firstTimeWindowDisplayed  = true;
+      _firstTimeActivated       = true;
       MinimizeOnStartup         = false;
       MinimizeOnGuiExit         = false;
       MinimizeOnFocusLoss       = false;
@@ -377,6 +379,14 @@ namespace MediaPortal
 
       // disable event handlers
       GUIGraphicsContext.DX9Device.DeviceLost -= OnDeviceLost;
+
+      // Reset DialogMenu to avoid freeze when going to fullscreen/windowed
+      var dialogMenu = (GUIDialogMenu)GUIWindowManager.GetWindow((int)GUIWindow.Window.WINDOW_DIALOG_MENU);
+      if (dialogMenu != null && GUIWindowManager.RoutedWindow == (int)GUIWindow.Window.WINDOW_DIALOG_MENU)
+      {
+        dialogMenu.Dispose();
+        GUIWindowManager.UnRoute(); // only unroute if we still the routed window
+      }
 
       // reset device if necessary
       Windowed = !Windowed;
@@ -602,6 +612,15 @@ namespace MediaPortal
           Thread.Sleep(100);
         }
       }
+
+      if (_firstTimeActivated && GUIGraphicsContext.CurrentState == GUIGraphicsContext.State.RUNNING)
+      {
+        Log.Debug("D3D FullRender: MP focus");
+        Activate();
+        TopMost = true; // important
+        TopMost = false; // important
+        Focus();
+      }
     }
 
 
@@ -741,6 +760,9 @@ namespace MediaPortal
         WindowState = FormWindowState.Normal;
         Activate();
 
+        // Enable _firstTimeActivated to focus on restore
+        _firstTimeActivated = true;
+
         // resume player and restore volume
         if (g_Player.IsVideo || g_Player.IsTV || g_Player.IsDVD)
         {
@@ -774,9 +796,19 @@ namespace MediaPortal
         return;
       }
 
+      // Init for resetting DialogMenu to avoid freeze on minimize
+      var dialogMenu = (GUIDialogMenu)GUIWindowManager.GetWindow((int)GUIWindow.Window.WINDOW_DIALOG_MENU);
+
       // only minimize if visible and lost focus in windowed mode or if in fullscreen mode or if exiting to tray
       if (IsVisible && ((Windowed && _lostFocus) || (!Windowed && MinimizeOnFocusLoss)) || ExitToTray)
       {
+        if (dialogMenu != null && GUIWindowManager.RoutedWindow == (int)GUIWindow.Window.WINDOW_DIALOG_MENU)
+        {
+          dialogMenu.Reset();
+          dialogMenu.Dispose();
+          GUIWindowManager.UnRoute(); // only unroute if we still the routed window
+        }
+
         Log.Info("D3D: Minimizing to tray");
         IsVisible = false;
         AppActive = false;
@@ -801,6 +833,9 @@ namespace MediaPortal
         {
           HideTaskBar(false);
         }
+
+        // Enable _firstTimeActivated to focus on restore
+        _firstTimeActivated = false;
 
         MouseCursor = true;
         MouseTimeOutTimer = DateTime.Now;
@@ -1061,17 +1096,20 @@ namespace MediaPortal
       //  check if GPU supports shader model 2.0
       if (capabilities.VertexShaderVersion >= new Version(2, 0) && capabilities.PixelShaderVersion >= new Version(2, 0))
       {
-        // check if GPU supports rasterization, transformation, lightning in hardware
+        // check if GPU supports rasterization, transformation, lighting in hardware
         if (capabilities.DeviceCaps.SupportsHardwareTransformAndLight)
         {
-          Log.Info("D3D: GPU supports rasterization, transformation, lightning in hardware");
+          Log.Info("D3D: GPU supports rasterization, transformation, lighting in hardware");
           _createFlags = CreateFlags.HardwareVertexProcessing;
         }
         // check if GPU supports rasterization, transformations, lighting, and shading in hardware
         if (capabilities.DeviceCaps.SupportsPureDevice)
         {
           Log.Info("D3D: GPU supports rasterization, transformations, lighting, and shading in hardware");
-          _createFlags |= CreateFlags.PureDevice;
+          if (OSInfo.OSInfo.VistaOrLater())
+          {
+            _createFlags |= CreateFlags.PureDevice;
+          }
         }
       }
 
@@ -1843,6 +1881,11 @@ namespace MediaPortal
       FullRender();
       Activate();
 
+      // needed to focus on first run.
+      this.WindowState = FormWindowState.Minimized;
+      this.Show();
+      this.WindowState = FormWindowState.Normal;
+
       _isLoaded = true;
     }
 
@@ -1902,6 +1945,16 @@ namespace MediaPortal
         OnProcess();
         FrameMove();
         FullRender();
+        if (_firstTimeActivated && GUIGraphicsContext.CurrentState == GUIGraphicsContext.State.RUNNING)
+        {
+          Log.Debug("D3D OnIdle: MP focus done");
+          Activate();
+          TopMost = true; // important
+          TopMost = false; // important
+          Focus();
+          BringToFront();
+          _firstTimeActivated = false;
+        }
         if (GUIGraphicsContext.CurrentState == GUIGraphicsContext.State.STOPPING)
         {
           break;
@@ -2115,6 +2168,7 @@ namespace MediaPortal
         ShowMouseCursor(false);
       }
       _lostFocus = false;
+      _firstTimeActivated = true;
       base.OnGotFocus(e);
     }
 
