@@ -21,6 +21,7 @@
 using System;
 using System.ComponentModel;
 using System.IO;
+using MediaPortal.Dialogs;
 using MediaPortal.GUI.Library;
 using MediaPortal.Player;
 using MediaPortal.Playlists;
