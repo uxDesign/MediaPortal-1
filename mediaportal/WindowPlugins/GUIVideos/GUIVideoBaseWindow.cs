@@ -417,6 +417,58 @@ namespace MediaPortal.GUI.Video
       base.OnPageDestroy(newWindowId);
     }
 
+    protected virtual void SetView(int selectedViewId)
+    {
+      switch (selectedViewId)
+      {
+        case 0: // Shares
+          {
+            int nNewWindow = (int)Window.WINDOW_VIDEOS;
+            VideoState.StartWindow = nNewWindow;
+            if (nNewWindow != GetID)
+            {
+              GUIVideoFiles.Reset();
+              GUIWindowManager.ReplaceWindow(nNewWindow);
+            }
+          }
+          break;
+
+        default: // a db view
+          {
+            ViewDefinition selectedView = (ViewDefinition)handler.Views[selectedViewId - 1];
+            handler.CurrentView = selectedView.Name;
+            VideoState.View = selectedView.Name;
+            int nNewWindow = (int)Window.WINDOW_VIDEO_TITLE;
+            // Reset search variables
+            if (GUIVideoTitle.CurrentViewHistory != handler.CurrentLevelWhere)
+            {
+              GUIVideoTitle.IsActorSearch = false;
+              GUIVideoTitle.IsMovieSearch = false;
+              GUIVideoTitle.ActorSearchString = string.Empty;
+              GUIVideoTitle.MovieSearchString = string.Empty;
+              GUIVideoTitle.MovieSearchDbFieldString = string.Empty;
+            }
+            if (GetID != nNewWindow)
+            {
+              VideoState.StartWindow = nNewWindow;
+              if (nNewWindow != GetID)
+              {
+                GUIWindowManager.ReplaceWindow(nNewWindow);
+              }
+            }
+            else
+            {
+              LoadDirectory(string.Empty);
+              if (facadeLayout.Count <= 0)
+              {
+                GUIControl.FocusControl(GetID, btnLayouts.GetID);
+              }
+            }
+          }
+          break;
+      }
+    }
+
     #region Sort Members
 
     protected virtual void OnSort()
