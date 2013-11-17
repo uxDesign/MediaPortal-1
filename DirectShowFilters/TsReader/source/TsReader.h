@@ -43,6 +43,7 @@
 #define FS_TIM_LIM (2000*10000) //2 seconds in hns units
 #define FS_ADDON_LIM (1000*10000) //1 second in hns units (must not be zero)
 #define INITIAL_BUFF_DELAY 0      // ms units
+#define AUDIO_DELAY (1*10000)             //hns units - audio timestamp offset
 #define AV_READY_DELAY 400     // ms units
 #define PRESENT_DELAY (300*10000) // hns units - timestamp compensation offset
 #define AUDIO_READY_POINT 0.7     // in seconds
@@ -277,6 +278,7 @@ public:
   LONG            m_regInitialBuffDelay;
   bool            m_bEnableBufferLogging;
   bool            m_bSubPinConnectAlways;
+  REFERENCE_TIME  m_regAudioDelay;
 
   CLSID           GetCLSIDFromPin(IPin* pPin);
   HRESULT         GetSubInfoFromPin(IPin* pPin);

@@ -347,6 +347,7 @@ CTsReaderFilter::CTsReaderFilter(IUnknown *pUnk, HRESULT *phr):
   m_regInitialBuffDelay = INITIAL_BUFF_DELAY;
   m_bEnableBufferLogging = false;
   m_bSubPinConnectAlways = false;
+  m_regAudioDelay = AUDIO_DELAY; 
   if (ERROR_SUCCESS==RegCreateKeyEx(HKEY_CURRENT_USER, _T("Software\\Team MediaPortal\\TsReader"), 0, NULL, 
                                     REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, NULL, &key, NULL))
   {
@@ -429,6 +430,20 @@ CTsReaderFilter::CTsReaderFilter(IUnknown *pUnk, HRESULT *phr):
     {
       LogDebug("----- SubPinConnectAlways -----");
       m_bSubPinConnectAlways = true;
+    }
+
+    keyValue = (DWORD)(m_regAudioDelay/10000);
+    LPCTSTR regAudioDelay_RRK = _T("AudioDelayInMilliSeconds");
+    ReadRegistryKeyDword(key, regAudioDelay_RRK, keyValue);
+    if ((keyValue >= 0) && (keyValue <= 500))
+    {
+      m_regAudioDelay = (REFERENCE_TIME)(keyValue*10000);
+      LogDebug("--- Audio delay = %d ms", (m_regAudioDelay/10000));
+    }
+    else
+    {
+      m_regAudioDelay = AUDIO_DELAY;
+      LogDebug("--- Audio delay = %d ms (default value, allowed range is %d - %d)", (m_regAudioDelay/10000), 0, 500);
     }
 
     RegCloseKey(key);

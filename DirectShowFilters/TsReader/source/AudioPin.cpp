@@ -552,10 +552,11 @@ HRESULT CAudioPin::FillBuffer(IMediaSample *pSample)
             //now we have the final timestamp, set timestamp in sample
             REFERENCE_TIME refTime=(REFERENCE_TIME)cRefTime;
             refTime = (REFERENCE_TIME)((double)refTime/m_dRateSeeking);
+            refTime += m_pTsReaderFilter->m_regAudioDelay; //add offset (to produce delay relative to video)
 
             pSample->SetSyncPoint(TRUE);
-
             pSample->SetTime(&refTime,&refTime);
+            
             if (m_pTsReaderFilter->m_ShowBufferAudio || fTime < 0.02 || (m_sampleCount < 3))
             {
               int cntA, cntV;
