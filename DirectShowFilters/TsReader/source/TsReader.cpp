@@ -486,6 +486,7 @@ CTsReaderFilter::CTsReaderFilter(IUnknown *pUnk, HRESULT *phr):
   m_ShowBufferAudio = INIT_SHOWBUFFERAUDIO;
   m_ShowBufferVideo = INIT_SHOWBUFFERVIDEO;
   m_bMPARinGraph = false;
+  m_bEVRhasConnected = false;
   m_MPmainThreadID = GetCurrentThreadId() ;
   m_lastPause = GET_TIME_NOW();
   
@@ -571,6 +572,10 @@ STDMETHODIMP CTsReaderFilter::NonDelegatingQueryInterface(REFIID riid, void ** p
   if ( riid == IID_IAudioStream )
   {
     return GetInterface((IAudioStream*)this, ppv);
+  }
+  if ( riid == IID_ITSRStatus )
+  {
+    return GetInterface((ITSRStatus*)this, ppv);
   }
   return CSource::NonDelegatingQueryInterface(riid, ppv);
 }
@@ -1182,6 +1187,8 @@ STDMETHODIMP CTsReaderFilter::Load(LPCOLESTR pszFileName,const AM_MEDIA_TYPE *pm
 
   //AddGraphToRot(GetFilterGraph());
   SetDuration();
+  
+  m_bEVRhasConnected = false;
 
   return S_OK;
 }
@@ -2383,11 +2390,133 @@ void CTsReaderFilter::CheckForMPAR()
   {
     m_bMPARinGraph = true;
     LogDebug("MPAR found");
+  }  
+  else if (GetFilterGraph() && SUCCEEDED(GetFilterGraph()->FindFilterByName(L"ReClock Audio Renderer", &pBaseFilter)))
+  {
+    m_bMPARinGraph = true;
+    LogDebug("ReClock found");
   }
   else
   {
     m_bMPARinGraph = false;
-    LogDebug("MPAR not found");
+    LogDebug("MPAR/Reclock not found");
+  }
+}
+
+
+// ITSRStatus interface implementation
+
+HRESULT CTsReaderFilter::GetStatusData(STATUSDATA *pStatusData)
+{
+  CheckPointer(pStatusData, E_POINTER);
+  //LogDebug("ITSRStatus - GetStatusData called"); 
+
+  if (!m_bEVRhasConnected)
+  {
+    m_bEVRhasConnected = true;
+    //InitMPARControl();
+  } 
+  
+  int ACnt, VCnt;
+  m_demultiplexer.GetBufferCounts(&ACnt, &VCnt);
+
+//  pStatusData->videoBuffCount = VCnt;
+//  pStatusData->audioBuffCount = ACnt;
+//  pStatusData->videoDelta = m_LastVideoPinDelta;
+//  pStatusData->audioDemuxDelta = (float)m_demultiplexer.GetAverageAudDelta();
+//  pStatusData->audioDeltaRef = (float)m_dAudToPresDeltaRef;
+//  pStatusData->audioPinDelta = m_LastAudioPinDelta;
+//  pStatusData->isMPARcontrol = m_bControlMPAR;
+//  pStatusData->isTimeShifting = m_bTimeShifting;
+//  pStatusData->clockAdjustments = m_iClockAdjustmentsDone;
+
+  pStatusData->videoBuffCount = VCnt;
+  pStatusData->audioBuffCount = ACnt;
+  pStatusData->videoDelta = 0.0;
+  pStatusData->audioDemuxDelta = 0.0;
+  pStatusData->audioDeltaRef = 0.0;
+  pStatusData->audioPinDelta = 0.0;
+  pStatusData->isMPARcontrol = false;
+  pStatusData->isTimeShifting = m_bTimeShifting;
+  pStatusData->clockAdjustments = 0;
+  
+  return S_OK;
+}
+
+HRESULT CTsReaderFilter::AdjustClock(DOUBLE adjustment)
+{
+//  if (!m_bEVRhasConnected)
+//  {
+//    m_bEVRhasConnected = true;
+//    InitMPARControl();
+//  } 
+//  
+//  CAutoLock lock(&m_sectionMPAR);
+//  
+//  if (m_pAVSyncClock)
+//  {
+//    //LogDebug("ITSRStatus - AdjustClock called");
+//    if (m_bControlMPAR) 
+//    {
+//      return E_NOTIMPL;
+//    }
+//    else
+//    {
+//      return m_pAVSyncClock->AdjustClock(adjustment);
+//    }
+//  }
+
+  LogDebug("ITSRStatus - AdjustClock failed");
+  return E_FAIL;
+}
+
+HRESULT CTsReaderFilter::SetBias(DOUBLE bias)
+{
+//  if (!m_bEVRhasConnected)
+//  {
+//    m_bEVRhasConnected = true;
+//    InitMPARControl();
+//  } 
+//
+//  CAutoLock lock(&m_sectionMPAR);
+//
+//  m_dBiasFromEVR = bias; //Store bias from EVR presenter in case we need it later...
+//
+//  if (m_pAVSyncClock)
+//  {
+//    LogDebug("ITSRStatus - SetBias() called from EVR, bias: %f", (float)bias);
+//    if (m_bControlMPAR) 
+//    {
+//      return E_NOTIMPL;
+//    }
+//    else
+//    {
+//      return m_pAVSyncClock->SetBias(bias);
+//    }
+//  }
+    
+  LogDebug("ITSRStatus - SetBias failed");
+  return E_FAIL;
+}
+
+HRESULT CTsReaderFilter::SetAudioDelay(DOUBLE delay)
+{
+  if (!m_bEVRhasConnected)
+  {
+    m_bEVRhasConnected = true;
+    //InitMPARControl();
+  } 
+
+  if ((delay >= 0.0) && (delay <= 500.0) )
+  {
+    m_regAudioDelay = delay * 10000; //Convert to hns units from ms units
+    LogDebug("ITSRStatus - SetAudioDelay(), delay: %f ms", (float)delay);
+    return S_OK;
+  }
+  else
+  {
+    LogDebug("ITSRStatus - SetAudioDelay() failed");
+    return E_FAIL;
   }
 }
 

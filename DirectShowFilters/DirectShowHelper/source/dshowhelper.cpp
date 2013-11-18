@@ -689,8 +689,16 @@ HRESULT MyGetService(IUnknown* punkObject, REFGUID guidService, REFIID riid, LPV
 }
 
 
+#ifdef IS_MP150
+BOOL EvrInit(IVMR9Callback* callback, DWORD dwD3DDevice, IBaseFilter** evrFilter, DWORD monitor)
+{
+  int monitorIdx = 0;
+  bool disVsyncCorr = false;
+  bool disMparCorr = false;
+#else  
 BOOL EvrInit(IVMR9Callback* callback, DWORD dwD3DDevice, IBaseFilter** evrFilter, DWORD monitor, int monitorIdx, bool disVsyncCorr, bool disMparCorr)
 {
+#endif
   HRESULT hr;
   m_RenderPrefix = _T("evr");
   // Make sure that we aren't trying to load the DLLs for second time

@@ -22,6 +22,7 @@
 #include <Mferror.h>
 #include "OuterEVR.h"
 #include "IAVSyncClock.h"
+#include "..\..\shared\ITSRStatus.h"
 #include "callback.h"
 #include "myqueue.h"
 
@@ -375,6 +376,9 @@ protected:
   void           StallScheduler();
   void           ReleaseScheduler();
   void           DwmInitDelegated();
+
+  void           GetTSRStatusInterface();
+  void           SetTSRAudioDelay();
  
   HRESULT EnumFilters(IFilterGraph *pGraph);
   bool GetFilterNames();
@@ -604,6 +608,8 @@ protected:
   double        m_avPhaseDiff;
 
   COuterEVR*    m_pOuterEVR;
+
+  ITSRStatus*   m_pTSRStatus;
 
   LONGLONG      m_streamDuration;
 

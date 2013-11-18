@@ -27,6 +27,8 @@
 #define DSHOWHELPER_API __declspec(dllimport)
 #endif
 
+#define IS_MP150
+
 #include <dxva2api.h>
 #include <dwmapi.h>
 #include <Avrt.h>

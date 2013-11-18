@@ -906,11 +906,10 @@ bool CDeMultiplexer::CheckCompensation(CRefTime rtStartTime)
 
     LogDebug("demux:Compensation:%03.3f, Clock on start %03.3f m_rtStart:%d ",(float)m_filter.Compensation.Millisecs()/1000.0f, m_filter.m_ClockOnStart.Millisecs()/1000.0f, rtStartTime.Millisecs());
 
-    //set flag to false so we dont keep compensating
+    m_targetAVready = GET_TIME_NOW() + AV_READY_DELAY;
+    //set flag so we dont keep compensating
     m_filter.m_bStreamCompensated = true;
     m_bSubtitleCompensationSet = false;
-
-    m_targetAVready = GET_TIME_NOW() + AV_READY_DELAY;
   }
 
   // Subtitle filter is "found" only after Run() has been completed

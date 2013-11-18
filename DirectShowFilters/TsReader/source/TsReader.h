@@ -31,6 +31,7 @@
 #include "ISubtitleStream.h"
 #include "IAudioStream.h"
 #include "ITeletextSource.h"
+#include "..\..\shared\ITSRStatus.h"
 #include <map>
 
 #define AUDIO_CHANGE 0x1
@@ -143,6 +144,7 @@ class CTsReaderFilter : public CSource,
 						public ISubtitleStream, 
 						public ITeletextSource,						
 						public IAudioStream,
+						public ITSRStatus,
 						public ITSReader
 {
 public:
@@ -200,6 +202,11 @@ public:
   void STDMETHODCALLTYPE  OnZapping(int info);
   void STDMETHODCALLTYPE  OnGraphRebuild(int info);
   void STDMETHODCALLTYPE  SetMediaPosition(REFERENCE_TIME MediaPos);
+
+  STDMETHOD(GetStatusData)(STATUSDATA* pStatusData);
+  STDMETHOD(AdjustClock)(DOUBLE adjustment);
+  STDMETHOD(SetBias)(DOUBLE bias);
+  STDMETHOD(SetAudioDelay)(DOUBLE delay);
 	
   // IFileSourceFilter
   STDMETHODIMP    Load(LPCOLESTR pszFileName,const AM_MEDIA_TYPE *pmt);
@@ -333,6 +340,8 @@ private:
   IDVBSubtitle*   m_pDVBSubtitle;
   ITSReaderCallback* m_pCallback;
   ITSReaderAudioChange* m_pRequestAudioCallback;
+
+  bool            m_bEVRhasConnected;
 
   bool            m_bAnalog;
   bool            m_bStoppedForUnexpectedSeek ;

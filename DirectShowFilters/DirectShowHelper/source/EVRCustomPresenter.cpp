@@ -77,6 +77,7 @@ MPEVRCustomPresenter::MPEVRCustomPresenter( IVMR9Callback* pCallback,
   m_bMsVideoCodec(true),
   m_bNewSegment(true),
   m_pAVSyncClock(NULL),
+  m_pTSRStatus(NULL),
   m_dBias(1.0),
   m_dMaxBias(1.1),
   m_dMinBias(0.9),
@@ -578,6 +579,9 @@ void MPEVRCustomPresenter::ReleaseCallback()
 
   m_bEnableDWMQueued = false;
   
+  if (m_pTSRStatus)
+    SAFE_RELEASE(m_pTSRStatus);
+
   if (m_pAVSyncClock)
     SAFE_RELEASE(m_pAVSyncClock);
 
@@ -2797,6 +2801,9 @@ HRESULT STDMETHODCALLTYPE MPEVRCustomPresenter::ProcessMessage(MFVP_MESSAGE_TYPE
       //Setup the Desktop Window Manager (DWM)
       //DwmInitDelegated();
       // TODO add 2nd monitor support
+      GetAVSyncClockInterface();
+      GetTSRStatusInterface();
+      SetTSRAudioDelay();
     break;
 
     case MFVP_MESSAGE_ENDSTREAMING:
@@ -4980,6 +4987,71 @@ void MPEVRCustomPresenter::WriteRegistryKeyDword(HKEY hKey, LPCTSTR& lpSubKey, D
   else 
   {
     Log("Error writing to Registry - subkey: %s error: %d", T2A(lpSubKey), result);
+  }
+}
+
+//=============== TS Reader interface functions =================
+
+void MPEVRCustomPresenter::GetTSRStatusInterface()
+{
+  LOG_NOSCRUB("Get TSRStatus 1");
+  if (m_pTSRStatus)
+  {
+    return;
+  }
+
+  LOG_NOSCRUB("Get TSRStatus 2");
+
+  FILTER_INFO filterInfo;
+  ZeroMemory(&filterInfo, sizeof(filterInfo));
+  m_EVRFilter->QueryFilterInfo(&filterInfo); // This addref's the pGraph member
+
+  CComPtr<IBaseFilter> pBaseFilter;
+
+  HRESULT hr = filterInfo.pGraph->FindFilterByName(L"TsReader", &pBaseFilter);
+  filterInfo.pGraph->Release();
+  if (hr != S_OK)
+  {
+    LOG_NOSCRUB("failed to find TsReader!");
+    return;
+  }
+
+  hr = pBaseFilter->QueryInterface(IID_ITSRStatus, (void**)&m_pTSRStatus);
+  
+  if (hr != S_OK)
+  {
+    LOG_NOSCRUB("Could not get TSRStatus interface");
+    return;
+  }
+
+  if (m_pTSRStatus)
+  {
+    //Tell TsReader.ax we are around...
+    STATUSDATA StatusData;
+    HRESULT hr = m_pTSRStatus->GetStatusData(&StatusData);
+    if (hr != S_OK)
+    {
+      LOG_NOSCRUB("Get TSRStatus failed");
+    }
+  }
+}
+
+void MPEVRCustomPresenter::SetTSRAudioDelay()
+{
+  LOG_NOSCRUB("SetTSRAudioDelay 1");
+  if (m_pAVSyncClock || !m_pTSRStatus || !m_bEnableAudioDelayComp)  //MPAR handles this or we have no TsReader interface
+  {
+    return;
+  }
+
+  double audioDelayRequired = (double) m_dwmBuffers * GetDisplayCycle();
+  if (S_OK == m_pTSRStatus->SetAudioDelay(audioDelayRequired))
+  {
+    LOG_NOSCRUB("SetTSRAudioDelay: TsReader audio delay is %1.10f ms", audioDelayRequired);
+  }
+  else
+  {
+    LOG_NOSCRUB("SetTSRAudioDelay: failed to set TsReader audio delay");
   }
 }
 
