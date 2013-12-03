@@ -50,16 +50,6 @@ namespace TvLibrary.Log
   public class Log
   {
     /// <summary>
-    /// Configure after how many days the log file shall be rotated when a new line is added
-    /// </summary>
-    private static readonly TimeSpan _logDaysToKeep = new TimeSpan(1, 0, 0, 0);
-
-    /// <summary>
-    /// The maximum size of each log file in Megabytes
-    /// </summary>
-    private const int _maxLogSizeMb = 100;
-
-    /// <summary>
     /// The maximum count of identic messages to be logged in a row
     /// </summary>
     private const int _maxRepetitions = 5;
@@ -81,7 +71,6 @@ namespace TvLibrary.Log
     /// </summary>
     static Log()
     {
-      //BackupLogFiles(); <-- do not rotate logs when e.g. SetupTv is started.
       _lastLogLines.Clear();
     }
 
@@ -94,7 +83,6 @@ namespace TvLibrary.Log
     /// </summary>
     public static void BackupLogFiles()
     {
-      RotateLogs();
       _lastLogLines.Clear();
     }
 
@@ -279,94 +267,6 @@ namespace TvLibrary.Log
 
     #region Private methods
 
-    private static string GetFileName(LogType logType)
-    {
-      string Path = GetPathName();
-      switch (logType)
-      {
-        case LogType.Error:
-          return String.Format(@"{0}\log\error.log", Path);
-        case LogType.EPG:
-          return String.Format(@"{0}\log\epg.log", Path);
-        case LogType.PS:
-          return String.Format(@"{0}\log\ps.log", Path);
-        default:
-          return String.Format(@"{0}\log\tv.log", Path);
-      }
-    }
-
-    /// <summary>
-    /// Since Windows caches API calls to the FileSystem a simple FileInfo.CreationTime will be wrong when replacing files (even after refresh).
-    /// Therefore we set it manually.
-    /// </summary>
-    /// <param name="aFileName"></param>
-    private static void CreateBlankFile(string aFileName)
-    {
-      try
-      {
-        using (StreamWriter sw = File.CreateText(aFileName))
-        {
-          sw.Close();
-          try
-          {
-            File.SetCreationTime(aFileName, DateTime.Now);
-          }
-          catch (Exception) {}
-        }
-      }
-      catch (Exception) {}
-    }
-
-    /// <summary>
-    /// Deletes .bak file, moves .log to .bak for every LogType
-    /// </summary>
-    private static void RotateLogs()
-    {
-      try
-      {
-        List<string> physicalLogFiles = new List<string>(3);
-        // Get all log types
-        foreach (LogType logType in Enum.GetValues(typeof(LogType)))
-        {
-          // Get full path for log
-          string name = GetFileName(logType);
-          // Since e.g. debug and info might share the same file make sure we only rotate once
-          if (!physicalLogFiles.Contains(name))
-          {
-            physicalLogFiles.Add(name);
-          }
-        }
-
-        foreach (string logFileName in physicalLogFiles)
-        {
-          // make sure other files will be rotated even if one file fails
-          try
-          {
-            string bakFileName = logFileName.Replace(".log", ".bak");
-            // Delete outdated log
-            if (File.Exists(bakFileName))
-            {
-              File.Delete(bakFileName);
-            }
-            // Rotate current log
-            if (File.Exists(logFileName))
-            {
-              File.Move(logFileName, bakFileName);
-            }
-            // Create a new log file with correct timestamps
-            CreateBlankFile(logFileName);
-          }
-          catch (UnauthorizedAccessException) {}
-          catch (ArgumentException) {}
-          catch (IOException) {}
-        }
-      }
-      catch (Exception)
-      {
-        // Maybe add EventLog here...
-      }
-    }
-
     /// <summary>
     /// Compares the cache's last log entries to check whether we have repeating lines that should not be logged
     /// </summary>
@@ -408,48 +308,6 @@ namespace TvLibrary.Log
       }
     }
 
-
-    /// <summary>
-    /// Does pre-logging tasks - like check for rotation, oversize, etc
-    /// </summary>
-    /// <param name="aLogFileName">The file to be checked</param>
-    /// <returns>False if logging must not go on</returns>
-    private static bool CheckLogPrepared(string aLogFileName)
-    {
-      bool result = true;
-      try
-      {
-        // If the user or some other event deleted the dir make sure to recreate it.
-        Directory.CreateDirectory(Path.GetDirectoryName(aLogFileName));
-        if (File.Exists(aLogFileName))
-        {
-          DateTime checkDate = DateTime.Now - _logDaysToKeep;
-          // Set the file date to a default which would NOT rotate for the case that FileInfo fetching will fail
-          DateTime fileDate = DateTime.Now;
-          try
-          {
-            FileInfo logFi = new FileInfo(aLogFileName);
-            // The information is retrieved from a cache and might be outdated.
-            logFi.Refresh();
-            fileDate = logFi.CreationTime;
-
-            // Some log source went out of control here - do not log until out of disk space!
-            if (logFi.Length > _maxLogSizeMb * 1000 * 1000)
-            {
-              result = false;
-            }
-          }
-          catch (Exception) {}
-          // File is older than today - _logDaysToKeep = rotate
-          if (checkDate.CompareTo(fileDate) > 0)
-          {
-            BackupLogFiles();
-          }
-        }
-      }
-      catch (Exception) {}
-      return result;
-    }
 
     /// <summary>
     /// Writes the file.

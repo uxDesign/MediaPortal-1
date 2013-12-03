@@ -4,7 +4,7 @@ using MediaPortal.Common.Utils.Logger;
 
 namespace MediaPortal.ServiceImplementations
 {
-  public class Log4NetWrapper : MediaPortal.Services.ILog
+  public class Log4NetWrapper : ILog
   {
     #region Variables
     private bool _configuration;
