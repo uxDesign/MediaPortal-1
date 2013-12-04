@@ -2776,6 +2776,27 @@ namespace MediaPortal.GUI.Video
 
     #region Private methods
 
+    private void WakeUpSrv(string newFolderName)
+    {
+      string serverName = string.Empty;
+      bool wakeOnLanEnabled = _virtualDirectory.IsWakeOnLanEnabled(_virtualDirectory.GetShare(newFolderName));
+
+      if (wakeOnLanEnabled)
+      {
+        serverName = Util.Utils.GetServerNameFromUNCPath(newFolderName);
+      }
+      try
+      {
+        Log.Debug("WakeUpSrv: FolderName = {0}, ShareName = {1}, WOL enabled = {2}", newFolderName, _virtualDirectory.GetShare(newFolderName).Name, wakeOnLanEnabled);
+      }
+      catch { };
+      if (!string.IsNullOrEmpty(serverName))
+      {
+        WakeUpServer wakeUpServer = new Util.WakeUpServer();
+        wakeUpServer.HandleWakeUpServer(serverName);
+      }
+    }
+
     private void LoadDirectory(string newFolderName, bool useCache)
     {
       if (newFolderName == null)
@@ -2790,6 +2811,8 @@ namespace MediaPortal.GUI.Video
       }
 
       GUIWaitCursor.Show();
+
+      WakeUpSrv(newFolderName);
 
       if (newFolderName != _currentFolder && _mapSettings != null)
       {

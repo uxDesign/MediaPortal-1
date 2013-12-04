@@ -382,6 +382,7 @@ namespace MediaPortal.GUI.Music
       }
 
       base.OnPageLoad();
+      ResetShares();
 
       if (MusicState.StartWindow != GetID)
       {
@@ -407,10 +408,33 @@ namespace MediaPortal.GUI.Music
       base.OnPageDestroy(newWindowId);
     }
 
+    private void WakeUpSrv(string newFolderName)
+    {
+      string serverName = string.Empty;
+      bool wakeOnLanEnabled = _virtualDirectory.IsWakeOnLanEnabled(_virtualDirectory.GetShare(newFolderName));
+
+      if (wakeOnLanEnabled)
+      {
+        serverName = Util.Utils.GetServerNameFromUNCPath(newFolderName);
+      }
+      try
+      {
+        Log.Debug("WakeUpSrv: FolderName = {0}, ShareName = {1}, WOL enabled = {2}", newFolderName, _virtualDirectory.GetShare(newFolderName).Name, wakeOnLanEnabled);
+      }
+      catch { };
+      if (!string.IsNullOrEmpty(serverName))
+      {
+        WakeUpServer wakeUpServer = new Util.WakeUpServer();
+        wakeUpServer.HandleWakeUpServer(serverName);
+      }
+    }
+
     protected override void LoadDirectory(string strNewDirectory)
     {
       DateTime dtStart = DateTime.Now;
       GUIWaitCursor.Show();
+
+      WakeUpSrv(strNewDirectory);
 
       try
       {

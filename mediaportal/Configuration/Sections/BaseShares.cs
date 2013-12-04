@@ -51,6 +51,7 @@ namespace MediaPortal.Configuration.Sections
       public bool ScanShare = false;
       public bool CreateThumbs = true;
       public bool EachFolderIsMovie = false;
+      public bool EnableWakeOnLan = false;
       
       public bool HasPinCode
       {
@@ -342,6 +343,8 @@ namespace MediaPortal.Configuration.Sections
         shareData.ActiveConnection = editShare.ActiveConnection;
         shareData.RemoteFolder = editShare.RemoteFolder;
         shareData.DefaultLayout = ProperLayoutFromDefault(editShare.View);
+        shareData.EnableWakeOnLan = editShare.EnableWakeOnLan;
+
         //CreateThumbs
         if (selectedSection == "movies")
         {
@@ -410,6 +413,8 @@ namespace MediaPortal.Configuration.Sections
           editShare.PassWord = shareData.PassWord;
           editShare.RemoteFolder = shareData.RemoteFolder;
           editShare.View = ProperDefaultFromLayout(shareData.DefaultLayout);
+          editShare.EnableWakeOnLan = shareData.EnableWakeOnLan;
+
           // CreateThumbs
           int drivetype = Util.Utils.getDriveType(shareData.Folder);
           if (selectedSection == "movies") // && 
@@ -449,6 +454,8 @@ namespace MediaPortal.Configuration.Sections
             shareData.ActiveConnection = editShare.ActiveConnection;
             shareData.RemoteFolder = editShare.RemoteFolder;
             shareData.DefaultLayout = ProperLayoutFromDefault(editShare.View);
+            shareData.EnableWakeOnLan = editShare.EnableWakeOnLan;
+
             //CreateThumbs
             if (selectedSection == "movies")
             {
@@ -682,6 +689,7 @@ namespace MediaPortal.Configuration.Sections
           string sharePort = String.Format("shareport{0}", index);
           string shareRemotePath = String.Format("shareremotepath{0}", index);
           string shareViewPath = String.Format("shareview{0}", index);
+          string sharewakeonlan = String.Format("sharewakeonlan{0}", index);
 
           string shareNameData = xmlreader.GetValueAsString(section, shareName, "");
           string sharePathData = xmlreader.GetValueAsString(section, sharePath, "");
@@ -706,6 +714,8 @@ namespace MediaPortal.Configuration.Sections
           int shareLayout = xmlreader.GetValueAsInt(section, shareViewPath,
                                                     (int)MediaPortal.GUI.Library.GUIFacadeControl.Layout.List);
 
+          bool shareWakeOnLan = xmlreader.GetValueAsBool(section, sharewakeonlan, false);
+          
           // For Music Shares, we can indicate, if we want to scan them every time
           bool shareScanData = false;
           if (section == "music" || section == "movies")
@@ -735,7 +745,8 @@ namespace MediaPortal.Configuration.Sections
             newShare.Port = sharePortData;
             newShare.RemoteFolder = shareRemotePathData;
             newShare.DefaultLayout = (Layout)shareLayout;
-
+            newShare.EnableWakeOnLan = shareWakeOnLan;
+            
             if (section == "music" || section == "movies")
             {
               newShare.ScanShare = shareScanData;
@@ -792,7 +803,8 @@ namespace MediaPortal.Configuration.Sections
           string sharePort = String.Format("shareport{0}", index);
           string shareRemotePath = String.Format("shareremotepath{0}", index);
           string shareViewPath = String.Format("shareview{0}", index);
-
+          string sharewakeonlan = String.Format("sharewakeonlan{0}", index);
+          
           xmlwriter.RemoveEntry(section, shareName);
           xmlwriter.RemoveEntry(section, sharePath);
           xmlwriter.RemoveEntry(section, sharePin);
@@ -803,7 +815,8 @@ namespace MediaPortal.Configuration.Sections
           xmlwriter.RemoveEntry(section, sharePort);
           xmlwriter.RemoveEntry(section, shareRemotePath);
           xmlwriter.RemoveEntry(section, shareViewPath);
-
+          xmlwriter.RemoveEntry(section, sharewakeonlan);
+          
           if (section == "music" || section == "movies")
           {
             string shareScan = String.Format("sharescan{0}", index);
@@ -833,6 +846,7 @@ namespace MediaPortal.Configuration.Sections
           //ThumbsCreate (default true)
           bool thumbsCreate = true;
           bool folderIsMovie = false;
+          bool shareWakeOnLan = false;
 
           if (CurrentShares != null && CurrentShares.Count > index)
           {
@@ -854,6 +868,7 @@ namespace MediaPortal.Configuration.Sections
               // ThumbsCreate
               thumbsCreate = shareData.CreateThumbs;
               folderIsMovie = shareData.EachFolderIsMovie;
+              shareWakeOnLan = shareData.EnableWakeOnLan;
 
               if (CurrentShares[index] == DefaultShare)
               {
@@ -870,6 +885,7 @@ namespace MediaPortal.Configuration.Sections
               xmlwriter.SetValue(section, sharePort, sharePortData.ToString());
               xmlwriter.SetValue(section, shareRemotePath, shareRemotePathData);
               xmlwriter.SetValue(section, shareViewPath, shareLayout);
+              xmlwriter.SetValueAsBool(section, sharewakeonlan, shareWakeOnLan);
 
               if (section == "music" || section == "movies")
               {

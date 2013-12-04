@@ -659,6 +659,7 @@ namespace MediaPortal.GUI.Pictures
       base.OnPageLoad();
       InitViewSelections();
       UpdateButtonStates();
+      ResetShares();
 
       GUITextureManager.CleanupThumbs();
       // LoadSettings();
@@ -2110,6 +2111,27 @@ namespace MediaPortal.GUI.Pictures
       }
     }
 
+    private void WakeUpSrv(string newFolderName)
+    {
+      string serverName = string.Empty;
+      bool wakeOnLanEnabled = virtualDirectory.IsWakeOnLanEnabled(virtualDirectory.GetShare(newFolderName));
+      
+      if (wakeOnLanEnabled)
+      {
+        serverName = Util.Utils.GetServerNameFromUNCPath(newFolderName);
+      }
+      try 
+      {
+        Log.Debug("WakeUpSrv: FolderName = {0}, ShareName = {1}, WOL enabled = {2}", newFolderName, virtualDirectory.GetShare(newFolderName).Name, wakeOnLanEnabled);
+      }
+      catch { };
+      if (!string.IsNullOrEmpty(serverName))
+      {
+        WakeUpServer wakeUpServer = new Util.WakeUpServer();
+        wakeUpServer.HandleWakeUpServer(serverName);
+      }
+    }
+
     public static void Filter(ref List<GUIListItem> itemlist)
     {
       itemlist.RemoveAll(ContainsFolderThumb);
@@ -2121,6 +2143,8 @@ namespace MediaPortal.GUI.Pictures
       string objectCount = string.Empty;
 
       GUIWaitCursor.Show();
+
+      WakeUpSrv(strNewDirectory);
 
       GUIListItem SelectedItem = GetSelectedItem();
       if (SelectedItem != null)

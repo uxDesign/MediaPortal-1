@@ -354,6 +354,16 @@ namespace MediaPortal.Util
       return sFilePath;
     }
 
+    public static string GetServerNameFromUNCPath(string sFilePath)
+    {
+      Uri uri = new Uri(sFilePath);
+      
+      if (!uri.IsUnc)
+        return string.Empty;
+
+      return uri.Host;
+    }
+
     public static long GetDiskSize(string drive)
     {
       long diskSize = 0;

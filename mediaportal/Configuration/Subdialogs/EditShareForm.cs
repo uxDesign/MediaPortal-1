@@ -59,6 +59,7 @@ namespace MediaPortal.Configuration
     public MPLabel labelCreateThumbs;
     public MPCheckBox cbEachFolderIsMovie;
     private ToolTip toolTipEditShare;
+    private MPCheckBox cbEnableWakeOnLan;
     private IContainer components;
 
     public EditShareForm()
@@ -100,6 +101,7 @@ namespace MediaPortal.Configuration
       this.components = new System.ComponentModel.Container();
       System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(EditShareForm));
       this.groupBox1 = new MediaPortal.UserInterface.Controls.MPGroupBox();
+      this.cbEnableWakeOnLan = new MediaPortal.UserInterface.Controls.MPCheckBox();
       this.cbEachFolderIsMovie = new MediaPortal.UserInterface.Controls.MPCheckBox();
       this.cbCreateThumbs = new MediaPortal.UserInterface.Controls.MPCheckBox();
       this.labelCreateThumbs = new MediaPortal.UserInterface.Controls.MPLabel();
@@ -136,6 +138,7 @@ namespace MediaPortal.Configuration
       this.groupBox1.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
             | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
+      this.groupBox1.Controls.Add(this.cbEnableWakeOnLan);
       this.groupBox1.Controls.Add(this.cbEachFolderIsMovie);
       this.groupBox1.Controls.Add(this.cbCreateThumbs);
       this.groupBox1.Controls.Add(this.labelCreateThumbs);
@@ -168,6 +171,17 @@ namespace MediaPortal.Configuration
       this.groupBox1.TabStop = false;
       this.groupBox1.Text = "Folder settings";
       this.groupBox1.Enter += new System.EventHandler(this.groupBox1_Enter);
+      // 
+      // cbEnableWakeOnLan
+      // 
+      this.cbEnableWakeOnLan.AutoSize = true;
+      this.cbEnableWakeOnLan.FlatStyle = System.Windows.Forms.FlatStyle.Popup;
+      this.cbEnableWakeOnLan.Location = new System.Drawing.Point(16, 172);
+      this.cbEnableWakeOnLan.Name = "cbEnableWakeOnLan";
+      this.cbEnableWakeOnLan.Size = new System.Drawing.Size(127, 17);
+      this.cbEnableWakeOnLan.TabIndex = 31;
+      this.cbEnableWakeOnLan.Text = "Enable Wake On Lan";
+      this.cbEnableWakeOnLan.UseVisualStyleBackColor = true;
       // 
       // cbEachFolderIsMovie
       // 
@@ -663,6 +677,17 @@ namespace MediaPortal.Configuration
     {
       get { return cbEachFolderIsMovie.Checked; }
       set { cbEachFolderIsMovie.Checked = value; }
+    }
+
+    public bool EnableWakeOnLan
+    {
+      get { return cbEnableWakeOnLan.Checked; }
+      set { cbEnableWakeOnLan.Checked = value; }
+    }
+
+    private void checkBox1_CheckedChanged(object sender, EventArgs e)
+    {
+
     }
   }
 }
