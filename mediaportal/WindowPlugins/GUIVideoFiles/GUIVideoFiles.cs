@@ -2207,6 +2207,7 @@ namespace MediaPortal.GUI.Video
         FileInformation fi = new FileInformation();
         GUIListItem item = new GUIListItem(Util.Utils.GetFilename(file), "", file, false, fi);
         items.Add(item);
+        WakeUpSrv(item.Path);
       }
 
       if (items.Count <= 0)
@@ -2776,7 +2777,7 @@ namespace MediaPortal.GUI.Video
 
     #region Private methods
 
-    private void WakeUpSrv(string newFolderName)
+    private static void WakeUpSrv(string newFolderName)
     {
       string serverName = string.Empty;
       bool wakeOnLanEnabled = _virtualDirectory.IsWakeOnLanEnabled(_virtualDirectory.GetShare(newFolderName));
