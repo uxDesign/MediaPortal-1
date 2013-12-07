@@ -263,6 +263,17 @@ namespace TvLibrary.Log
       CommonLogger.Instance.LogLevel = ConvertToCommonLogLevel(level);
     }
 
+    /// <summary>
+    /// Set the log level for the log type
+    /// </summary>
+    /// <param name="type">log type</param>
+    /// <param name="level">level to set</param>
+    public static void SetLogLevel(LogType type, LogLevel level)
+    {
+      Log.Info(type, "Set loglevel for {0} to: {1}", type.ToString(), level.ToString());
+      CommonLogger.Instance.SetLogLevel(ConvertToCommonLogType(type), ConvertToCommonLogLevel(level));
+    }
+
     #endregion
 
     #region Private methods

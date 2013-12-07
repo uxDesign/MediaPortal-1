@@ -15,6 +15,8 @@ namespace MediaPortal.ServiceImplementations
     {
       var logLevel = (Level)MediaPortal.Profile.MPSettings.Instance.GetValueAsInt("general", "loglevel", 3);
       SetLogLevel(logLevel);
+      logLevel = (Level)MediaPortal.Profile.MPSettings.Instance.GetValueAsInt("general", "loglevelpowerscheduler", 3);
+      SetLogLevel(LogType.PS, logLevel);
     }
     #endregion
 
@@ -107,6 +109,11 @@ namespace MediaPortal.ServiceImplementations
         case Level.Warning: return CommonLogLevel.Warning;
         default: return CommonLogLevel.All;
       }
+    }
+
+    private void SetLogLevel(LogType type, Level logLevel)
+    {
+      CommonLogger.Instance.SetLogLevel(ConvertToCommonLogType(type), ConvertToCommonLogLevel(logLevel));
     }
 
     #endregion

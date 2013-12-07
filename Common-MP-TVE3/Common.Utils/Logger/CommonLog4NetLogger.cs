@@ -13,7 +13,7 @@ namespace MediaPortal.Common.Utils.Logger
   {
 
     #region variables
-    protected CommonLogLevel MinLevel = CommonLogLevel.All;
+    protected Dictionary<CommonLogType, CommonLogLevel> _logLevels;
     protected Dictionary<CommonLogType, ILog> _loggers;
     #endregion
 
@@ -47,9 +47,11 @@ namespace MediaPortal.Common.Utils.Logger
       log4net.Config.XmlConfigurator.Configure(mStream);
 
       _loggers = new Dictionary<CommonLogType, ILog>();
+      _logLevels = new Dictionary<CommonLogType, CommonLogLevel>();
       foreach (CommonLogType logType in Enum.GetValues(typeof(CommonLogType)))
       {
         _loggers.Add(logType, LogManager.GetLogger(logType.ToString()));
+        _logLevels.Add(logType, CommonLogLevel.Debug);
       }
     }
 
@@ -88,10 +90,33 @@ namespace MediaPortal.Common.Utils.Logger
       tw.WriteLine("      <filter type=\"log4net.Filter.LevelMatchFilter\">  ");
       tw.WriteLine("        <levelToMatch value=\"ERROR\" />  ");
       tw.WriteLine("      </filter>  ");
-      tw.WriteLine("      <filter type=\"log4net.Filter.LoggerMatchFilter\">  ");
+      tw.WriteLine("      <!-- filter type=\"log4net.Filter.LoggerMatchFilter\">  ");
+      tw.WriteLine("        <loggerToMatch value=\"EPG\" />  ");
+      tw.WriteLine("        <acceptOnMatch value=\"false\" />  ");
+      tw.WriteLine("      </filter -->");
+      tw.WriteLine("      <!-- filter type=\"log4net.Filter.LoggerMatchFilter\">  ");
       tw.WriteLine("        <loggerToMatch value=\"PS\" />  ");
       tw.WriteLine("        <acceptOnMatch value=\"false\" />  ");
-      tw.WriteLine("      </filter>");
+      tw.WriteLine("      </filter -->");
+      tw.WriteLine("    </appender>");
+      tw.WriteLine("");
+      tw.WriteLine("    <appender name=\"EPGLogAppender\" type=\"log4net.Appender.RollingFileAppender\">");
+      tw.WriteLine("      <file value=\"EPG.log\" />");
+      tw.WriteLine("      <encoding type=\"System.Text.UTF8Encoding\" />");
+      tw.WriteLine("      <appendToFile value=\"false\" />");
+      tw.WriteLine("      <lockingModel type=\"log4net.Appender.FileAppender+MinimalLock\" />");
+      tw.WriteLine("      <rollingStyle value=\"Size\" />");
+      tw.WriteLine("      <maxSizeRollBackups value=\"5\" />");
+      tw.WriteLine("      <maximumFileSize value=\"5MB\" />");
+      tw.WriteLine("      <staticLogFileName value=\"true\" />");
+      tw.WriteLine("      <PreserveLogFileNameExtension value=\"true\" />");
+      tw.WriteLine("      <layout type=\"log4net.Layout.PatternLayout\">");
+      tw.WriteLine("        <conversionPattern value=\"[%date] [%-9thread] [%-5level] - %message%newline\" />");
+      tw.WriteLine("      </layout>");
+      tw.WriteLine("      <filter type=\"log4net.Filter.LoggerMatchFilter\">  ");
+      tw.WriteLine("        <loggerToMatch value=\"EPG\" />  ");
+      tw.WriteLine("      </filter>  ");
+      tw.WriteLine("      <filter type=\"log4net.Filter.DenyAllFilter\" />");
       tw.WriteLine("    </appender>");
       tw.WriteLine("");
       tw.WriteLine("    <appender name=\"PSLogAppender\" type=\"log4net.Appender.RollingFileAppender\">");
@@ -151,7 +176,8 @@ namespace MediaPortal.Common.Utils.Logger
       tw.WriteLine("      <level value=\"ALL\" />");
       tw.WriteLine("      <appender-ref ref=\"ConsoleAppender\" />");
       tw.WriteLine("      <appender-ref ref=\"ErrorLossyFileAppender\" />");
-      tw.WriteLine("      <appender-ref ref=\"PSLogAppender\" />");
+      tw.WriteLine("      <!-- appender-ref ref=\"EPGLogAppender\" / -->");
+      tw.WriteLine("      <!-- appender-ref ref=\"PSLogAppender\" / -->");
       tw.WriteLine("      <appender-ref ref=\"DefaultLogAppender\" />");
       tw.WriteLine("    </root>");
       tw.WriteLine("  </log4net>");
@@ -172,10 +198,19 @@ namespace MediaPortal.Common.Utils.Logger
     /// written to the logger.</value>
     public CommonLogLevel LogLevel
     {
-      get { return MinLevel; }
-      set { MinLevel = value; }
+      get { return _logLevels[CommonLogType.Log]; }
+      set { _logLevels[CommonLogType.Log] = value; }
     }
 
+    /// <summary>
+    /// Gets or sets the log level.
+    /// </summary>
+    /// <value>A <see cref="CommonLogLevel"/> value that indicates the minimum level messages must have to be 
+    /// written to the logger.</value>
+    public void SetLogLevel(CommonLogType logType, CommonLogLevel logLevel)
+    {
+      _logLevels[logType] = logLevel;
+    }
 
     /// <summary>
     /// Writes a debug message to the Log  
@@ -185,7 +220,7 @@ namespace MediaPortal.Common.Utils.Logger
     /// <param name="args">An array of objects to write using format.</param>
     public void Debug(CommonLogType logType, string format, params object[] args)
     {
-      if (MinLevel >= CommonLogLevel.Debug)
+      if (_logLevels[logType] >= CommonLogLevel.Debug)
       {
         _loggers[logType].Debug(FormatString(format, args));
       }
@@ -199,7 +234,7 @@ namespace MediaPortal.Common.Utils.Logger
     /// <param name="args">An array of objects to write using format.</param>
     public void Info(CommonLogType logType, string format, params object[] args)
     {
-      if (MinLevel >= CommonLogLevel.Information)
+      if (_logLevels[logType] >= CommonLogLevel.Information)
       {
         _loggers[logType].Info(FormatString(format, args));
       }
@@ -213,7 +248,7 @@ namespace MediaPortal.Common.Utils.Logger
     /// <param name="args">An array of objects to write using format.</param>
     public void Warn(CommonLogType logType, string format, params object[] args)
     {
-      if (MinLevel >= CommonLogLevel.Warning)
+      if (_logLevels[logType] >= CommonLogLevel.Warning)
       {
         _loggers[logType].Warn(FormatString(format, args));
       }
@@ -260,7 +295,7 @@ namespace MediaPortal.Common.Utils.Logger
     /// <param name="args">An array of objects to write using format.</param>
     public void Critical(CommonLogType logType, string format, params object[] args)
     {
-      if (MinLevel >= CommonLogLevel.Critical)
+      if (_logLevels[logType] >= CommonLogLevel.Critical)
       {
         _loggers[logType].Fatal(FormatString(format, args));
       }
@@ -274,7 +309,7 @@ namespace MediaPortal.Common.Utils.Logger
     /// <param name="ex">The <see cref="Exception"/> to write.</param>
     public void Critical(CommonLogType logType, Exception ex)
     {
-      if (MinLevel >= CommonLogLevel.Critical)
+      if (_logLevels[logType] >= CommonLogLevel.Critical)
       {
         _loggers[logType].Fatal(FormatException(ex));
       }
