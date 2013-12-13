@@ -170,7 +170,7 @@ namespace MediaPortal.Util
     /// <param name="hwAddress">hardware ethernet address to wake up</param>
     /// <param name="ipAddress">IP address to use as target</param>
     /// <returns>bool indicating if the packet was sent successfully</returns>
-    private bool SendWakeOnLanPacket(byte[] hwAddress, IPAddress ipAddress)
+    public bool SendWakeOnLanPacket(byte[] hwAddress, IPAddress ipAddress)
     {
       if (IsValidEthernetAddress(hwAddress))
       {

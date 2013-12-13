@@ -577,7 +577,6 @@
       <SubType>Component</SubType>
     </Compile>
     <Compile Include="guilib\DXEnums.cs" />
-    <Compile Include="Util\WakeUpServer.cs" />
     <Compile Include="Util\WakeOnLanManager.cs" />
     <Compile Include="Util\EncryptDecrypt.cs" />
     <Compile Include="Util\FanArt.cs" />
