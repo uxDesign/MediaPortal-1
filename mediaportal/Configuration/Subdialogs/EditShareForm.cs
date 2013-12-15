@@ -21,6 +21,10 @@
 using System;
 using System.ComponentModel;
 using System.Windows.Forms;
+using System.Net;
+using MediaPortal.Util;
+using MediaPortal.Profile;
+using MediaPortal.GUI.Library;
 using MediaPortal.UserInterface.Controls;
 
 namespace MediaPortal.Configuration
@@ -60,6 +64,7 @@ namespace MediaPortal.Configuration
     public MPCheckBox cbEachFolderIsMovie;
     private ToolTip toolTipEditShare;
     private MPCheckBox cbEnableWakeOnLan;
+    private MPButton mpButtonLearnMacNow;
     private IContainer components;
 
     public EditShareForm()
@@ -130,6 +135,7 @@ namespace MediaPortal.Configuration
       this.okButton = new MediaPortal.UserInterface.Controls.MPButton();
       this.folderBrowserDialog = new System.Windows.Forms.FolderBrowserDialog();
       this.toolTipEditShare = new System.Windows.Forms.ToolTip(this.components);
+      this.mpButtonLearnMacNow = new MediaPortal.UserInterface.Controls.MPButton();
       this.groupBox1.SuspendLayout();
       this.SuspendLayout();
       // 
@@ -138,6 +144,7 @@ namespace MediaPortal.Configuration
       this.groupBox1.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
             | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
+      this.groupBox1.Controls.Add(this.mpButtonLearnMacNow);
       this.groupBox1.Controls.Add(this.cbEnableWakeOnLan);
       this.groupBox1.Controls.Add(this.cbEachFolderIsMovie);
       this.groupBox1.Controls.Add(this.cbCreateThumbs);
@@ -448,6 +455,16 @@ namespace MediaPortal.Configuration
       this.okButton.UseVisualStyleBackColor = true;
       this.okButton.Click += new System.EventHandler(this.okButton_Click);
       // 
+      // mpButtonLearnMacNow
+      // 
+      this.mpButtonLearnMacNow.Location = new System.Drawing.Point(251, 172);
+      this.mpButtonLearnMacNow.Name = "mpButtonLearnMacNow";
+      this.mpButtonLearnMacNow.Size = new System.Drawing.Size(141, 23);
+      this.mpButtonLearnMacNow.TabIndex = 32;
+      this.mpButtonLearnMacNow.Text = "Learn MAC address now";
+      this.mpButtonLearnMacNow.UseVisualStyleBackColor = true;
+      this.mpButtonLearnMacNow.Click += new System.EventHandler(this.mpButton1_Click);
+      // 
       // EditShareForm
       // 
       this.AcceptButton = this.okButton;
@@ -688,6 +705,86 @@ namespace MediaPortal.Configuration
     private void checkBox1_CheckedChanged(object sender, EventArgs e)
     {
 
+    }
+
+    private void mpButton1_Click(object sender, EventArgs e)
+    {
+      String macAddress;
+      byte[] hwAddress;
+
+      WakeOnLanManager wakeOnLanManager = new WakeOnLanManager();
+
+      IPAddress ipAddress = null;
+      string hostName = Util.Utils.GetServerNameFromUNCPath(folderTextBox.Text);
+
+      if (string.IsNullOrEmpty(hostName))
+      {
+        Log.Debug("Wrong unc path {0}", folderTextBox.Text);
+        return;
+      }
+
+      using (Profile.Settings xmlreader = new MPSettings())
+      {
+        macAddress = xmlreader.GetValueAsString("macAddress", hostName, null);
+      }
+
+      if (wakeOnLanManager.Ping(hostName, 100) && !string.IsNullOrEmpty(macAddress))
+      {
+        Log.Debug("WakeUpServer: The {0} server already started and mac address is learnt!", hostName);
+        return;
+      }
+
+      // Check if we already have a valid IP address stored,
+      // otherwise try to resolve the IP address
+      if (!IPAddress.TryParse(hostName, out ipAddress))
+      {
+        // Get IP address of the server
+        try
+        {
+          IPAddress[] ips;
+
+          ips = Dns.GetHostAddresses(hostName);
+
+          Log.Debug("WakeUpServer: WOL - GetHostAddresses({0}) returns:", hostName);
+
+          foreach (IPAddress ip in ips)
+          {
+            Log.Debug("    {0}", ip);
+          }
+
+          // Use first valid IP address
+          ipAddress = ips[0];
+        }
+        catch (Exception ex)
+        {
+          Log.Error("WakeUpServer: WOL - Failed GetHostAddress - {0}", ex.Message);
+        }
+      }
+
+      // Check for valid IP address
+      if (ipAddress != null)
+      {
+        // Update the MAC address if possible
+        hwAddress = wakeOnLanManager.GetHardwareAddress(ipAddress);
+
+        if (wakeOnLanManager.IsValidEthernetAddress(hwAddress))
+        {
+          Log.Debug("WakeUpServer: WOL - Valid auto MAC address: {0:x}:{1:x}:{2:x}:{3:x}:{4:x}:{5:x}"
+                    , hwAddress[0], hwAddress[1], hwAddress[2], hwAddress[3], hwAddress[4], hwAddress[5]);
+
+          // Store MAC address
+          macAddress = BitConverter.ToString(hwAddress).Replace("-", ":");
+
+          Log.Debug("WakeUpServer: WOL - Store MAC address: {0}", macAddress);
+
+          using (
+            MediaPortal.Profile.Settings xmlwriter =
+              new MediaPortal.Profile.MPSettings())
+          {
+            xmlwriter.SetValue("macAddress", hostName, macAddress);
+          }
+        }
+      }
     }
   }
 }

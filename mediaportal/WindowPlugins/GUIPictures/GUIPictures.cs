@@ -2203,7 +2203,7 @@ namespace MediaPortal.GUI.Pictures
       // otherwise try to resolve the IP address
       if (!IPAddress.TryParse(HostName, out ipAddress))
       {
-        // Get IP address of the TV server
+        // Get IP address of the server
         try
         {
           IPAddress[] ips;
