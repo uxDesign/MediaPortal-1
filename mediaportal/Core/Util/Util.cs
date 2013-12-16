@@ -592,6 +592,24 @@ namespace MediaPortal.Util
       return false;
     }
 
+    public static bool CheckServerStatus(string folderName)
+    {
+      string serverName = string.Empty;
+      
+      try
+      {
+        serverName = Util.Utils.GetServerNameFromUNCPath(folderName);
+      }
+      catch { }
+      
+      if (!string.IsNullOrEmpty(serverName))
+      {
+        WakeOnLanManager wakeOnLanManager = new WakeOnLanManager();
+        return wakeOnLanManager.Ping(serverName, 100);
+      }
+      return false;
+    }
+
     public static void SetDefaultIcons(GUIListItem item)
     {
       if (item == null)

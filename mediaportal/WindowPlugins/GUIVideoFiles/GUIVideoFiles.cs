@@ -190,6 +190,8 @@ namespace MediaPortal.GUI.Video
     private bool _useSortTitle = false;
     private bool _useOnlyNfoScraper = false;
     private bool _doNotUseDatabase = false;
+
+    private static string _prevServerName = string.Empty;
     
     #endregion
 
@@ -2948,6 +2950,11 @@ namespace MediaPortal.GUI.Video
 
     private static void WakeUpSrv(string newFolderName)
     {
+      if (!Util.Utils.IsNetwork(newFolderName))
+      {
+        return;
+      }
+      
       string serverName = string.Empty;
       bool wakeOnLanEnabled = _virtualDirectory.IsWakeOnLanEnabled(_virtualDirectory.GetShare(newFolderName));
 
@@ -2955,6 +2962,14 @@ namespace MediaPortal.GUI.Video
       {
         serverName = Util.Utils.GetServerNameFromUNCPath(newFolderName);
       }
+
+      if (serverName == _prevServerName)
+      {
+        return;
+      }
+
+      _prevServerName = serverName;
+
       try
       {
         Log.Debug("WakeUpSrv: FolderName = {0}, ShareName = {1}, WOL enabled = {2}", newFolderName, _virtualDirectory.GetShare(newFolderName).Name, wakeOnLanEnabled);
@@ -3164,17 +3179,22 @@ namespace MediaPortal.GUI.Video
             for (int i = 0; i < innerList.Count; i++)
             {
               GUIListItem item = innerList[i];
-              bool isMovieFolder = IsMovieFolder(item.Path);
-
-              if (VirtualDirectory.IsValidExtension(item.Path, Util.Utils.VideoExtensions, false) || isMovieFolder)
+              bool isMovieFolder = false;
+ 
+              if (!string.IsNullOrEmpty(newFolderName))
               {
-                item.Label = pair.Key;
-              }
+                isMovieFolder = IsMovieFolder(item.Path);
 
-              SetLabel(item);
+                if (VirtualDirectory.IsValidExtension(item.Path, Util.Utils.VideoExtensions, false) || isMovieFolder)
+                {
+                  item.Label = pair.Key;
+                }
+
+                SetLabel(item);
+              }
               // Check db for watched status for played movie or changed status in movie info window
               string file = item.Path;
-              
+
               if (!item.IsFolder || isMovieFolder)
               {
                 // Special folders (DVD/Blu-Ray)
@@ -3221,7 +3241,6 @@ namespace MediaPortal.GUI.Video
                   item.Label3 = percentWatched + "% #" + timesWatched;
                 }
               }
-
               item.OnItemSelected += item_OnItemSelected;
               facadeLayout.Add(item);
             }
@@ -4053,6 +4072,7 @@ namespace MediaPortal.GUI.Video
         {
           item.Label2 = strSize1;
         }
+
       }
       else if (CurrentSortMethod == VideoSort.SortMethod.Created || CurrentSortMethod == VideoSort.SortMethod.Date || CurrentSortMethod == VideoSort.SortMethod.Modified)
       {

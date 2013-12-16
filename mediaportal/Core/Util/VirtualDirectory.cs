@@ -1446,7 +1446,17 @@ namespace MediaPortal.Util
           item.IsRemote = true;
         }
         Utils.SetDefaultIcons(item);
-        if (share.Pincode < 0)// && !Utils.IsNetwork(share.Path))
+
+        bool pathOnline = Util.Utils.CheckServerStatus(item.Path);
+
+        if (Util.Utils.IsNetwork(item.Path) && !pathOnline)
+        {
+          item.IconImage = "defaultNetworkOffline.png";
+          item.IconImageBig = "defaultNetworkBigOffline.png";
+          item.ThumbnailImage = "defaultNetworkBigOffline.png";
+        }
+
+        if (share.Pincode < 0 && pathOnline)
         {
           string coverArt = Utils.GetCoverArtName(item.Path, "folder");
           string largeCoverArt = Utils.GetLargeCoverArtName(item.Path, "folder");
@@ -1468,6 +1478,7 @@ namespace MediaPortal.Util
             item.ThumbnailImage = coverArt;
           }
         }
+
         items.Add(item);
       }
 
