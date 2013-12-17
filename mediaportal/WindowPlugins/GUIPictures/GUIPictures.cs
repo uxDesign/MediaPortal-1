@@ -407,6 +407,7 @@ namespace MediaPortal.GUI.Pictures
     public static string fileNameCheck = string.Empty;
     protected PictureSort.SortMethod currentSortMethod = PictureSort.SortMethod.Name;
     public static List<string> _thumbnailFolderItem = new List<string>();
+    private static string _prevServerName = string.Empty;
 
     #endregion
 
@@ -2283,6 +2284,11 @@ namespace MediaPortal.GUI.Pictures
 
     private static void WakeUpSrv(string newFolderName)
     {
+      if (!Util.Utils.IsNetwork(newFolderName))
+      {
+        return;
+      }
+
       string serverName = string.Empty;
       bool wakeOnLanEnabled = virtualDirectory.IsWakeOnLanEnabled(virtualDirectory.GetShare(newFolderName));
 
@@ -2290,6 +2296,14 @@ namespace MediaPortal.GUI.Pictures
       {
         serverName = Util.Utils.GetServerNameFromUNCPath(newFolderName);
       }
+
+      if (serverName == _prevServerName)
+      {
+        return;
+      }
+
+      _prevServerName = serverName;
+
       try
       {
         Log.Debug("WakeUpSrv: FolderName = {0}, ShareName = {1}, WOL enabled = {2}", newFolderName, virtualDirectory.GetShare(newFolderName).Name, wakeOnLanEnabled);

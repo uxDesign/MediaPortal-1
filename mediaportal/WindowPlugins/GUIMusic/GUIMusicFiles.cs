@@ -151,6 +151,7 @@ namespace MediaPortal.GUI.Music
 
     private Thread _importFolderThread = null;
     private Queue<string> _scanQueue = new Queue<string>();
+    private static string _prevServerName = string.Empty;
 
     #endregion
 
@@ -581,6 +582,11 @@ namespace MediaPortal.GUI.Music
 
     private static void WakeUpSrv(string newFolderName)
     {
+      if (!Util.Utils.IsNetwork(newFolderName))
+      {
+        return;
+      }
+
       string serverName = string.Empty;
       bool wakeOnLanEnabled = _virtualDirectory.IsWakeOnLanEnabled(_virtualDirectory.GetShare(newFolderName));
 
@@ -588,6 +594,14 @@ namespace MediaPortal.GUI.Music
       {
         serverName = Util.Utils.GetServerNameFromUNCPath(newFolderName);
       }
+
+      if (serverName == _prevServerName)
+      {
+        return;
+      }
+
+      _prevServerName = serverName;
+
       try
       {
         Log.Debug("WakeUpSrv: FolderName = {0}, ShareName = {1}, WOL enabled = {2}", newFolderName, _virtualDirectory.GetShare(newFolderName).Name, wakeOnLanEnabled);
