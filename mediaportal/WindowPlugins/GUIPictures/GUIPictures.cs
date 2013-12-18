@@ -2319,7 +2319,7 @@ namespace MediaPortal.GUI.Pictures
       }
 
       string serverName = string.Empty;
-      bool wakeOnLanEnabled = virtualDirectory.IsWakeOnLanEnabled(virtualDirectory.GetShare(newFolderName));
+      bool wakeOnLanEnabled = _virtualDirectory.IsWakeOnLanEnabled(_virtualDirectory.GetShare(newFolderName));
 
       if (wakeOnLanEnabled)
       {
@@ -2335,7 +2335,7 @@ namespace MediaPortal.GUI.Pictures
 
       try
       {
-        Log.Debug("WakeUpSrv: FolderName = {0}, ShareName = {1}, WOL enabled = {2}", newFolderName, virtualDirectory.GetShare(newFolderName).Name, wakeOnLanEnabled);
+        Log.Debug("WakeUpSrv: FolderName = {0}, ShareName = {1}, WOL enabled = {2}", newFolderName, _virtualDirectory.GetShare(newFolderName).Name, wakeOnLanEnabled);
       }
       catch { };
       if (!string.IsNullOrEmpty(serverName))
