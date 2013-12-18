@@ -1454,6 +1454,7 @@ namespace MediaPortal.Util
           item.IconImage = "defaultNetworkOffline.png";
           item.IconImageBig = "defaultNetworkBigOffline.png";
           item.ThumbnailImage = "defaultNetworkBigOffline.png";
+          Log.Debug("GetRootExt(): Path = {0}, IconImage = {1}", item.Path, item.IconImage);
         }
 
         if (share.Pincode < 0 && pathOnline)
