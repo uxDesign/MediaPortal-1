@@ -133,7 +133,7 @@ namespace MediaPortal.GUI.Music
     private MapSettings _mapSettings = new MapSettings();
     private DirectoryHistory _dirHistory = new DirectoryHistory();
     private GUIListItem _selectedListItem = null;
-    private static VirtualDirectory _virtualDirectory = new VirtualDirectory();
+    private static VirtualDirectory _virtualDirectory;
 
     private int _selectedAlbum = -1;
     private int _selectedItem = -1;
@@ -240,38 +240,25 @@ namespace MediaPortal.GUI.Music
         _useFileMenu = xmlreader.GetValueAsBool("filemenu", "enabled", true);
         _fileMenuPinCode = Util.Utils.DecryptPin(xmlreader.GetValueAsString("filemenu", "pincode", string.Empty));
 
-        string strDefault = xmlreader.GetValueAsString("music", "default", string.Empty);
-        _virtualDirectory.Clear();
-        foreach (Share share in _shareList)
+        //string strDefault = xmlreader.GetValueAsString("music", "default", string.Empty);
+        _virtualDirectory = VirtualDirectories.Instance.Music;
+        if (currentFolder == string.Empty)
         {
-          if (!string.IsNullOrEmpty(share.Name))
+          if (_virtualDirectory.DefaultShare != null)
           {
-            if (strDefault == share.Name)
+            if (_virtualDirectory.DefaultShare.IsFtpShare)
             {
-              share.Default = true;
-              if (string.IsNullOrEmpty(currentFolder))
-              {
-                if (share.IsFtpShare)
-                {
                   //remote:hostname?port?login?password?folder
-                  currentFolder = _virtualDirectory.GetShareRemoteURL(share);
+              currentFolder = _virtualDirectory.GetShareRemoteURL(_virtualDirectory.DefaultShare);
                   _startDirectory = currentFolder;
                 }
                 else
                 {
-                  currentFolder = share.Path;
-                  _startDirectory = share.Path;
+              currentFolder = _virtualDirectory.DefaultShare.Path;
+              _startDirectory = _virtualDirectory.DefaultShare.Path;
                 }
               }
             }
-
-            _virtualDirectory.Add(share);
-          }
-          else
-          {
-            break;
-          }
-        }
         if (xmlreader.GetValueAsBool("music", "rememberlastfolder", false))
         {
           string lastFolder = xmlreader.GetValueAsString("music", "lastfolder", currentFolder);
@@ -329,8 +316,6 @@ namespace MediaPortal.GUI.Music
     {
       base.OnAdded();
       currentFolder = string.Empty;
-      _virtualDirectory.AddDrives();
-      _virtualDirectory.SetExtensions(Util.Utils.AudioExtensions);
 
       using (Profile.Settings xmlreader = new Profile.MPSettings())
       {
@@ -340,6 +325,9 @@ namespace MediaPortal.GUI.Music
 
       GUIWindowManager.OnNewAction += new OnActionHandler(GUIWindowManager_OnNewAction);
       GUIWindowManager.Receivers += new SendMessageHandler(GUIWindowManager_OnNewMessage);
+      LoadSettings();
+      _virtualDirectory.AddDrives();
+      _virtualDirectory.SetExtensions(Util.Utils.AudioExtensions);
     }
 
     public override bool Init()
@@ -379,14 +367,14 @@ namespace MediaPortal.GUI.Music
 
     protected override void OnPageLoad()
     {
+      base.OnPageLoad();
+
       if (!KeepVirtualDirectory(PreviousWindowId))
       {
         _virtualDirectory.Reset();
       }
 
-      base.OnPageLoad();
       ResetShares();
-
       if (MusicState.StartWindow != GetID)
       {
         GUIWindowManager.ReplaceWindow((int)Window.WINDOW_MUSIC_GENRE);
@@ -896,11 +884,6 @@ namespace MediaPortal.GUI.Music
           }
         }
 
-        if (Util.Utils.getDriveType(item.Path) == 5)
-        {
-          dlg.AddLocalizedString(654); //Eject
-        }
-
         int iPincodeCorrect;
         if (!_virtualDirectory.IsProtectedShare(item.Path, out iPincodeCorrect) && !item.IsRemote && _useFileMenu)
         {
@@ -916,11 +899,34 @@ namespace MediaPortal.GUI.Music
           dlg.AddLocalizedString(751); // Show all songs from current artist
         }
       }
-      if (Util.Utils.IsRemovable(item.Path))
+
+      #region Eject/Load
+
+      // CD/DVD/BD
+      if (Util.Utils.getDriveType(item.Path) == 5)
+      {
+        if (item.Path != null)
+        {
+          var driveInfo = new DriveInfo(Path.GetPathRoot(item.Path));
+
+          // There is no easy way in NET to detect open tray so we will check
+          // if media is inside (load will be visible also in case that tray is closed but
+          // media is not loaded)
+          if (!driveInfo.IsReady)
+          {
+            dlg.AddLocalizedString(607); //Load  
+          }
+
+          dlg.AddLocalizedString(654); //Eject  
+        }
+      }
+
+      if (Util.Utils.IsRemovable(item.Path) || Util.Utils.IsUsbHdd(item.Path))
       {
         dlg.AddLocalizedString(831);
       }
 
+      #endregion
 
       dlg.DoModal(GetID);
       if (dlg.SelectedId == -1)
@@ -963,6 +969,10 @@ namespace MediaPortal.GUI.Music
           GUIWindowManager.ActivateWindow((int)Window.WINDOW_MUSIC_PLAYLIST);
           break;
 
+        case 607: // Load (only CDROM)
+          Util.Utils.CloseCDROM(Path.GetPathRoot(item.Path));
+          break;
+
         case 654: // Eject
           if (Util.Utils.getDriveType(item.Path) != 5)
           {
@@ -970,7 +980,19 @@ namespace MediaPortal.GUI.Music
           }
           else
           {
+            if (item.Path != null)
+            {
+              var driveInfo = new DriveInfo(Path.GetPathRoot(item.Path));
+
+              if (!driveInfo.IsReady)
+              {
+                Util.Utils.CloseCDROM(Path.GetPathRoot(item.Path));
+              }
+              else
+              {
             Util.Utils.EjectCDROM(Path.GetPathRoot(item.Path));
+          }
+            }
           }
           LoadDirectory(string.Empty);
           break;
@@ -1070,8 +1092,28 @@ namespace MediaPortal.GUI.Music
 
           break;
         case 831:
-          string message;
+          string message = string.Empty;
+
+          if (Util.Utils.IsUsbHdd(item.Path) || Util.Utils.IsRemovableUsbDisk(item.Path))
+          {
           if (!RemovableDriveHelper.EjectDrive(item.Path, out message))
+          {
+            GUIDialogOK pDlgOK = (GUIDialogOK)GUIWindowManager.GetWindow((int)Window.WINDOW_DIALOG_OK);
+            pDlgOK.SetHeading(831);
+            pDlgOK.SetLine(1, GUILocalizeStrings.Get(832));
+            pDlgOK.SetLine(2, string.Empty);
+            pDlgOK.SetLine(3, message);
+            pDlgOK.DoModal(GUIWindowManager.ActiveWindow);
+          }
+          else
+          {
+            GUIDialogOK pDlgOK = (GUIDialogOK)GUIWindowManager.GetWindow((int)Window.WINDOW_DIALOG_OK);
+            pDlgOK.SetHeading(831);
+            pDlgOK.SetLine(1, GUILocalizeStrings.Get(833));
+            pDlgOK.DoModal(GUIWindowManager.ActiveWindow);
+          }
+          }
+          else if (!RemovableDriveHelper.EjectMedia(item.Path, out message))
           {
             GUIDialogOK pDlgOK = (GUIDialogOK)GUIWindowManager.GetWindow((int)Window.WINDOW_DIALOG_OK);
             pDlgOK.SetHeading(831);
