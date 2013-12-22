@@ -1737,6 +1737,9 @@ namespace MediaPortal.GUI.Pictures
       {
         return;
       }
+
+      WakeUpSrv(item.Path);
+
       if (item.IsFolder)
       {
         selectedItemIndex = -1;
@@ -1787,6 +1790,9 @@ namespace MediaPortal.GUI.Pictures
       {
         return;
       }
+
+      WakeUpSrv(item.Path);
+
       if (item.IsFolder)
       {
         i++;
@@ -2326,12 +2332,12 @@ namespace MediaPortal.GUI.Pictures
         serverName = Util.Utils.GetServerNameFromUNCPath(newFolderName);
       }
 
-      if (serverName == _prevServerName)
+     /* if (serverName == _prevServerName)
       {
         return;
       }
 
-      _prevServerName = serverName;
+      _prevServerName = serverName; */
 
       try
       {

@@ -638,6 +638,8 @@ namespace MediaPortal.GUI.Video
         return;
       }
 
+      WakeUpSrv(item.Path);
+
       string path = item.Path;
 
       if (item.IsBdDvdFolder)
@@ -2977,7 +2979,7 @@ namespace MediaPortal.GUI.Video
         // Finally, start up the server
         Log.Info("WakeUpServer: WOL - Start the {0} server", HostName);
 
-        if (WakeupSystem(hwAddress, HostName, 10))
+        if (WakeupSystem(hwAddress, HostName, 60))
         {
           Log.Info("WakeUpServer: WOL - The {0} server started successfully!", HostName);
         }
@@ -3007,18 +3009,19 @@ namespace MediaPortal.GUI.Video
         serverName = Util.Utils.GetServerNameFromUNCPath(newFolderName);
       }
 
-      if (serverName == _prevServerName)
+     /* if (serverName == _prevServerName)
       {
         return;
       }
 
-      _prevServerName = serverName;
+      _prevServerName = serverName;*/
 
       try
       {
         Log.Debug("WakeUpSrv: FolderName = {0}, ShareName = {1}, WOL enabled = {2}", newFolderName, _virtualDirectory.GetShare(newFolderName).Name, wakeOnLanEnabled);
       }
       catch { };
+
       if (!string.IsNullOrEmpty(serverName))
       {
         HandleWakeUpServer(serverName);

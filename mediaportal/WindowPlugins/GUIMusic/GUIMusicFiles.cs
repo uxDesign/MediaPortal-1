@@ -583,18 +583,19 @@ namespace MediaPortal.GUI.Music
         serverName = Util.Utils.GetServerNameFromUNCPath(newFolderName);
       }
 
-      if (serverName == _prevServerName)
+    /*  if (serverName == _prevServerName)
       {
         return;
       }
 
-      _prevServerName = serverName;
+      _prevServerName = serverName;*/
 
       try
       {
         Log.Debug("WakeUpSrv: FolderName = {0}, ShareName = {1}, WOL enabled = {2}", newFolderName, _virtualDirectory.GetShare(newFolderName).Name, wakeOnLanEnabled);
       }
       catch { };
+
       if (!string.IsNullOrEmpty(serverName))
       {
         HandleWakeUpServer(serverName);
@@ -1141,6 +1142,8 @@ namespace MediaPortal.GUI.Music
       {
         return;
       }
+
+      WakeUpSrv(item.Path);
 
       if (item.IsFolder)
       {

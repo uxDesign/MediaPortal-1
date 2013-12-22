@@ -141,8 +141,8 @@ namespace MediaPortal.Configuration
       // 
       // groupBox1
       // 
-      this.groupBox1.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
-            | System.Windows.Forms.AnchorStyles.Left) 
+      this.groupBox1.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom)
+            | System.Windows.Forms.AnchorStyles.Left)
             | System.Windows.Forms.AnchorStyles.Right)));
       this.groupBox1.Controls.Add(this.mpButtonLearnMacNow);
       this.groupBox1.Controls.Add(this.cbEnableWakeOnLan);
@@ -264,7 +264,7 @@ namespace MediaPortal.Configuration
       // 
       // textBoxRemoteFolder
       // 
-      this.textBoxRemoteFolder.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
+      this.textBoxRemoteFolder.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)
             | System.Windows.Forms.AnchorStyles.Right)));
       this.textBoxRemoteFolder.BorderColor = System.Drawing.Color.Empty;
       this.textBoxRemoteFolder.Location = new System.Drawing.Point(16, 320);
@@ -365,7 +365,7 @@ namespace MediaPortal.Configuration
       // 
       // pinCodeTextBox
       // 
-      this.pinCodeTextBox.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
+      this.pinCodeTextBox.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)
             | System.Windows.Forms.AnchorStyles.Right)));
       this.pinCodeTextBox.BorderColor = System.Drawing.Color.Empty;
       this.pinCodeTextBox.Location = new System.Drawing.Point(216, 40);
@@ -396,7 +396,7 @@ namespace MediaPortal.Configuration
       // 
       // folderTextBox
       // 
-      this.folderTextBox.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
+      this.folderTextBox.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)
             | System.Windows.Forms.AnchorStyles.Right)));
       this.folderTextBox.BorderColor = System.Drawing.Color.Empty;
       this.folderTextBox.Location = new System.Drawing.Point(16, 88);
@@ -415,7 +415,7 @@ namespace MediaPortal.Configuration
       // 
       // nameTextBox
       // 
-      this.nameTextBox.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
+      this.nameTextBox.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)
             | System.Windows.Forms.AnchorStyles.Right)));
       this.nameTextBox.BorderColor = System.Drawing.Color.Empty;
       this.nameTextBox.Location = new System.Drawing.Point(16, 40);
@@ -596,7 +596,7 @@ namespace MediaPortal.Configuration
       }
     }
 
-    private void groupBox1_Enter(object sender, EventArgs e) {}
+    private void groupBox1_Enter(object sender, EventArgs e) { }
 
     private void EditShareForm_Load(object sender, EventArgs e)
     {
@@ -642,7 +642,7 @@ namespace MediaPortal.Configuration
         {
           port = Int32.Parse(textBoxPort.Text);
         }
-        catch (Exception) {}
+        catch (Exception) { }
         return port;
       }
       set { textBoxPort.Text = value.ToString(); }
@@ -750,10 +750,35 @@ namespace MediaPortal.Configuration
           foreach (IPAddress ip in ips)
           {
             Log.Debug("    {0}", ip);
-          }
 
-          // Use first valid IP address
-          ipAddress = ips[0];
+            ipAddress = ip;
+            // Check for valid IP address
+            if (ipAddress != null)
+            {
+              // Update the MAC address if possible
+              hwAddress = wakeOnLanManager.GetHardwareAddress(ipAddress);
+
+              if (wakeOnLanManager.IsValidEthernetAddress(hwAddress))
+              {
+                Log.Debug("WakeUpServer: WOL - Valid auto MAC address: {0:x}:{1:x}:{2:x}:{3:x}:{4:x}:{5:x}"
+                          , hwAddress[0], hwAddress[1], hwAddress[2], hwAddress[3], hwAddress[4], hwAddress[5]);
+
+                // Store MAC address
+                macAddress = BitConverter.ToString(hwAddress).Replace("-", ":");
+
+                Log.Debug("WakeUpServer: WOL - Store MAC address: {0}", macAddress);
+
+                using (MediaPortal.Profile.Settings xmlwriter = new MediaPortal.Profile.MPSettings())
+                {
+                  xmlwriter.SetValue("macAddress", hostName, macAddress);
+                }
+              }
+              else
+              {
+                Log.Debug("WakeUpServer: WOL - Not a valid IPv4 address: {0}", ipAddress);
+              }
+            }
+          }
         }
         catch (Exception ex)
         {
@@ -761,30 +786,7 @@ namespace MediaPortal.Configuration
         }
       }
 
-      // Check for valid IP address
-      if (ipAddress != null)
-      {
-        // Update the MAC address if possible
-        hwAddress = wakeOnLanManager.GetHardwareAddress(ipAddress);
 
-        if (wakeOnLanManager.IsValidEthernetAddress(hwAddress))
-        {
-          Log.Debug("WakeUpServer: WOL - Valid auto MAC address: {0:x}:{1:x}:{2:x}:{3:x}:{4:x}:{5:x}"
-                    , hwAddress[0], hwAddress[1], hwAddress[2], hwAddress[3], hwAddress[4], hwAddress[5]);
-
-          // Store MAC address
-          macAddress = BitConverter.ToString(hwAddress).Replace("-", ":");
-
-          Log.Debug("WakeUpServer: WOL - Store MAC address: {0}", macAddress);
-
-          using (
-            MediaPortal.Profile.Settings xmlwriter =
-              new MediaPortal.Profile.MPSettings())
-          {
-            xmlwriter.SetValue("macAddress", hostName, macAddress);
-          }
-        }
-      }
     }
   }
 }
