@@ -581,7 +581,7 @@ namespace MediaPortal.MusicPlayer.BASS
 
         case Action.ActionType.ACTION_PAGE_UP:
           {
-            if (FullScreen)
+            if (FullScreen && CurrentAudioStream != 0)
             {
               Log.Debug("BASS: Switch to Previous Vis");
               VizManager.GetPrevVis();
@@ -591,7 +591,7 @@ namespace MediaPortal.MusicPlayer.BASS
 
         case Action.ActionType.ACTION_PAGE_DOWN:
           {
-            if (FullScreen)
+            if (FullScreen && CurrentAudioStream != 0)
             {
               Log.Info("BASS: Switch to Next Vis");
               VizManager.GetNextVis();
@@ -633,10 +633,10 @@ namespace MediaPortal.MusicPlayer.BASS
           string nextSong = Playlists.PlayListPlayer.SingletonPlayer.GetNextSong();
           if (nextSong != string.Empty)
           {
+            g_Player.OnChanged(nextSong);
             PlayInternal(nextSong);
             g_Player.currentMedia = g_Player.MediaType.Music;
             g_Player.currentFilePlaying = nextSong;
-            g_Player.OnChanged(nextSong);
             g_Player.OnStarted();
           }
           else
@@ -1029,7 +1029,7 @@ namespace MediaPortal.MusicPlayer.BASS
       {
         case 0:
           return 1;
-        
+
         case 1:
           return 2;
 
@@ -1144,7 +1144,7 @@ namespace MediaPortal.MusicPlayer.BASS
 
     #endregion
 
-    #region Clenaup / Free Resources
+    #region Cleanup / Free Resources
 
     /// <summary>
     /// Dispose the BASS Audio engine. Free all BASS and Visualisation related resources
@@ -1239,7 +1239,7 @@ namespace MediaPortal.MusicPlayer.BASS
         VizWindow.Visible = false;
       }
 
-      //if (!Stopped) // Check if stopped already to avoid that Stop() is called two or three times
+      if (!Stopped) // Check if stopped already to avoid that Stop() is called two or three times
       {
         Stop();
       }
@@ -1399,9 +1399,12 @@ namespace MediaPortal.MusicPlayer.BASS
       if (VizWindow.InvokeRequired)
       {
         ShowVisualizationWindowDelegate d = new ShowVisualizationWindowDelegate(ShowVisualizationWindow);
-        VizWindow.Invoke(d, new object[] { visible });
+        try
+        {
+          VizWindow.Invoke(d, new object[] { visible });
+        }
+        catch { }
       }
-
       else
       {
         VizWindow.Visible = visible;
@@ -1574,24 +1577,6 @@ namespace MediaPortal.MusicPlayer.BASS
           // Free Mixer
           _mixer.Dispose();
           _mixer = null;
-
-          // Free Wasapi, if needed
-          if (Config.MusicPlayer == AudioPlayer.WasApi && BassWasapi.BASS_WASAPI_IsStarted())
-          {
-            try
-            {
-              Log.Debug("BASS: Freeing WASAPI Device");
-              if (!BassWasapi.BASS_WASAPI_Free())
-              {
-                Log.Error("BASS: Error freeing WASAPI Device: {0}", Bass.BASS_ErrorGetCode());
-              }
-            }
-            catch (Exception ex)
-            {
-              Log.Error("BASS: Exception stopping WASAPI. {0} {1}", ex.Message, ex.StackTrace);
-            }
-          }
-
           _mixer = new MixerStream(this);
           if (!_mixer.CreateMixer(stream))
           {
@@ -1647,10 +1632,14 @@ namespace MediaPortal.MusicPlayer.BASS
         if (currentStream != null && filePath.ToLowerInvariant().CompareTo(currentStream.FilePath.ToLowerInvariant()) == 0)
         {
           // Selected file is equal to current stream
+          // Extend detection to permit to play the file if it failed.
+          if (_state == PlayState.Paused || _state == PlayState.Init)
+          {
           if (_state == PlayState.Paused)
           {
             // Resume paused stream
             currentStream.ResumePlayback();
+            }
 
             result = Bass.BASS_Start();
 
@@ -1679,9 +1668,12 @@ namespace MediaPortal.MusicPlayer.BASS
         else
         {
           // Cue support
-          if (HandleCueFile(ref filePath))
+          if ((currentStream != null && currentStream.IsPlaying))
           {
-            return true;
+            if (HandleCueFile(ref filePath))
+            {
+              return true;
+            }
           }
         }
 
@@ -1695,6 +1687,14 @@ namespace MediaPortal.MusicPlayer.BASS
         }
 
         _state = PlayState.Init;
+
+        // If WASAPI is started, we might run into troubles, because of a new stream needed,
+        // So let's stop it here
+        if (Config.MusicPlayer == AudioPlayer.WasApi && BassWasapi.BASS_WASAPI_IsStarted())
+        {
+          Log.Debug("BASS: Stop WASAPI Device before start of new playback");
+          BassWasapi.BASS_WASAPI_Stop(true);
+        }
 
         if (!PlayInternal(filePath))
         {
@@ -1877,7 +1877,7 @@ namespace MediaPortal.MusicPlayer.BASS
       if (_mixer == null)
       {
         Log.Debug("BASS: Already stopped. Don't execute Stop a second time");
-        //return;
+        return;
       }
 
       // Execute the Stop in a separate thread, so that it doesn't block the Main UI Render thread
@@ -1899,6 +1899,11 @@ namespace MediaPortal.MusicPlayer.BASS
 
                              // Wait until the slide is done
                              // Sometimes the slide is causing troubles, so we wait a maximum of CrossfadeIntervals + 100 ms
+                             // Enable only if it's music playing
+                             if (g_Player.IsMusic && g_Player._currentMediaForBassEngine != g_Player.MediaType.Video &&
+                                 g_Player._currentMediaForBassEngine != g_Player.MediaType.TV &&
+                                 g_Player._currentMediaForBassEngine != g_Player.MediaType.Recording)
+                             {
                              DateTime start = DateTime.Now;
                              while (Bass.BASS_ChannelIsSliding(stream.BassStream, BASSAttribute.BASS_ATTRIB_VOL))
                              {
@@ -1909,7 +1914,7 @@ namespace MediaPortal.MusicPlayer.BASS
                                }
                              }
                            }
-
+                         }
                          }
                          BassMix.BASS_Mixer_ChannelRemove(stream.BassStream);
                          stream.Dispose();
@@ -2009,7 +2014,7 @@ namespace MediaPortal.MusicPlayer.BASS
     {
       PlayState oldState = _state;
 
-      if (!Util.Utils.IsAudio(_filePath))
+      if (!Util.Utils.IsAudio(_filePath) || g_Player._currentMediaForBassEngine == g_Player.MediaType.Video)
       {
         GUIGraphicsContext.IsFullScreenVideo = false;
       }
