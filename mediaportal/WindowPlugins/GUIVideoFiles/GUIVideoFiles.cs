@@ -192,6 +192,7 @@ namespace MediaPortal.GUI.Video
     private bool _doNotUseDatabase = false;
 
     private static string _prevServerName = string.Empty;
+    private static DateTime _prevWolTime;
     
     #endregion
 
@@ -3009,12 +3010,16 @@ namespace MediaPortal.GUI.Video
         serverName = Util.Utils.GetServerNameFromUNCPath(newFolderName);
       }
 
-     /* if (serverName == _prevServerName)
+      DateTime now = DateTime.Now;
+      TimeSpan ts = now - _prevWolTime;
+
+      if (serverName == _prevServerName && 60 > ts.TotalSeconds)
       {
         return;
       }
 
-      _prevServerName = serverName;*/
+      _prevWolTime = DateTime.Now;
+      _prevServerName = serverName;
 
       try
       {

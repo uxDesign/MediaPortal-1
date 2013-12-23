@@ -408,6 +408,7 @@ namespace MediaPortal.GUI.Pictures
     protected PictureSort.SortMethod currentSortMethod = PictureSort.SortMethod.Name;
     public static List<string> _thumbnailFolderItem = new List<string>();
     private static string _prevServerName = string.Empty;
+    private static DateTime _prevWolTime;
 
     #endregion
 
@@ -2332,12 +2333,16 @@ namespace MediaPortal.GUI.Pictures
         serverName = Util.Utils.GetServerNameFromUNCPath(newFolderName);
       }
 
-     /* if (serverName == _prevServerName)
+      DateTime now = DateTime.Now;
+      TimeSpan ts = now - _prevWolTime;
+
+      if (serverName == _prevServerName && 60 > ts.TotalSeconds)
       {
         return;
       }
 
-      _prevServerName = serverName; */
+      _prevWolTime = DateTime.Now;
+      _prevServerName = serverName;
 
       try
       {
