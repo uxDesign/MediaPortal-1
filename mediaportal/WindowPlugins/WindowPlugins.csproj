@@ -250,6 +250,7 @@
     <Compile Include="AssemblyInfo.cs">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="WakeupSystem.cs" />
     <Compile Include="GUIPictures\PictureSort.cs" />
     <Compile Include="GUILastFMRadio\GUILastFMRadio.cs" />
     <Compile Include="GUISettings\BluRay\GUISettingsBluRay.cs" />

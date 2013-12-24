@@ -41,6 +41,7 @@ using MediaPortal.Services;
 using MediaPortal.Threading;
 using MediaPortal.Util;
 using MediaPortal.Player;
+using MediaPortal.GUI.WakeupSystem;
 using Action = MediaPortal.GUI.Library.Action;
 using Layout = MediaPortal.GUI.Library.GUIFacadeControl.Layout;
 using WindowPlugins;
@@ -409,6 +410,8 @@ namespace MediaPortal.GUI.Pictures
     public static List<string> _thumbnailFolderItem = new List<string>();
     private static string _prevServerName = string.Empty;
     private static DateTime _prevWolTime;
+    private static int _wolTimeout;
+    private static int _wolResendTime;
 
     #endregion
 
@@ -434,6 +437,8 @@ namespace MediaPortal.GUI.Pictures
         isFileMenuEnabled = xmlreader.GetValueAsBool("filemenu", "enabled", true);
         fileMenuPinCode = Util.Utils.DecryptPin(xmlreader.GetValueAsString("filemenu", "pincode", string.Empty));
         //string strDefault = xmlreader.GetValueAsString("pictures", "default", string.Empty);
+        _wolTimeout = xmlreader.GetValueAsInt("WOL", "WolTimeout", 10);
+        _wolResendTime = xmlreader.GetValueAsInt("WOL", "WolResendTime", 1);
         _virtualDirectory = VirtualDirectories.Instance.Pictures;
         
         if (currentFolder == string.Empty)
@@ -2149,176 +2154,7 @@ namespace MediaPortal.GUI.Pictures
       }
     }
 
-    private static bool WakeupSystem(byte[] hwAddress, string wakeupTarget, int timeout)
-    {
-      int waited = 0;
-      WakeOnLanManager wakeOnLanManager = new WakeOnLanManager();
-
-      Log.Debug("WOLMgr: Ping {0}", wakeupTarget);
-      if (wakeOnLanManager.Ping(wakeupTarget, timeout))
-      {
-        Log.Debug("WOLMgr: {0} already started", wakeupTarget);
-        return true;
-      }
-
-      GUIDialogProgress progressDialog =
-       (GUIDialogProgress)GUIWindowManager.GetWindow((int)Window.WINDOW_DIALOG_PROGRESS);
-      progressDialog.Reset();
-      progressDialog.SetHeading(GUILocalizeStrings.Get(1990));
-      progressDialog.ShowProgressBar(true);
-      progressDialog.SetLine(1, GUILocalizeStrings.Get(1991));
-      progressDialog.StartModal(GUIWindowManager.ActiveWindow);
-
-      // First, try to send WOL Packet
-      if (!wakeOnLanManager.SendWakeOnLanPacket(hwAddress, IPAddress.Broadcast))
-      {
-        Log.Debug("WOLMgr: FAILED to send the first wake-on-lan packet!");
-      }
-
-      while (waited < timeout * 1000)
-      {
-        progressDialog.SetPercentage(waited / 100);
-        progressDialog.Progress();
-
-        Log.Debug("WOLMgr: Ping {0}", wakeupTarget);
-        if (wakeOnLanManager.Ping(wakeupTarget, 1000))
-        {
-          progressDialog.SetPercentage(100);
-          progressDialog.Progress();
-          progressDialog.Close();
-
-          return true;
-        }
-        // Send WOL Packet
-        if (!wakeOnLanManager.SendWakeOnLanPacket(hwAddress, IPAddress.Broadcast))
-        {
-          Log.Debug("WOLMgr: Sending the wake-on-lan packet failed (local network maybe not ready)! {0}s", (waited / 1000));
-        }
-        Log.Debug("WOLMgr: System {0} still not reachable, waiting... {1}s", wakeupTarget, (waited / 1000));
-        System.Threading.Thread.Sleep(1000);
-        waited += 1000;
-      }
-
-      // Timeout was reached and WOL packet can't be send (we stop here)
-      if (!wakeOnLanManager.SendWakeOnLanPacket(hwAddress, IPAddress.Broadcast))
-      {
-        Log.Debug("WOLMgr: FAILED to send wake-on-lan packet after the timeout {0}, try increase the value!", timeout);
-        progressDialog.SetPercentage(100);
-        progressDialog.Progress();
-        progressDialog.Close();
-
-        return false;
-      }
-      progressDialog.SetPercentage(100);
-      progressDialog.Progress();
-      progressDialog.Close();
-
-      return false;
-    }
-
-    private static void HandleWakeUpServer(string HostName)
-    {
-      String macAddress;
-      byte[] hwAddress;
-
-      WakeOnLanManager wakeOnLanManager = new WakeOnLanManager();
-
-      IPAddress ipAddress = null;
-
-      using (Profile.Settings xmlreader = new MPSettings())
-      {
-        macAddress = xmlreader.GetValueAsString("macAddress", HostName, null);
-      }
-
-      if (wakeOnLanManager.Ping(HostName, 100) && !string.IsNullOrEmpty(macAddress))
-      {
-        Log.Debug("WakeUpServer: The {0} server already started and mac address is learnt!", HostName);
-        return;
-      }
-
-      // Check if we already have a valid IP address stored,
-      // otherwise try to resolve the IP address
-      if (!IPAddress.TryParse(HostName, out ipAddress))
-      {
-        // Get IP address of the server
-        try
-        {
-          IPAddress[] ips;
-
-          ips = Dns.GetHostAddresses(HostName);
-
-          Log.Debug("WakeUpServer: WOL - GetHostAddresses({0}) returns:", HostName);
-
-          foreach (IPAddress ip in ips)
-          {
-            Log.Debug("    {0}", ip);
-          }
-
-          // Use first valid IP address
-          ipAddress = ips[0];
-        }
-        catch (Exception ex)
-        {
-          Log.Error("WakeUpServer: WOL - Failed GetHostAddress - {0}", ex.Message);
-        }
-      }
-
-      // Check for valid IP address
-      if (ipAddress != null)
-      {
-        // Update the MAC address if possible
-        hwAddress = wakeOnLanManager.GetHardwareAddress(ipAddress);
-
-        if (wakeOnLanManager.IsValidEthernetAddress(hwAddress))
-        {
-          Log.Debug("WakeUpServer: WOL - Valid auto MAC address: {0:x}:{1:x}:{2:x}:{3:x}:{4:x}:{5:x}"
-                    , hwAddress[0], hwAddress[1], hwAddress[2], hwAddress[3], hwAddress[4], hwAddress[5]);
-
-          // Store MAC address
-          macAddress = BitConverter.ToString(hwAddress).Replace("-", ":");
-
-          Log.Debug("WakeUpServer: WOL - Store MAC address: {0}", macAddress);
-
-          using (
-            MediaPortal.Profile.Settings xmlwriter =
-              new MediaPortal.Profile.MPSettings())
-          {
-            xmlwriter.SetValue("macAddress", HostName, macAddress);
-          }
-        }
-      }
-
-      // Use stored MAC address
-      using (Profile.Settings xmlreader = new MPSettings())
-      {
-        macAddress = xmlreader.GetValueAsString("macAddress", HostName, null);
-      }
-
-      Log.Debug("WakeUpServer: WOL - Use stored MAC address: {0}", macAddress);
-
-      try
-      {
-        hwAddress = wakeOnLanManager.GetHwAddrBytes(macAddress);
-
-        // Finally, start up the server
-        Log.Info("WakeUpServer: WOL - Start the {0} server", HostName);
-
-        if (WakeupSystem(hwAddress, HostName, 10))
-        {
-          Log.Info("WakeUpServer: WOL - The {0} server started successfully!", HostName);
-        }
-        else
-        {
-          Log.Error("WakeUpServer: WOL - Failed to start the {0} server", HostName);
-        }
-      }
-      catch (Exception ex)
-      {
-        Log.Error("WakeUpServer: WOL - Failed to start the server - {0}", ex.Message);
-      }
-    }
-
-    private static void WakeUpSrv(string newFolderName)
+    private void WakeUpSrv(string newFolderName)
     {
       if (!Util.Utils.IsNetwork(newFolderName))
       {
@@ -2336,7 +2172,7 @@ namespace MediaPortal.GUI.Pictures
       DateTime now = DateTime.Now;
       TimeSpan ts = now - _prevWolTime;
 
-      if (serverName == _prevServerName && 60 > ts.TotalSeconds)
+      if (serverName == _prevServerName && _wolResendTime * 60 > ts.TotalSeconds)
       {
         return;
       }
@@ -2351,7 +2187,7 @@ namespace MediaPortal.GUI.Pictures
       catch { };
       if (!string.IsNullOrEmpty(serverName))
       {
-        HandleWakeUpServer(serverName);
+        BaseWakeupSystem.HandleWakeUpServer(serverName, _wolTimeout);
       }
     }
 
