@@ -600,7 +600,7 @@ namespace TvEngine.PowerScheduler
           // 2 possibilities for the same day: before or after the Timespan
            ((Current24hHour < _settings.AllowedSleepStartTimeOnWeekend) ||
             (Current24hHour >= _settings.AllowedSleepStopTimeOnWeekend))
-          )) && ((int)DateTime.Now.DayOfWeek == 0) || (int)DateTime.Now.DayOfWeek == 6))
+          )) && (((int)DateTime.Now.DayOfWeek == 0) || (int)DateTime.Now.DayOfWeek == 6)))
         {
           Log.Debug("PS: Standby is not allowed at this hour: StandbyPrevented");
           _currentStandbyHandler = "NOT-ALLOWED-TIME";

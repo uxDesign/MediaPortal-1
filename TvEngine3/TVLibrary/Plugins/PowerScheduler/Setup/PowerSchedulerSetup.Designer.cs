@@ -1448,7 +1448,7 @@ namespace PowerScheduler.Setup
       this.flowLayoutPanel1.Controls.Add(this.label8);
       this.flowLayoutPanel1.Controls.Add(this.numericUpDownStandbyHoursOnWeekendTo);
       this.flowLayoutPanel1.Controls.Add(this.label9);
-      this.flowLayoutPanel1.Location = new System.Drawing.Point(8, 147);
+      this.flowLayoutPanel1.Location = new System.Drawing.Point(6, 147);
       this.flowLayoutPanel1.Name = "flowLayoutPanel1";
       this.flowLayoutPanel1.Size = new System.Drawing.Size(448, 26);
       this.flowLayoutPanel1.TabIndex = 30;
@@ -1476,6 +1476,7 @@ namespace PowerScheduler.Setup
       this.numericUpDownStandbyHoursOnWeekendFrom.Size = new System.Drawing.Size(47, 20);
       this.numericUpDownStandbyHoursOnWeekendFrom.TabIndex = 3;
       this.numericUpDownStandbyHoursOnWeekendFrom.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
+      this.numericUpDownStandbyHoursOnWeekendFrom.ValueChanged += new System.EventHandler(this.buttonApply_Enable);
       // 
       // label8
       // 
@@ -1505,6 +1506,7 @@ namespace PowerScheduler.Setup
             0,
             0,
             0});
+      this.numericUpDownStandbyHoursOnWeekendTo.ValueChanged += new System.EventHandler(this.buttonApply_Enable);
       // 
       // label9
       // 
