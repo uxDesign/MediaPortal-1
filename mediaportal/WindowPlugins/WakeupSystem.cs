@@ -89,23 +89,21 @@ namespace MediaPortal.GUI.WakeupSystem
       }
 
       // Timeout was reached and WOL packet can't be send (we stop here)
-      if (!wakeOnLanManager.SendWakeOnLanPacket(hwAddress, IPAddress.Broadcast))
-      {
-        Log.Debug("WOLMgr: FAILED to send wake-on-lan packet after the timeout {0}, try increase the value!", timeout);
-        progressDialog.SetPercentage(100);
-        progressDialog.Progress();
-        progressDialog.Close();
+      Log.Debug("WOLMgr: FAILED to send wake-on-lan packet after the timeout {0}, try increase the value!", timeout);
 
-        return false;
-      }
       progressDialog.SetPercentage(100);
       progressDialog.Progress();
       progressDialog.Close();
 
+      GUIDialogOK dlgOk = (GUIDialogOK)GUIWindowManager.GetWindow((int)GUIWindow.Window.WINDOW_DIALOG_OK);
+      dlgOk.SetHeading(GUILocalizeStrings.Get(1992)); // Not available
+      dlgOk.SetLine(1, GUILocalizeStrings.Get(1993));
+      dlgOk.DoModal(GUIWindowManager.ActiveWindow);
+
       return false;
     }
 
-    public static void HandleWakeUpServer(string HostName, int WolTimeout)
+    public static bool HandleWakeUpServer(string HostName, int WolTimeout)
     {
       String macAddress;
       byte[] hwAddress;
@@ -122,7 +120,7 @@ namespace MediaPortal.GUI.WakeupSystem
       if (wakeOnLanManager.Ping(HostName, 100) && !string.IsNullOrEmpty(macAddress))
       {
         Log.Debug("WakeUpServer: The {0} server already started and mac address is learnt!", HostName);
-        return;
+        return true;
       }
 
       // Check if we already have a valid IP address stored,
@@ -195,6 +193,7 @@ namespace MediaPortal.GUI.WakeupSystem
         if (WakeupSystem(hwAddress, HostName, WolTimeout))
         {
           Log.Info("WakeUpServer: WOL - The {0} server started successfully!", HostName);
+          return true;
         }
         else
         {
@@ -205,6 +204,7 @@ namespace MediaPortal.GUI.WakeupSystem
       {
         Log.Error("WakeUpServer: WOL - Failed to start the server - {0}", ex.Message);
       }
+      return false;
     }
   }
 }

@@ -83,6 +83,7 @@ namespace MediaPortal.Configuration.Sections
     private ColumnHeader columnHeader4;
     private IContainer components = null;
     private MPButton mpButtonWOL;
+    private ColumnHeader columnHeader5;
 
     private string selectedSection = string.Empty;
 
@@ -140,6 +141,7 @@ namespace MediaPortal.Configuration.Sections
       this.columnHeader3 = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
       this.columnHeader2 = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
       this.columnHeader4 = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
+      this.columnHeader5 = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
       this.groupBox1.SuspendLayout();
       this.SuspendLayout();
       // 
@@ -261,7 +263,8 @@ namespace MediaPortal.Configuration.Sections
             this.columnHeader1,
             this.columnHeader3,
             this.columnHeader2,
-            this.columnHeader4});
+            this.columnHeader4,
+            this.columnHeader5});
       this.sharesListView.FullRowSelect = true;
       this.sharesListView.Location = new System.Drawing.Point(16, 24);
       this.sharesListView.Name = "sharesListView";
@@ -290,6 +293,11 @@ namespace MediaPortal.Configuration.Sections
       // columnHeader4
       // 
       this.columnHeader4.Text = "Thumbs";
+      // 
+      // columnHeader5
+      // 
+      this.columnHeader5.Text = "MAC Address";
+      this.columnHeader5.Width = 120;
       // 
       // BaseShares
       // 
@@ -385,6 +393,18 @@ namespace MediaPortal.Configuration.Sections
       if (check)
       {
         currentlyCheckedItem = listItem;
+      }
+
+      if (!Util.Utils.IsNetwork(shareData.Folder))
+      {
+        listItem.SubItems[4].Text = string.Empty;
+      }
+      else
+      {
+        using (Profile.Settings xmlreader = new MPSettings())
+        {
+          listItem.SubItems[4].Text = xmlreader.GetValueAsString("macAddress", Util.Utils.GetServerNameFromUNCPath(shareData.Folder), null);
+        }
       }
 
       sharesListView.Items.Add(listItem);
@@ -772,9 +792,9 @@ namespace MediaPortal.Configuration.Sections
         }
         else
         {
-          sharesListView.Columns[2].Width = 270;
-          if (sharesListView.Columns.Contains(columnHeader4))
-          sharesListView.Columns.Remove(columnHeader4);
+          sharesListView.Columns[3].Width = 0;
+         // if (sharesListView.Columns.Contains(columnHeader4))
+         // sharesListView.Columns.Remove(columnHeader4);
         }
       }
     }

@@ -404,11 +404,11 @@ namespace MediaPortal.GUI.Music
       base.OnPageDestroy(newWindowId);
     }
 
-    private void WakeUpSrv(string newFolderName)
+    private bool WakeUpSrv(string newFolderName)
     {
       if (!Util.Utils.IsNetwork(newFolderName))
       {
-        return;
+        return true;
       }
 
       string serverName = string.Empty;
@@ -424,7 +424,7 @@ namespace MediaPortal.GUI.Music
 
       if (serverName == _prevServerName && _wolResendTime * 60 > ts.TotalSeconds)
       {
-        return;
+        return true;
       }
 
       _prevWolTime = DateTime.Now;
@@ -438,15 +438,19 @@ namespace MediaPortal.GUI.Music
 
       if (!string.IsNullOrEmpty(serverName))
       {
-        BaseWakeupSystem.HandleWakeUpServer(serverName, _wolTimeout);
+        return BaseWakeupSystem.HandleWakeUpServer(serverName, _wolTimeout);
       }
+      return true;
     }
 
     protected override void LoadDirectory(string strNewDirectory)
     {
       DateTime dtStart = DateTime.Now;
 
-      WakeUpSrv(strNewDirectory);
+      if (!WakeUpSrv(strNewDirectory))
+      {
+        return;
+      }
 
       GUIWaitCursor.Show();
 
@@ -983,7 +987,10 @@ namespace MediaPortal.GUI.Music
         return;
       }
 
-      WakeUpSrv(item.Path);
+      if (!WakeUpSrv(item.Path))
+      {
+        return;
+      }
 
       if (item.IsFolder)
       {

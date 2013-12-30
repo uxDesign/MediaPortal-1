@@ -1744,7 +1744,10 @@ namespace MediaPortal.GUI.Pictures
         return;
       }
 
-      WakeUpSrv(item.Path);
+      if (!WakeUpSrv(item.Path))
+      {
+        return;
+      }
 
       if (item.IsFolder)
       {
@@ -1797,7 +1800,10 @@ namespace MediaPortal.GUI.Pictures
         return;
       }
 
-      WakeUpSrv(item.Path);
+      if (!WakeUpSrv(item.Path))
+      {
+        return;
+      }
 
       if (item.IsFolder)
       {
@@ -2154,11 +2160,11 @@ namespace MediaPortal.GUI.Pictures
       }
     }
 
-    private void WakeUpSrv(string newFolderName)
+    private bool WakeUpSrv(string newFolderName)
     {
       if (!Util.Utils.IsNetwork(newFolderName))
       {
-        return;
+        return true;
       }
 
       string serverName = string.Empty;
@@ -2174,7 +2180,7 @@ namespace MediaPortal.GUI.Pictures
 
       if (serverName == _prevServerName && _wolResendTime * 60 > ts.TotalSeconds)
       {
-        return;
+        return true;
       }
 
       _prevWolTime = DateTime.Now;
@@ -2185,10 +2191,12 @@ namespace MediaPortal.GUI.Pictures
         Log.Debug("WakeUpSrv: FolderName = {0}, ShareName = {1}, WOL enabled = {2}", newFolderName, _virtualDirectory.GetShare(newFolderName).Name, wakeOnLanEnabled);
       }
       catch { };
+
       if (!string.IsNullOrEmpty(serverName))
       {
-        BaseWakeupSystem.HandleWakeUpServer(serverName, _wolTimeout);
+        return BaseWakeupSystem.HandleWakeUpServer(serverName, _wolTimeout);
       }
+      return true;
     }
 
     public static void Filter(ref List<GUIListItem> itemlist)
@@ -2201,7 +2209,10 @@ namespace MediaPortal.GUI.Pictures
       List<GUIListItem> itemlist;
       string objectCount = string.Empty;
 
-      WakeUpSrv(strNewDirectory);
+      if (!WakeUpSrv(strNewDirectory))
+      {
+        return;
+      }
       
       GUIWaitCursor.Show();
 

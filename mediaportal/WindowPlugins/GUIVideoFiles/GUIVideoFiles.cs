@@ -644,8 +644,11 @@ namespace MediaPortal.GUI.Video
         _playClicked = false;
         return;
       }
-
-      WakeUpSrv(item.Path);
+      
+      if (!WakeUpSrv(item.Path))
+      {
+        return;
+      }
 
       string path = item.Path;
 
@@ -2262,7 +2265,11 @@ namespace MediaPortal.GUI.Video
         FileInformation fi = new FileInformation();
         GUIListItem item = new GUIListItem(Util.Utils.GetFilename(file), "", file, false, fi);
         items.Add(item);
-        WakeUpSrv(item.Path);
+
+        if (!WakeUpSrv(item.Path))
+        {
+          return;
+        }
       }
 
       if (items.Count <= 0)
@@ -2832,11 +2839,11 @@ namespace MediaPortal.GUI.Video
 
     #region Private methods
 
-    private static void WakeUpSrv(string newFolderName)
+    private static bool WakeUpSrv(string newFolderName)
     {
       if (!Util.Utils.IsNetwork(newFolderName))
       {
-        return;
+        return true;
       }
       
       string serverName = string.Empty;
@@ -2852,7 +2859,7 @@ namespace MediaPortal.GUI.Video
 
       if (serverName == _prevServerName && _wolResendTime * 60 > ts.TotalSeconds)
       {
-        return;
+        return true;
       }
 
       _prevWolTime = DateTime.Now;
@@ -2866,8 +2873,9 @@ namespace MediaPortal.GUI.Video
 
       if (!string.IsNullOrEmpty(serverName))
       {
-        BaseWakeupSystem.HandleWakeUpServer(serverName, _wolTimeout);
+        return BaseWakeupSystem.HandleWakeUpServer(serverName, _wolTimeout);
       }
+      return true;
     }
 
     private void LoadDirectory(string newFolderName, bool useCache)
@@ -2883,7 +2891,10 @@ namespace MediaPortal.GUI.Video
         return;
       }
 
-      WakeUpSrv(newFolderName);
+      if (!WakeUpSrv(newFolderName))
+      {
+        return;
+      }
 
       GUIWaitCursor.Show();
 
