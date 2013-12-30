@@ -75,6 +75,36 @@ namespace MediaPortal.GUI.WakeupSystem
           progressDialog.Progress();
           progressDialog.Close();
 
+          int waittime;
+          using (Profile.Settings xmlreader = new MPSettings())
+          {
+            waittime = xmlreader.GetValueAsInt("WOL", "WaitTimeAfterWOL", 0);
+          }
+
+          GUIDialogProgress progressDialog2 =
+           (GUIDialogProgress)GUIWindowManager.GetWindow((int)Window.WINDOW_DIALOG_PROGRESS);
+          progressDialog2.Reset();
+          progressDialog2.SetHeading(string.Empty);
+          progressDialog2.ShowProgressBar(true);
+          progressDialog2.SetLine(1, GUILocalizeStrings.Get(1994));
+          progressDialog2.StartModal(GUIWindowManager.ActiveWindow);
+
+          waited = waittime;
+
+          for (int i = waited; waited != 0; waited--)
+          {
+            percentange = (waited * 100) / waittime;
+
+            progressDialog2.SetPercentage(percentange);
+            progressDialog2.Progress();
+
+            System.Threading.Thread.Sleep(1000);
+          }
+
+          progressDialog2.SetPercentage(0);
+          progressDialog2.Progress();          
+          progressDialog2.Close();
+          
           return true;
         }
         // Send WOL Packet

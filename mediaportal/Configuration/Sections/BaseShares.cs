@@ -495,6 +495,19 @@ namespace MediaPortal.Configuration.Sections
             selectedItem.SubItems[1].Text = shareData.HasPinCode ? "Yes" : "No";
             selectedItem.SubItems[2].Text = shareData.Folder;
             selectedItem.SubItems[3].Text = shareData.CreateThumbs ? "Yes" : "No";
+
+            if (!Util.Utils.IsNetwork(shareData.Folder))
+            {
+              selectedItem.SubItems[4].Text = string.Empty;
+            }
+            else
+            {
+              using (Profile.Settings xmlreader = new MPSettings())
+              {
+                selectedItem.SubItems[4].Text = xmlreader.GetValueAsString("macAddress", Util.Utils.GetServerNameFromUNCPath(shareData.Folder), null);
+              }
+            }
+
             if (shareData.IsRemote)
             {
               selectedItem.SubItems[2].Text = String.Format("ftp://{0}:{1}{2}", shareData.Server, shareData.Port,
