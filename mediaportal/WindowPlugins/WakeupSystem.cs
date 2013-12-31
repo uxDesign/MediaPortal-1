@@ -81,30 +81,32 @@ namespace MediaPortal.GUI.WakeupSystem
             waittime = xmlreader.GetValueAsInt("WOL", "WaitTimeAfterWOL", 0);
           }
 
-          GUIDialogProgress progressDialog2 =
-           (GUIDialogProgress)GUIWindowManager.GetWindow((int)Window.WINDOW_DIALOG_PROGRESS);
-          progressDialog2.Reset();
-          progressDialog2.SetHeading(string.Empty);
-          progressDialog2.ShowProgressBar(true);
-          progressDialog2.SetLine(1, GUILocalizeStrings.Get(1994));
-          progressDialog2.StartModal(GUIWindowManager.ActiveWindow);
-
-          waited = waittime;
-
-          for (int i = waited; waited != 0; waited--)
+          if (waittime > 0)
           {
-            percentange = (waited * 100) / waittime;
+            GUIDialogProgress progressDialog2 =
+             (GUIDialogProgress)GUIWindowManager.GetWindow((int)Window.WINDOW_DIALOG_PROGRESS);
+            progressDialog2.Reset();
+            progressDialog2.SetHeading(string.Empty);
+            progressDialog2.ShowProgressBar(true);
+            progressDialog2.SetLine(1, GUILocalizeStrings.Get(1994));
+            progressDialog2.StartModal(GUIWindowManager.ActiveWindow);
 
-            progressDialog2.SetPercentage(percentange);
+            waited = waittime;
+
+            for (int i = waited; waited != 0; waited--)
+            {
+              percentange = (waited * 100) / waittime;
+
+              progressDialog2.SetPercentage(percentange);
+              progressDialog2.Progress();
+
+              System.Threading.Thread.Sleep(1000);
+            }
+
+            progressDialog2.SetPercentage(0);
             progressDialog2.Progress();
-
-            System.Threading.Thread.Sleep(1000);
+            progressDialog2.Close();
           }
-
-          progressDialog2.SetPercentage(0);
-          progressDialog2.Progress();          
-          progressDialog2.Close();
-          
           return true;
         }
         // Send WOL Packet
@@ -155,7 +157,7 @@ namespace MediaPortal.GUI.WakeupSystem
 
       // Check if we already have a valid IP address stored,
       // otherwise try to resolve the IP address
-      if (!IPAddress.TryParse(HostName, out ipAddress))
+      if (!IPAddress.TryParse(HostName, out ipAddress) && string.IsNullOrEmpty(macAddress))
       {
         // Get IP address of the server
         try
@@ -169,46 +171,40 @@ namespace MediaPortal.GUI.WakeupSystem
           foreach (IPAddress ip in ips)
           {
             Log.Debug("    {0}", ip);
-          }
 
-          // Use first valid IP address
-          ipAddress = ips[0];
+            ipAddress = ip;
+            // Check for valid IP address
+            if (ipAddress != null)
+            {
+              // Update the MAC address if possible
+              hwAddress = wakeOnLanManager.GetHardwareAddress(ipAddress);
+
+              if (wakeOnLanManager.IsValidEthernetAddress(hwAddress))
+              {
+                Log.Debug("WakeUpServer: WOL - Valid auto MAC address: {0:x}:{1:x}:{2:x}:{3:x}:{4:x}:{5:x}"
+                          , hwAddress[0], hwAddress[1], hwAddress[2], hwAddress[3], hwAddress[4], hwAddress[5]);
+
+                // Store MAC address
+                macAddress = BitConverter.ToString(hwAddress).Replace("-", ":");
+
+                Log.Debug("WakeUpServer: WOL - Store MAC address: {0}", macAddress);
+
+                using (MediaPortal.Profile.Settings xmlwriter = new MediaPortal.Profile.MPSettings())
+                {
+                  xmlwriter.SetValue("macAddress", HostName, macAddress);
+                }
+              }
+              else
+              {
+                Log.Debug("WakeUpServer: WOL - Not a valid IPv4 address: {0}", ipAddress);
+              }
+            }
+          }
         }
         catch (Exception ex)
         {
           Log.Error("WakeUpServer: WOL - Failed GetHostAddress - {0}", ex.Message);
         }
-      }
-
-      // Check for valid IP address
-      if (ipAddress != null)
-      {
-        // Update the MAC address if possible
-        hwAddress = wakeOnLanManager.GetHardwareAddress(ipAddress);
-
-        if (wakeOnLanManager.IsValidEthernetAddress(hwAddress))
-        {
-          Log.Debug("WakeUpServer: WOL - Valid auto MAC address: {0:x}:{1:x}:{2:x}:{3:x}:{4:x}:{5:x}"
-                    , hwAddress[0], hwAddress[1], hwAddress[2], hwAddress[3], hwAddress[4], hwAddress[5]);
-
-          // Store MAC address
-          macAddress = BitConverter.ToString(hwAddress).Replace("-", ":");
-
-          Log.Debug("WakeUpServer: WOL - Store MAC address: {0}", macAddress);
-
-          using (
-            MediaPortal.Profile.Settings xmlwriter =
-              new MediaPortal.Profile.MPSettings())
-          {
-            xmlwriter.SetValue("macAddress", HostName, macAddress);
-          }
-        }
-      }
-
-      // Use stored MAC address
-      using (Profile.Settings xmlreader = new MPSettings())
-      {
-        macAddress = xmlreader.GetValueAsString("macAddress", HostName, null);
       }
 
       Log.Debug("WakeUpServer: WOL - Use stored MAC address: {0}", macAddress);

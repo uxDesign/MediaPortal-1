@@ -785,8 +785,6 @@ namespace MediaPortal.Configuration
           Log.Error("WakeUpServer: WOL - Failed GetHostAddress - {0}", ex.Message);
         }
       }
-
-
     }
   }
 }
